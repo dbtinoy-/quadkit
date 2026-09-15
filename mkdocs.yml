@@ -1,0 +1,110 @@
+# Documentation site for the public tree. Build locally:
+#
+#   pip install mkdocs-material==9.5.34
+#   mkdocs build --strict
+#   mkdocs serve            # local preview at http://127.0.0.1:8000
+#
+# CI (docs.yml) builds this on every docs change and publishes to GitHub
+# Pages on release tags. The docs-check gates (scripts/) run first — this
+# site only ships prose that already passed them.
+site_name: Quadkit
+site_description: >-
+  Async Python, contract-driven, container-assembled — documentation for the
+  five public distributions.
+site_url: https://dbtinoy-.github.io/quadkit/
+repo_url: https://github.com/dbtinoy-/quadkit
+edit_uri: ""
+docs_dir: docs
+
+theme:
+  name: material
+  palette:
+    - scheme: default
+      primary: deep purple
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: deep purple
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.top
+    - navigation.indexes
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search
+
+markdown_extensions:
+  - admonition
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.superfences
+  - pymdownx.inlinehilite
+
+# Executable examples live inside the docs tree; they are test fixtures,
+# not site content.
+exclude_docs: |
+  examples/
+
+# Repo-relative links (SECURITY.md, package READMEs, example paths) are
+# validated by scripts/check_public_docs.py and render correctly on GitHub,
+# but they leave the docs/ tree, so mkdocs reports them as not-found. That
+# one class is downgraded to info; every other warning stays fatal.
+validation:
+  links:
+    not_found: info
+
+nav:
+  - Home: README.md
+  - Getting started:
+      - getting-started/installation.md
+      - getting-started/first-app.md
+      - getting-started/configuration.md
+      - getting-started/testing.md
+  - Concepts:
+      - concepts/contracts.md
+      - concepts/dependency-injection.md
+      - concepts/modules.md
+      - concepts/lifecycle.md
+      - concepts/async-model.md
+  - Guides:
+      - guides/web-api.md
+      - guides/middleware.md
+      - guides/dependency-overrides.md
+      - guides/error-handling.md
+      - guides/observability.md
+      - guides/production-deployment.md
+      - install.docker.md
+  - Reference:
+      - reference/quadkit.md
+      - reference/quadkit-web.md
+      - reference/quadkit-testing.md
+      - reference/quadkit-cli.md
+      - reference/stability.md
+      - reference/support-matrix.md
+      - reference/performance-budgets.md
+      - reference/upgrading.md
+  - Security:
+      - security/secure-configuration.md
+      - security/vulnerability-reporting.md
+  - Governance:
+      - governance/roadmap.md
+      - governance/rfc-process.md
+      - governance/good-first-issues.md
+      - governance/adoption-metrics.md
+  - Contributing:
+      - contributing/development.md
+      - contributing/public-repository-model.md
+      - contributing/release-process.md
+  - Support:
+      - support.md
+      - Changelog: https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md
