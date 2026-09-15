@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security vulnerability
+    url: https://github.com/dbtinoy-/quadkit/security/policy
+    about: Never file security issues here — report them per SECURITY.md.
+  - name: Documentation
+    url: https://github.com/dbtinoy-/quadkit/tree/main/docs
+    about: Read the validated docs pages before filing.
