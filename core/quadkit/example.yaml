@@ -1,0 +1,294 @@
+# quadkit/example.yaml
+# Quadkit Core Configuration Template
+# ---------------------------------------------------------------------------
+# Loaded from: application.yaml (or application.{profile}.yaml)
+# Top-level env var prefix: QK_  (nested delimiter: __)
+#
+# Core fields are declared at the top level of this file.
+# Extension packages (quadkit-cache, quadkit-sql, etc.) each add their own
+# top-level section (e.g. cache:, sql:, ai:) read by their own Config class.
+
+# -- Application Identity --------------------------------------------------
+
+app_name: "my-app"              # Surfaced in health checks, OTEL resource attributes,
+                                # and structured log context.
+                                # Env: QK__APP_NAME
+
+debug: false                    # Enable verbose startup/teardown logging and relaxed
+                                # production validations. Must be false in production.
+                                # Env: QK__DEBUG  (also toggled by QK_DEBUG)
+
+env: "development"              # Deployment environment.
+                                # Values: development | staging | production | test
+                                # Env: QK__ENV
+
+# -- Logging ---------------------------------------------------------------
+
+logging:
+  # Global minimum log level. All loggers inherit this unless overridden.
+  # Values: DEBUG | INFO | WARNING | ERROR | CRITICAL
+  level: "INFO"
+
+  # Render log records as structured JSON (recommended for production).
+  json_format: false
+
+  # Per-logger level overrides. Keys are logger name prefixes;
+  # the most specific match wins.
+  # Example:
+  #   quadkit.di: DEBUG
+  #   quadkit.web: WARNING
+  levels: {}
+
+  # Log sampling -- rate-limit high-volume events.
+  sampling:
+    enabled: false
+    default_rate: 1.0           # 0.0-1.0. 1.0 = keep everything.
+    # Per-logger rate overrides.
+    # Example:
+    #   quadkit.web.access: 0.05
+    rules: {}
+
+# -- Modules ---------------------------------------------------------------
+
+modules: []                     # Allowlist of module class names (fully-qualified).
+
+# -- Module Discovery ------------------------------------------------------
+
+discovery:
+  entry_point_group: "quadkit.modules"
+  directories: []               # Filesystem paths to scan for Module subclasses.
+  enabled_modules: []           # Allowlist (empty = all discovered).
+  disabled_modules: []          # Denylist (takes precedence over enabled).
+  auto_discover: false          # Auto-discover on Application.start().
+
+# -- Clock -----------------------------------------------------------------
+# NEW -- Injectable time source. Internal time is always UTC.
+
+clock:
+  # Timezone for display/formatting only. Does not affect ClockProtocol.now().
+  display_timezone: "UTC"
+
+# -- Identity --------------------------------------------------------------
+# NEW -- ID generation strategy for entities, events, and correlation IDs.
+
+identity:
+  # ID generation strategy.
+  # Values: uuid4 | uuid7 | ulid | prefixed
+  strategy: "uuid4"
+
+  # Entity-type -> short prefix mapping. Only used when strategy = "prefixed".
+  # Example:
+  #   user: "usr"
+  #   order: "ord"
+  #   product: "prd"
+  prefix_map: {}
+
+  # Separator between prefix and ID body. Default: "_"
+  prefix_separator: "_"
+
+# -- Dependency Injection --------------------------------------------------
+
+di:
+  # Log every resolution step (performance cost in production).
+  debug_resolution: false
+
+  # Maximum resolution depth before cycle detection aborts.
+  max_resolution_depth: 50
+
+  # Validate protocol conformance on registration.
+  validate_on_register: true
+
+  # Raise on unknown type resolution instead of returning None.
+  strict_mode: false
+
+  # LRU cache size for resolved type-hint signatures.
+  type_hint_cache_size: 2048
+
+# -- Application Lifecycle -------------------------------------------------
+
+app:
+  # Maximum seconds to wait for graceful shutdown.
+  shutdown_timeout: 30.0
+
+  # Per-provider timeout for health checks.
+  health_check_timeout: 5.0
+
+# -- Concurrency -----------------------------------------------------------
+
+concurrency:
+  # Default capacity for BoundedChannel instances.
+  default_channel_capacity: 100
+
+  # Default semaphore acquisition timeout (seconds).
+  default_semaphore_timeout: 30.0
+
+  # Number of worker threads for the thread pool executor.
+  worker_threads: 4
+
+  # Dispatcher drain timeout on shutdown (seconds).
+  dispatcher_shutdown_timeout: 10.0
+
+  # Task dispatcher configuration.
+  dispatcher:
+    max_concurrent_tasks: 100
+    queue_timeout: 30.0
+    retry_failed_tasks: true
+    max_retries: 3
+
+    pool:
+      min_size: 1
+      max_size: 10
+      task_queue_size: 100
+      worker_ttl: 3600.0
+      enable_metrics: false
+
+    cpu_pool:
+      max_workers: null         # null = Python default (min(32, cpu_count + 4))
+      thread_name_prefix: null
+
+    io_pool:
+      max_workers: null
+      thread_name_prefix: null
+
+# -- Validation ------------------------------------------------------------
+
+validation:
+  # Raise immediately on first invalid field vs. accumulate all errors.
+  strict: false
+
+  # Stop validation after the first error in a validator chain.
+  stop_on_first_error: false
+
+  # Attempt type coercion (e.g. "42" -> 42) before validation.
+  coerce_types: false
+
+# -- Serialization ---------------------------------------------------------
+
+serialization:
+  # JSON backend. orjson is 3-10x faster than stdlib.
+  # Values: orjson | stdlib
+  preferred_backend: "orjson"
+
+  # Character encoding for serialized output.
+  encoding: "utf-8"
+
+  # Escape non-ASCII characters in JSON output.
+  ensure_ascii: false
+
+  # Pretty-print indent. null = compact (no indentation).
+  indent: null
+
+# -- Middleware ------------------------------------------------------------
+
+middleware:
+  # Retry defaults for RetryMiddleware.
+  default_retry_count: 3
+  default_retry_delay: 1.0
+
+  # HTTP header for correlation ID propagation.
+  correlation_header: "X-Correlation-ID"
+
+  # Default timeout for TimeoutMiddleware (seconds).
+  default_timeout: 30.0
+
+  # Circuit breaker: consecutive failures before opening.
+  circuit_failure_threshold: 5
+
+  # Circuit breaker: seconds before half-open transition.
+  circuit_recovery_timeout: 30.0
+
+  # Rate limiter: max requests per window.
+  rate_limit_max_requests: 100
+
+  # Rate limiter: window duration in seconds.
+  rate_limit_window: 60.0
+
+# -- Domain ----------------------------------------------------------------
+
+domain:
+  # Raise at runtime when code mutates a frozen ValueObject.
+  strict_immutability: false
+
+  # Prefix prepended to auto-generated entity IDs (deprecated -- use identity.prefix_map).
+  id_prefix: ""
+
+# -- Mapping ---------------------------------------------------------------
+
+mapping:
+  # Raise on missing fields during object mapping.
+  strict: false
+
+  # Fall back to auto-mapping when no explicit mapper is registered.
+  auto_map: true
+
+# -- Security --------------------------------------------------------------
+
+security:
+  # Input sanitization defaults.
+  sanitizer:
+    # HTML tags allowed through sanitization. null = strip all.
+    allowed_tags: null
+    # Strip HTML comments.
+    strip_comments: true
+    # Default mode: "strip" | "escape" | "allow"
+    default_sanitize_mode: "allow"
+
+  # Hashing defaults.
+  hashing:
+    # Default algorithm for general-purpose hashing.
+    # Values: sha256 | blake2b
+    algorithm: "sha256"
+
+    # PBKDF2 iterations for key derivation. OWASP recommends >= 600000.
+    pbkdf2_iterations: 600000
+
+# -- Observability ---------------------------------------------------------
+# NEW -- Core observability hooks. Full OTLP/Prometheus config is in quadkit-monitor.
+
+observability:
+  # Master switch. When false, no-op implementations are used unconditionally.
+  enabled: true
+
+  # Service name for trace/metric resource attributes.
+  # Defaults to app_name if null.
+  service_name: null
+
+  # Fraction of requests to trace. Only effective with a real tracer.
+  trace_sample_rate: 1.0
+
+# -- Health ----------------------------------------------------------------
+# NEW -- Health probe configuration.
+
+health:
+  # Per-provider timeout for individual health checks (seconds).
+  check_timeout: 5.0
+
+  # Include detailed error messages in health responses.
+  # Disable in production to avoid leaking internals.
+  include_details: true
+
+  # Startup probe: how long to wait for application readiness.
+  startup:
+    timeout: 60.0
+
+# -- Extension Package Sections -------------------------------------------
+# Extension packages add their own top-level sections independently.
+# Uncomment and configure as needed.
+#
+# cache:
+#   enabled: true
+#   backends:
+#     - name: "default"
+#       type: "memory"
+#       default: true
+#
+# sql:
+#   enabled: true
+#   url: "postgresql+asyncpg://user:password@localhost:5432/mydb"
+#   pool_size: 10
+#
+# web:
+#   host: "0.0.0.0"
+#   port: 8000
+#   cors:
+#     allowed_origins: ["*"]

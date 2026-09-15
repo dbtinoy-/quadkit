@@ -1,0 +1,289 @@
+# =============================================================================
+# Quadkit Core — The DI/IoC Foundation
+# =============================================================================
+# This is the CORE package. It provides:
+#   - DI/IoC container
+#   - Application lifecycle
+#   - Configuration system
+#   - Provider protocol
+#   - Exception hierarchy
+#   - Structured logging foundation
+#
+# It does NOT contain:
+#   - Database code          → quadkit-sql
+#   - Auth/JWT/crypto        → quadkit-auth
+#   - HTTP/ASGI/routing      → quadkit-web
+#   - Message queue / email  → quadkit-queue / quadkit-mailer / quadkit-notification
+#   - Any domain-specific feature
+#
+# Core should be lightweight. `pip install quadkit` should take seconds,
+# not minutes, and should not compile C extensions.
+# =============================================================================
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+# =============================================================================
+# Project Metadata
+# =============================================================================
+
+[project]
+name = "quadkit"
+version = "0.0.2"
+description = "Async-first DI/IoC framework for Python — core package"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+keywords = [
+    "async",
+    "framework",
+    "dependency-injection",
+    "ioc",
+    "provider-pattern",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+# =============================================================================
+# Core Dependencies — MINIMAL
+# =============================================================================
+# Every dependency here is pulled in by ALL users and ALL extension packages.
+# Add something here ONLY if the DI container, config system, provider
+# lifecycle, or exception hierarchy literally cannot function without it.
+
+dependencies = [
+    "quadkit-contracts>=0.0.2",
+    "orjson>=3.0.0",
+    "structlog>=25.1.0,<27",         # Structured logging foundation
+    "pydantic>=2.10.0",              # Required: used unconditionally by config, validation
+]
+
+# =============================================================================
+# Optional Dependencies — Convenience Bundles ONLY
+# =============================================================================
+# These exist so users can do `pip install quadkit[api]` instead of
+# listing extension packages individually. They contain ONLY references
+# to extension packages — never raw third-party drivers.
+
+[project.optional-dependencies]
+
+# ── Development ────────────────────────────────────────────────────────
+
+dev = [
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "pre-commit>=3.0.0",
+]
+
+# Codegen extra — opt-in template engine for quadkit.codegen scaffolders.
+# The base classes import jinja2 lazily; only template rendering needs it.
+codegen = [
+    "jinja2>=3.1.0",
+]
+
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+docs = [
+    "mkdocs>=1.4.0",
+    "mkdocs-material>=9.0.0",
+]
+
+# Security extras — opt-in deps for quadkit.security.* implementations
+# Encryption requires cryptography.
+security = [
+    "cryptography>=41.0.0",
+]
+
+# ── Extension Convenience Groups ──────────────────────────────────────
+# Users can install entire subsystems via:
+#   pip install quadkit[web]     → all web packages
+
+# ── Web & API ─────────────────────────────────────────────────────────
+
+web = [
+    "quadkit-web[granian]>=0.0.2",
+]
+# NOTE: Convenience extras for the extension packages (db, cache, auth,
+# events, tasks, monitor, graphql) were removed. Those packages are not
+# published, so the extras resolved against name-reservation placeholders
+# that contain no code: `pip install quadkit[cache]` succeeded and then
+# `import quadkit.cache` raised ModuleNotFoundError. Install extension
+# packages directly once they are published.
+
+# =============================================================================
+# URLs
+# =============================================================================
+
+[project.urls]
+Homepage = "https://quadkit.dev"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://quadkit.dev"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+# =============================================================================
+# Extension Discovery (Entry Points)
+# =============================================================================
+# Extension packages register themselves here so core can discover them
+# at runtime WITHOUT hardcoding their existence.
+#
+# Each extension's pyproject.toml declares:
+#
+#   [project.entry-points."quadkit.extensions"]
+#   web = "quadkit.web:extension_info"
+#
+# Core discovers them with:
+#
+#   from importlib.metadata import entry_points
+#   extensions = entry_points(group="quadkit.extensions")
+
+# PluginsModule ships with core so `discovery.auto_discover = true` picks up
+# entry-point plugin/provider discovery on every application boot. Explicit
+# apps can instead call `app.add_module(PluginsModule.configure())`.
+
+[project.entry-points."quadkit.modules"]
+PluginsModule = "quadkit.plugins.module:PluginsModule"
+
+# =============================================================================
+# Build Configuration
+# =============================================================================
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quadkit"]
+
+# =============================================================================
+# Ruff — Linter & Formatter
+# =============================================================================
+# Philosophy: The linter is a safety net, not decoration.
+# We do NOT globally suppress rules to hide known bugs.
+# If a rule fires, we fix the code or justify the exception per-file.
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"migrations/**/*" = ["INP001", "E402", "F401", "ANN"]
+"src/quadkit/serialization/**" = ["TID251"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "quadkit.serialization.msgpack_serializer"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = "yaml"
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["opentelemetry", "opentelemetry.*"]
+ignore_missing_imports = true
+
+# =============================================================================
+# Pytest — Test Configuration
+# =============================================================================
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+markers = [
+    "integration: mark a test as an integration test",
+]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "-ra",
+    "--cov=src/quadkit",  # scoped to this package's own tree; the bare `quadkit` name resolves to the whole shared namespace (all workspace packages) and dilutes the gate
+    "--cov-report=term",
+    "--cov-fail-under=72",
+]
+filterwarnings = [
+    "ignore::pytest.PytestAssertRewriteWarning",
+]
+
+# =============================================================================
+# Coverage — Test Coverage
+# =============================================================================
+
+[tool.coverage.run]
+source = ["src/quadkit"]
+branch = true
+omit = [
+    "*/tests/*",
+    "*/examples/*",
+    "*/_*/",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+precision = 2
+show_missing = true
+
+[tool.uv.sources]
+quadkit-contracts = { workspace = true }
+

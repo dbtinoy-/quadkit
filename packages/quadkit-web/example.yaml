@@ -1,0 +1,128 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+
+web:
+  # HTTP Server Configuration
+  server:
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+    backlog: 2048
+    timeout: "30s"  # Duration: 30s, 1m
+    keepalive_timeout: "5s"  # Duration: 5s, 10s
+    reload: true  # For development only
+    ssl_keyfile: null
+    ssl_certfile: null
+    
+  # CORS (Cross-Origin Resource Sharing)
+  cors:
+    enabled: true
+    allow_credentials: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "http://localhost:5173"
+      - "https://example.com"
+    allowed_methods:
+      - "GET"
+      - "POST"
+      - "PUT"
+      - "DELETE"
+      - "PATCH"
+      - "OPTIONS"
+    allowed_headers:
+      - "Content-Type"
+      - "Authorization"
+      - "X-Requested-With"
+    expose_headers:
+      - "X-Total-Count"
+      - "X-Page-Number"
+    max_age: 3600  # Seconds
+    
+  # CSRF Protection
+  csrf:
+    enabled: true
+    token_header: "X-CSRF-Token"
+    token_cookie: "csrf_token"
+    safe_methods:
+      - "GET"
+      - "HEAD"
+      - "OPTIONS"
+      
+  # Security Headers
+  security:
+    hsts_enabled: true
+    hsts_max_age: 31536000  # 1 year
+    hsts_include_subdomains: true
+    hsts_preload: false
+    
+  # Content Security Policy
+  csp:
+    enabled: true
+    directives:
+      default_src:
+        - "'self'"
+      script_src:
+        - "'self'"
+        - "'unsafe-inline'"  # Only for development
+        - "https://cdn.jsdelivr.net"
+      style_src:
+        - "'self'"
+        - "'unsafe-inline'"
+        - "https://fonts.googleapis.com"
+      img_src:
+        - "'self'"
+        - "data:"
+        - "https:"
+      font_src:
+        - "'self'"
+        - "https://fonts.gstatic.com"
+      connect_src:
+        - "'self'"
+      report_uri: "/api/csp-report"
+      
+  # Rate Limiting
+  rate_limit:
+    enabled: true
+    backend: "redis"  # redis, memory
+    default_limit: "100/minute"
+    storage_key_prefix: "ratelimit:"
+    
+  # Static Files
+  static:
+    enabled: true
+    directory: "./public"
+    base_url: "/static"
+    cache_max_age: 86400  # 1 day
+    
+  # API Documentation
+  api_docs:
+    enabled: true
+    title: "Quadkit API"
+    version: "1.0.0"
+    description: "REST API for Quadkit"
+    openapi_url: "/openapi.json"
+    docs_url: "/docs"
+    redoc_url: "/redoc"
+    
+  # Response Compression
+  compression:
+    enabled: true
+    min_size: 1024  # Bytes
+    algorithm: "gzip"  # gzip, brotli
+    quality: 9
+    
+  # Request/Response Middleware
+  middleware:
+    request_id:
+      enabled: true
+      header_name: "X-Request-ID"
+    
+    logging:
+      enabled: true
+      exclude_paths:
+        - "/health"
+        - "/metrics"
+        
+    timing:
+      enabled: true
+      header_name: "X-Response-Time"

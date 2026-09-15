@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Quadkit Example Hub</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-copy">
+      <div class="eyebrow">QUADKIT · BROWSER PLAYGROUND</div>
+      <h1>Quadkit Live Demos</h1>
+      <p class="hero-text">Explore focused, working examples of Quadkit capabilities. Open a card to interact with the demo; use <strong>About</strong> for the learning path and API notes.</p>
+    </div>
+    <div class="hero-stats" aria-label="Fleet summary">
+      <div><strong id="total-count">—</strong><span>demos</span></div>
+      <div><strong id="up-count">—</strong><span>ready now</span></div>
+    </div>
+    <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button>
+  </header>
+  <section class="guide" aria-label="How to use the demo hub">
+    <div class="guide-step"><span>1</span><div><strong>Choose a path</strong><small>Standard shows one domain module. Multi-module is for composed applications.</small></div></div>
+    <div class="guide-step"><span>2</span><div><strong>Open a demo</strong><small>Every card is a live browser console with no CLI required.</small></div></div>
+    <div class="guide-step"><span>3</span><div><strong>Learn by doing</strong><small>Use About to connect each control to its Quadkit package.</small></div></div>
+  </section>
+  <section class="toolbar" aria-label="Demo filters">
+    <label class="search"><span class="sr-only">Search demos</span><input id="search" type="search" placeholder="Search demos or capabilities…" autocomplete="off"></label>
+    <div id="filters" role="group" aria-label="Filter demos">
+      <button type="button" data-f="all" class="active">All demos</button>
+      <button type="button" data-f="standard">Standard modules</button>
+      <button type="button" data-f="multi-module">Multi-module apps</button>
+    </div>
+  </section>
+  <main>
+    <p id="hub-status" class="hub-status" role="status" aria-live="polite">Loading demos…</p>
+    <div id="cards"></div>
+  </main>
+  <div id="modal-overlay" class="modal-overlay hidden">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+      <div class="modal-header"><h2 id="modal-title"></h2><button type="button" id="modal-close" class="modal-close" aria-label="Close demo information">&times;</button></div>
+      <div id="modal-body" class="modal-body"></div>
+    </div>
+  </div>
+  <footer><div class="footer-brand"><span>Quadkit</span><span class="footer-note">Focused demos · deterministic where possible · web-first</span></div><div class="footer-links"><a href="https://docs.quadkit.dev" target="_blank" rel="noopener">Docs</a><span class="sep">·</span><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><span class="sep">·</span><a href="https://quadkit.dev" target="_blank" rel="noopener">quadkit.dev</a></div></footer>
+  <script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

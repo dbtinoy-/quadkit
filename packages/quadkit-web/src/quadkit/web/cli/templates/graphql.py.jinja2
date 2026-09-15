@@ -1,0 +1,282 @@
+"""GraphQL schema module for {{ class_name }}.{% if doc %}
+
+{{ doc }}{% endif %}"""
+
+from __future__ import annotations
+
+from collections.abc import AsyncIterator
+from datetime import {% if fields | selectattr("type", "equalto", "datetime") | list %}UTC, {% endif %}datetime
+
+import strawberry
+from strawberry import relay
+
+
+@strawberry.type(description="{{ class_name }} GraphQL type")
+class {{ class_name }}Type:
+    """GraphQL type for {{ resource_name }}.
+
+    Attributes:
+        id: The unique identifier.
+        {% for field in fields %}
+        {{ field.name }}: {{ field.description }}
+        {% endfor %}
+    """
+
+    id: strawberry.ID
+    {% for field in fields %}
+    {{ field.name }}: {{ field.graphql_type }}
+    {% endfor %}
+
+    {% if include_created_at %}
+    created_at: datetime
+    {% endif %}
+    {% if include_updated_at %}
+    updated_at: datetime
+    {% endif %}
+
+    @strawberry.field(description="Get the {{ resource_name }} by ID")
+    async def resolve_{{ resource_name }}(self, info: strawberry.Info) -> {{ class_name }}Type | None:
+        """Resolve the {{ resource_name }} from the database.
+
+        Args:
+            info: GraphQL resolve info.
+
+        Returns:
+            The {{ resource_name }} or None if not found.
+        """
+        # TODO: Implement resolver using service
+        # Example:
+        # service = info.context["service"]
+        # return await service.get(self.id)
+        return self
+
+
+@strawberry.input(description="Input type for creating {{ resource_name }}")
+class Create{{ class_name }}Input:
+    """Input for creating a new {{ resource_name }}.
+
+    Required fields:
+        {% for field in required_fields %}
+        - {{ field.name }}
+        {% endfor %}
+    """
+
+    {% for field in required_fields %}
+    {{ field.name }}: {{ field.graphql_type }}
+    {% endfor %}
+    {% for field in optional_fields %}
+    {{ field.name }}: {{ field.graphql_type }} = strawberry.field(default=None)
+    {% endfor %}
+
+
+@strawberry.input(description="Input type for updating {{ resource_name }}")
+class Update{{ class_name }}Input:
+    """Input for updating an existing {{ resource_name }}.
+
+    All fields are optional for partial updates.
+    """
+
+    {% for field in fields %}
+    {{ field.name }}: {{ field.graphql_type }} | None = strawberry.field(default=None)
+    {% endfor %}
+
+
+@strawberry.input(description="Filter options for {{ resource_name }} queries")
+class {{ class_name }}Filter:
+    """Filter input for {{ resource_name }} queries.
+
+    Use this to filter and sort {{ resource_name }} queries.
+    """
+
+    {% for field in filterable_fields %}
+    {{ field.name }}: {{ field.graphql_type }} | None = strawberry.field(default=None)
+    {% endfor %}
+    search: str | None = strawberry.field(default=None)
+    order_by: str | None = strawberry.field(default=None)
+    order_desc: bool = strawberry.field(default=False)
+
+
+@strawberry.type(description="{{ class_name }} connection for relay pagination")
+class {{ class_name }}Connection(relay.Connection):
+    """Relay connection for paginating {{ resource_name }}.
+
+    Provides cursor-based pagination for large datasets.
+    """
+
+    edges: list[relay.Edge[{{ class_name }}Type]]
+
+
+@strawberry.type
+class Query:
+    """GraphQL queries for {{ resource_name }}.
+
+    Provides:
+    - List all {{ resource_name }}
+    - Get {{ resource_name }} by ID
+    - Paginated {{ resource_name }} with relay
+    """
+
+    @strawberry.field(description="Get all {{ resource_name }}")
+    async def {{ resource_name }}(
+        self,
+        info: strawberry.Info,
+        first: int | None = None,
+        after: str | None = None,
+        filter: {{ class_name }}Filter | None = None,
+    ) -> list[{{ class_name }}Type]:
+        """Get a list of {{ resource_name }}.
+
+        Args:
+            info: GraphQL resolve info.
+            first: Number of items to return.
+            after: Cursor for pagination.
+            filter: Filter options.
+
+        Returns:
+            List of.
+        """
+        # TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # items = await service.list(limit=first or 20, offset=0)
+        # return [{{ class_name }}Type(id=str(i.id), ...) for i in items]
+        return []
+
+    @strawberry.field(description="Get {{ resource_name }} by ID")
+    async def {{ singular_name }}(
+        self,
+        info: strawberry.Info,
+        id: strawberry.ID,
+    ) -> {{ class_name }}Type | None:
+        """Get a single {{ resource_name }} by ID.
+
+        Args:
+            info: GraphQL resolve info.
+            id: The {{ resource_name }} ID.
+
+        Returns:
+            The {{ resource_name }} or None if not found.
+        """
+        # TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # item = await service.get(id)
+        # if item:
+        #     return {{ class_name }}Type(id=str(item.id), ...)
+        return None
+
+    @strawberry.relay.connection(
+        {{ class_name }}Connection,
+        description="Get paginated {{ resource_name }} using relay",
+    )
+    async def {{ resource_name }}_connection(
+        self,
+        info: strawberry.Info,
+        before: str | None = None,
+        after: str | None = None,
+        first: int | None = None,
+        last: int | None = None,
+    ) -> AsyncIterator[{{ class_name }}Type]:
+        """Get paginated {{ resource_name }} with relay cursor-based pagination.
+
+        Args:
+            info: GraphQL resolve info.
+
+        Yields:
+            {{ resource_name }} items.
+        """
+        # TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # async for item in service.list_all():
+        #     yield {{ class_name }}Type(id=str(item.id), ...)
+        return
+        yield  # Required for async generator
+
+
+@strawberry.type
+class Mutation:
+    """GraphQL mutations for {{ resource_name }}.
+
+    Provides:
+    - Create new {{ resource_name }}
+    - Update existing {{ resource_name }}
+    - Delete {{ resource_name }}
+    """
+
+    @strawberry.mutation(description="Create a new {{ resource_name }}")
+    async def create_{{ resource_name }}(
+        self,
+        info: strawberry.Info,
+        input: Create{{ class_name }}Input,
+    ) -> {{ class_name }}Type:
+        """Create a new {{ resource_name }}.
+
+        Args:
+            info: GraphQL resolve info.
+            input: The {{ resource_name }} data.
+
+        Returns:
+            The created {{ resource_name }}.
+        """
+        # TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # data = input.__dict__
+        # item = await service.create(data)
+        # return {{ class_name }}Type(id=str(item.id), ...)
+        return {{ class_name }}Type(
+            id=strawberry.ID("1"),
+            {% for field in fields[:3] %}
+            {{ field.name }}={{ field.sample_value }},
+            {% endfor %}
+        )
+
+    @strawberry.mutation(description="Update an existing {{ resource_name }}")
+    async def update_{{ resource_name }}(
+        self,
+        info: strawberry.Info,
+        id: strawberry.ID,
+        input: Update{{ class_name }}Input,
+    ) -> {{ class_name }}Type | None:
+        """Update an existing {{ resource_name }}.
+
+        Args:
+            info: GraphQL resolve info.
+            id: The {{ resource_name }} ID.
+            input: The updated data.
+
+        Returns:
+            The updated {{ resource_name }} or None if not found.
+        """
+        # TODO: Implement with service
+        return None
+
+    @strawberry.mutation(description="Delete a {{ resource_name }}")
+    async def delete_{{ resource_name }}(
+        self,
+        info: strawberry.Info,
+        id: strawberry.ID,
+    ) -> bool:
+        """Delete a {{ resource_name }}.
+
+        Args:
+            info: GraphQL resolve info.
+            id: The {{ resource_name }} ID.
+
+        Returns:
+            True if deleted successfully.
+        """
+        # TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # return await service.delete(id)
+        return True
+
+
+# Create schema
+schema = strawberry.Schema(
+    query=Query,
+    mutation=Mutation,
+    types=[{{ class_name }}Type],
+)

@@ -1,0 +1,67 @@
+"""WebSocket Handler for {{ name }}.
+
+This module defines a WebSocket handler for real-time {{ snake_name }} communication.
+"""
+
+from __future__ import annotations
+
+from typing import Any, ClassVar
+
+from quadkit.web.transport.websockets import WebSocket
+from quadkit.web.websocket import AbstractWebSocketHandler, websocket_handler
+
+
+@websocket_handler("/ws/{{ snake_name }}")
+class {{ name }}(AbstractWebSocketHandler):
+    """WebSocket handler for {{ name }}.
+
+    This handler manages real-time communication for {{ snake_name_plural }}.
+    Implement on_connect, on_message, and on_disconnect to customize behavior.
+    """
+
+    # Room management for broadcast support
+    rooms: ClassVar[dict[str, set[WebSocket]]] = {}
+
+    async def on_connect(self, websocket: WebSocket) -> None:
+        """Called when a client connects.
+
+        Override to handle connection setup. You MUST call
+        ``await websocket.accept()`` to accept the connection.
+
+        Args:
+            websocket: The WebSocket connection
+        """
+        # Extract room ID from path parameters if applicable
+        room_id = websocket.path_params.get("room_id", "default")
+
+        if room_id not in self.rooms:
+            self.rooms[room_id] = set()
+        self.rooms[room_id].add(websocket)
+
+        await websocket.accept()
+
+    async def on_message(self, websocket: WebSocket, message: dict[str, Any]) -> None:
+        """Called when a message is received.
+
+        Override to handle incoming messages.
+
+        Args:
+            websocket: The WebSocket connection
+            message: The parsed JSON message
+        """
+        room_id = websocket.path_params.get("room_id", "default")
+
+        # Broadcast message to all clients in the room
+        for ws in self.rooms.get(room_id, []):
+            await ws.send_json(message)
+
+    async def on_disconnect(self, websocket: WebSocket) -> None:
+        """Called when a client disconnects.
+
+        Override to handle cleanup.
+
+        Args:
+            websocket: The WebSocket connection
+        """
+        room_id = websocket.path_params.get("room_id", "default")
+        self.rooms.get(room_id, set()).discard(websocket)

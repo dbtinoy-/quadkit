@@ -1,0 +1,200 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-testing"
+version = "0.0.2"
+description = "Centralized testing infrastructure for Quadkit Framework - Fixtures, factories, and utilities"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "testing",
+    "pytest",
+    "fixtures",
+    "factories",
+    "mocking",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Testing",
+    "Framework :: Pytest",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+db = [
+    "aiosqlite>=0.19.0",
+    "asyncpg>=0.29.0",
+]
+web = [
+    "httpx>=0.26.0",
+    "httpx2>=2.0.0",
+    "starlette>=0.28.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+integration = [
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.19.0",
+    "redis>=5.0.0",
+    "aiokafka>=0.12.0",
+    "motor>=3.3.0",
+    "qdrant-client>=1.9.0",
+    "neo4j>=5.18.0",
+    "elasticsearch[async]>=8.12.0",
+]
+
+[project.urls]
+Homepage = "https://quadkit.dev"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://quadkit.dev"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points.pytest11]
+quadkit = "quadkit.testing.plugins.pytest"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+]
+integration = [
+    { include-group = "test" },
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.19.0",
+    "redis>=5.0.0",
+    "aiokafka>=0.12.0",
+    "motor>=3.3.0",
+    "qdrant-client>=1.9.0",
+    "neo4j>=5.18.0",
+    "elasticsearch[async]>=8.12.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+# Compliance tests intentionally assert isinstance(exc, ...) in except blocks
+# because the test must pass whether or not an exception is raised.
+# pytest.raises() would fail if no exception is raised.
+"src/quadkit/testing/compliance/*.py" = ["PT017"]
+# Testing/helpers package: asserts are the domain; dummy creds are intentional fixtures
+"src/**" = ["S101", "S105", "S106"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.13"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+    { module = "motor.motor_asyncio", ignore_missing_imports = true },
+    # pytest_asyncio is an optional dependency, so the fixture decorator is
+    # picked at runtime and is untyped when it is the asyncio one.
+    { module = "quadkit.testing.fixtures.tasks", disallow_untyped_decorators = false },
+]
+
+[tool.uv.sources.quadkit]
+workspace = true
+
+[tool.uv.sources.quadkit-contracts]
+workspace = true
+
+[tool.uv.sources.quadkit-secrets]
+workspace = true
+
+[tool.uv.sources.quadkit-sql]
+workspace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = ["--cov=quadkit.testing", "--cov-report=html", "--cov-report=term", "--cov-fail-under=66"]
+filterwarnings = [
+    "ignore::pytest.PytestAssertRewriteWarning",
+]
+testpaths = ["tests"]
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_redis: mark test as requiring Redis service",
+    "requires_postgres: mark test as requiring PostgreSQL service",
+    "requires_elasticsearch: mark test as requiring Elasticsearch service",
+    "requires_rabbitmq: mark test as requiring RabbitMQ service",
+    "requires_meilisearch: mark test as requiring Meilisearch service",
+    "requires_smtp: mark test as requiring SMTP service",
+    "requires_kafka: mark test as requiring Kafka service",
+    "requires_minio: mark test as requiring MinIO service",
+    "requires_mongodb: mark test as requiring MongoDB service",
+    "requires_qdrant: mark test as requiring Qdrant service",
+    "slow: mark test as slow running",
+    "performance: mark test as a performance test",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

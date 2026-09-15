@@ -1,0 +1,117 @@
+"""{{ class_name }} controller module.
+{% if doc %}
+{{ doc }}
+{% endif %}
+Scaffold: endpoints delegate to ``self.repo`` — wire a repository with
+CRUD methods ({{ ops_enabled | join('/') }}) in your DI provider.
+{% if ops['create'] or ops['update'] %}
+Request bodies are validated through the generated Pydantic DTOs
+(``{{ class_name }}Create`` / ``{{ class_name }}Update``) so field types and
+required-ness are enforced before the repository sees them.
+{% endif %}"""
+from __future__ import annotations
+
+from typing import Any
+
+{% if write_ops %}from pydantic import ValidationError
+from starlette.requests import Request
+{% endif %}from quadkit.web import Controller{% if ops['create'] %}, post{% endif %}{% if ops['list'] or ops['get'] %}, get{% endif %}{% if ops['update'] %}, put{% endif %}{% if ops['delete'] %}, delete{% endif %}
+{% if web_exceptions %}from quadkit.web.exceptions import {{ web_exceptions | join(', ') }}
+{% endif %}# resolves against the app source root (src/{{ repository_module }} by default)
+{% if write_ops %}from {{ models_module }}.{{ model_name }} import {{ class_name }}Create, {{ class_name }}Update
+{% endif %}from {{ repository_module }}.{{ model_name }}_repository import {{ class_name }}Repository
+
+
+def _to_dict(item: Any) -> dict[str, Any]:
+    """Serialize a repo result to a JSON-safe dict."""
+    if isinstance(item, dict):
+        return item
+    if hasattr(item, "to_dict"):
+        return item.to_dict()
+    if hasattr(item, "__dict__"):
+        return dict(vars(item))
+    return {"value": item}
+{% if write_ops %}
+
+async def _read_body(request: Request) -> dict[str, Any]:
+    """Parse and shallow-validate the JSON request body."""
+    try:
+        data: Any = await request.json()
+    except Exception as exc:
+        raise BadRequestError("Invalid JSON body") from exc
+    if not isinstance(data, dict) or not data:
+        raise BadRequestError("Request body must be a non-empty JSON object")
+    return data
+{% endif %}
+
+class {{ class_name }}Controller(Controller):
+    """Controller for {{ class_name }} CRUD operations."""
+
+    def __init__(self, repo: {{ class_name }}Repository) -> None:
+        super().__init__()
+        self.repo = repo
+{% if ops['list'] %}
+    @get("/{{ resource_path }}")
+    async def list(
+        self,
+        limit: int = 20,
+    ) -> dict[str, Any]:
+        items = await self.repo.list(limit=limit)
+        return {
+            "items": [_to_dict(item) for item in items],
+            "limit": limit,
+        }
+{% endif %}{% if ops['get'] %}
+    @get("/{{ resource_path }}/{item_id}")
+    async def get(self, item_id: str) -> dict[str, Any]:
+        item = await self.repo.get(item_id)
+        if item is None:
+            raise NotFoundError(
+                f"{{ class_name }} not found with id: {item_id}"
+            )
+        return _to_dict(item)
+{% endif %}{% if ops['create'] %}
+    @post("/{{ resource_path }}", status_code=201)
+    async def create(self, request: Request) -> dict[str, Any]:
+        data = await _read_body(request)
+        try:
+            payload = {{ class_name }}Create(**data)
+        except ValidationError as exc:
+            raise BadRequestError(
+                f"Invalid {{ class_name }} payload: {exc}"
+            ) from exc
+        created = await self.repo.create(payload.model_dump(mode="json"))
+        return _to_dict(created)
+{% endif %}{% if ops['update'] %}
+    @put("/{{ resource_path }}/{item_id}")
+    async def update(
+        self,
+        item_id: str,
+        request: Request,
+    ) -> dict[str, Any]:
+        data = await _read_body(request)
+        try:
+            payload = {{ class_name }}Update(**data)
+        except ValidationError as exc:
+            raise BadRequestError(
+                f"Invalid {{ class_name }} payload: {exc}"
+            ) from exc
+        updated = await self.repo.update(
+            item_id,
+            payload.model_dump(mode="json", exclude_unset=True),
+        )
+        if updated is None:
+            raise NotFoundError(
+                f"{{ class_name }} not found with id: {item_id}"
+            )
+        return _to_dict(updated)
+{% endif %}{% if ops['delete'] %}
+    @delete("/{{ resource_path }}/{item_id}")
+    async def delete(self, item_id: str) -> dict[str, str]:
+        deleted = await self.repo.delete(item_id)
+        if not deleted:
+            raise NotFoundError(
+                f"{{ class_name }} not found with id: {item_id}"
+            )
+        return {"message": "{{ class_name }} deleted"}
+{%- endif %}

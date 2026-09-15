@@ -1,0 +1,64 @@
+"""{{ class_name }} exception filter.
+
+{% if doc %}
+{{ doc }}
+{% endif %}
+Converts ``{{ exception_type }}`` exceptions into a structured JSON response.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from quadkit.contracts.web import ExceptionFilterProtocol
+from quadkit.web import JSONResponse
+
+
+class {{ class_name }}ExceptionFilter(ExceptionFilterProtocol):
+    """Exception filter for {{ exception_type }} errors.
+
+    Registered with ``@use_filters(...)`` on controllers and handlers so
+    matching exceptions are converted into HTTP responses instead of
+    propagating as 500s.
+    """
+
+    def can_handle(self, exc: Exception) -> bool:
+        """Return ``True`` when this filter should handle *exc*.
+
+        Args:
+            exc: Exception raised while handling the request.
+
+        Returns:
+            ``True`` when the exception is a ``{{ exception_type }}``.
+        """
+        return exc.__class__.__name__.endswith("{{ exception_type }}")
+
+    async def handle(self, exc: Exception, request: Any) -> JSONResponse:
+        """Convert *exc* into a JSON error response.
+
+        Args:
+            exc: Exception raised while handling the request.
+            request: Original request.
+
+        Returns:
+            A JSON response describing the error.
+        """
+        message = getattr(exc, "message", None) or str(exc) or "{{ class_name }} error"
+        return JSONResponse(
+            content={
+                "error": "{{ snake_name }}_error",
+                "message": message,
+                "detail": str(exc),
+            },
+            status_code=getattr(exc, "status_code", {{ status_code }}),
+        )
+
+
+# =============================================================================
+# Usage
+# =============================================================================
+#
+# from quadkit.web import use_filters
+#
+# @use_filters({{ class_name }}ExceptionFilter())
+# async def protected_endpoint(request):
+#     return {"message": "OK"}

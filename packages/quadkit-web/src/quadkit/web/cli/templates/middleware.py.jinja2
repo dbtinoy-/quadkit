@@ -1,0 +1,135 @@
+"""{{ class_name }} middleware module.
+
+{% if doc %}
+{{ doc }}
+{% endif %}
+"""
+
+from __future__ import annotations
+
+import time
+from typing import Any
+
+from starlette.types import ASGIApp, Receive, Scope, Send
+
+from quadkit.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class {{ class_name }}:
+    """{{ class_name }} for request/response processing.
+
+    This is the canonical Quadkit middleware shape: a plain ASGI class that
+    wraps ``app`` and intercepts ``scope``/``receive``/``send``.  Register it
+    with the web provider so it composes into the middleware stack::
+
+        WebProvider(middleware=[({{ class_name }},)])          # no options
+        WebProvider(middleware=[({{ class_name }}, {{ '{"key": "value"}' }})])
+
+    A bare class (``middleware=[{{ class_name }}]``) also works — the
+    middleware adapter instantiates it with the downstream app.
+    """
+
+    def __init__(
+        self,
+        app: ASGIApp,
+        {% if options %}options: dict[str, Any] | None = None,{% endif %}
+    ) -> None:
+        """Initialize the middleware.
+
+        Args:
+            app: The ASGI application.
+            {% if options %}options: Optional configuration options.{% endif %}
+        """
+        self.app = app
+        {% if options %}
+        self.options = options or {}
+        # Configure middleware behavior from options
+        self.enabled = bool(self.options.get("enabled", True))
+        {% else %}
+        self.enabled = True
+        {% endif %}
+
+    async def __call__(
+        self,
+        scope: Scope,
+        receive: Receive,
+        send: Send,
+    ) -> None:
+        """Process the ASGI request and response.
+
+        Args:
+            scope: The ASGI connection scope.
+            receive: The ASGI receive callable.
+            send: The ASGI send callable.
+        """
+        if scope["type"] != "http" or not self.enabled:
+            await self.app(scope, receive, send)
+            return
+
+        start_time = time.perf_counter()
+        response_status = 500
+
+        # Pre-request processing
+        self._pre_request(scope)
+
+        async def send_wrapper(message: dict[str, Any]) -> None:
+            """Wrap ``send`` to observe the response status."""
+            nonlocal response_status
+            if message["type"] == "http.response.start":
+                response_status = message["status"]
+            await send(message)
+
+        try:
+            await self.app(scope, receive, send_wrapper)
+        except Exception as exc:  # noqa: BLE001
+            # Exception handling before the response is sent
+            await self._handle_exception(scope, exc)
+            raise
+        finally:
+            # Always log request duration
+            duration = time.perf_counter() - start_time
+            self._log_request(scope, response_status, duration)
+
+    def _pre_request(self, scope: Scope) -> None:
+        """Process the scope before it reaches the handler.
+
+        Add custom pre-request logic here:
+        - Add request ID for tracing (via ``scope``/``state``)
+        - Validate headers
+        - Check rate limits
+        - Authenticate request
+        """
+        # Example:
+        # scope.setdefault("state", {})["request_id"] = str(uuid.uuid4())
+
+    async def _handle_exception(self, scope: Scope, exc: Exception) -> None:
+        """Handle exceptions raised by the application.
+
+        Args:
+            scope: The ASGI connection scope.
+            exc: The raised exception.
+        """
+        logger.error("{{ class_name }}_exception", error=str(exc))
+
+    def _log_request(
+        self,
+        scope: Scope,
+        response_status: int,
+        duration: float,
+    ) -> None:
+        """Log request duration and status.
+
+        Args:
+            scope: The ASGI connection scope.
+            response_status: The response status code.
+            duration: Request duration in seconds.
+        """
+        logger.info(
+            "{{ class_name }}_request",
+            path=scope.get("path"),
+            method=scope.get("method"),
+            status=response_status,
+            duration_ms=round(duration * 1000, 2),
+        )

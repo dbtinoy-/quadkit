@@ -1,0 +1,69 @@
+"""{{ class_name }} interceptor.
+
+{% if doc %}
+{{ doc }}
+{% endif %}
+Intercepts the request → handler → response lifecycle to add cross-cutting
+concerns (logging, audit, caching, timing, response shaping) without touching
+controller code.
+"""
+from __future__ import annotations
+
+from typing import Any
+
+from quadkit.web.interceptors import (
+    CallHandlerProtocol,
+    ExecutionContextProtocol,
+    WebInterceptorBase,
+)
+
+
+class {{ class_name }}Interceptor(WebInterceptorBase):
+    """Interceptor for the {{ class_name }} lifecycle concern.
+
+    Override :meth:`intercept` and call ``await next_handler.handle()`` to
+    continue the pipeline.  Pre-processing runs before the handler and
+    post-processing runs on the returned result.
+    """
+
+    async def intercept(
+        self,
+        context: ExecutionContextProtocol,
+        next_handler: CallHandlerProtocol,
+    ) -> Any:
+        """Intercept the request/response flow.
+
+        Args:
+            context: Metadata about the current request (request, handler,
+                method_name, route_metadata, scoped container).
+            next_handler: Continues the pipeline to the next interceptor or
+                the actual handler.
+
+        Returns:
+            The handler result, optionally transformed.
+        """
+        # Pre-processing — run before the handler.
+        # Example: context.set("started_at", time.perf_counter())
+
+        result = await next_handler.handle()
+
+        # Post-processing — run after the handler.
+        # Example:
+        # context.request.state.interception_elapsed = time.perf_counter() - start
+        return result
+
+
+# =============================================================================
+# Usage
+# =============================================================================
+#
+# from quadkit.web import WebProvider
+# from quadkit.web.routing.groups import RouteGroup
+#
+# group = RouteGroup(
+#     prefix="/api/v1",
+#     controllers=[DemoController],
+#     interceptors=[{{ class_name }}Interceptor()],
+# )
+#
+# provider = WebProvider(route_groups=[group])

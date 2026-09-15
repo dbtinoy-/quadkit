@@ -1,0 +1,233 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-web"
+version = "0.0.2"
+description = "Web layer for Quadkit Framework - ASGI, routing, middleware, and API tooling"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "web",
+    "asgi",
+    "api",
+    "rest",
+    "http",
+    "routing",
+    "middleware",
+    "starlette",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Internet :: WWW/HTTP :: HTTP Servers",
+    "Topic :: Internet :: WWW/HTTP :: WSGI :: Application",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "starlette>=0.28.0",
+    "orjson>=3.9.0",
+    "typing-extensions>=4.0.0",
+    "aiofiles>=23.0.0",
+    "markupsafe>=2.1.5",
+    "jinja2>=3.1.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+granian = [
+    "granian>=2.8.2",
+]
+uvicorn = [
+    "uvicorn[standard]>=0.52.4",
+]
+hypercorn = [
+    "hypercorn>=0.16.0",
+]
+security = [
+    "itsdangerous>=2.0.0",
+]
+templates = [
+    "jinja2>=3.1.0",
+]
+websocket = [
+    "websockets>=12.0.0",
+]
+client = [
+    "httpx>=0.26.0",
+    "httpx2>=2.0.0",
+]
+docs = [
+    "pyyaml>=6.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "httpx>=0.26.0",
+    "httpx2>=2.0.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "types-aiofiles>=23.0.0",
+]
+all = [
+    "granian>=2.8.2",
+    "uvicorn[standard]>=0.52.4",
+    "itsdangerous>=2.0.0",
+    "jinja2>=3.1.0",
+    "websockets>=12.0.0",
+    "httpx>=0.26.0",
+    "httpx2>=2.0.0",
+    "pyyaml>=6.0",
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://quadkit.dev"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://quadkit.dev"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points."quadkit.admin.contributors"]
+web = "quadkit.web.admin.contributor:WebAdminContributor"
+
+[project.entry-points."quadkit.providers"]
+web = "quadkit.web.di.provider:WebProvider"
+
+[project.entry-points."quadkit.config"]
+web = "quadkit.web.config:WebConfig"
+
+[project.entry-points."quadkit.cli.contributors"]
+web = "quadkit.web.cli.contributor:WebCliContributor"
+
+[project.entry-points."quadkit.modules"]
+web = "quadkit.web.module:WebModule"
+
+[project.entry-points."quadkit.servers"]
+web = "quadkit.web.server.runner:run_server"
+
+[project.entry-points."quadkit.web.contributors"]
+# Empty by design — installed packages register here
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "types-aiofiles>=23.0.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+    "httpx>=0.26.0",
+    "httpx2>=2.0.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "A001",  # builtin shadowed by function argument (e.g., `id`, `type`)
+    "B004",  # using `hasattr()` to check for dunder — WSGI/ASGI compat
+    "B007",  # loop variable not used in loop body
+    "C416",  # unnecessary list comprehension — middleware patterns
+    "PERF102",  # keys() on dict used only for membership check
+    "PTH112",  # os.path.isdir should be replaced by Path.is_dir()
+    "PTH113",  # os.path.isfile should be replaced by Path.is_file()
+    "PTH118",  # os.path.join should be replaced by / operator
+    "PTH204",  # os.path.getmtime should be replaced by Path.stat().st_mtime
+    "RUF006",  # asyncio.create_task return not stored — fire-and-forget subscriptions
+    "RUF022",  # `__all__` is not sorted — alphabetical sort not always logical
+    "S704",  # markupsafe.Markup used intentionally in template rendering
+    "TRY002",  # use Exception() instead of raise with no args
+    "TRY203",  # useless try-except-pass
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+mypy_path = ["src"]
+explicit_package_bases = true
+namespace_packages = true
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+
+[tool.pytest.ini_options]
+addopts = ["--cov=quadkit.web", "--cov-report=html", "--cov-report=term", "--cov-fail-under=85"]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_postgres: marks tests that require a live PostgreSQL connection",
+]
+pythonpath = [
+    "src",
+    "examples",
+    "examples/structured_users/src",
+    "examples/modular_platform/src",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

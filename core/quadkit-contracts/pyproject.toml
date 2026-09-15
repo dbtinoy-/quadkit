@@ -1,0 +1,110 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-contracts"
+version = "0.0.2"
+description = "Core types and protocols for the Quadkit Framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+keywords = ["quadkit", "contracts", "protocols", "framework", "async", "python"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+authors = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
+maintainers = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
+dependencies = [
+    "typing-extensions>=4.0.0",
+]
+
+[project.urls]
+Homepage = "https://quadkit.dev"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://quadkit.dev"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = ["ruff>=0.16.4", "mypy>=1.0.0"]
+
+[dependency-groups]
+dev = ["ruff>=0.16.4", "mypy>=1.0.0", "typing-extensions>=4.0.0"]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quadkit"]
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+strict = true
+show_error_codes = true
+disallow_any_generics = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = ["TID251"]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = [
+    "--cov=quadkit.contracts",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-fail-under=35",
+]
