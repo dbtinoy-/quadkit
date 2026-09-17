@@ -20,6 +20,7 @@ from quadkit.web.interceptors.builtin.cache import CacheInterceptor
 from quadkit.web.interceptors.builtin.logging import LoggingInterceptor
 from quadkit.web.interceptors.builtin.timing import HandlerTimingInterceptor
 from quadkit.web.interceptors.builtin.transform import TransformInterceptor
+from quadkit.web.interceptors.decorators import use_interceptors
 from quadkit.web.interceptors.pipeline import InterceptorPipeline
 from quadkit.web.protocols import (
     CallHandlerProtocol,
@@ -48,6 +49,8 @@ __all__ = [
     "MethodInterceptorRegistry",
     "MethodInterceptorRegistryManager",
     "TransformInterceptor",
+    # Decorator
+    "use_interceptors",
     # Context
     "WebExecutionContext",
     "WebInterceptorBase",

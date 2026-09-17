@@ -23,7 +23,7 @@ logger = get_logger(__name__)
 class RetryMiddleware:
     """Middleware that retries the downstream handler on transient failures.
 
-    Delegates to :func:`quadkit.resilience.retry` for backoff logic.
+    Delegates to :func:`the optional provider module` for backoff logic.
 
     Args:
         catch: Exception types considered retryable. Must be explicitly provided.

@@ -56,13 +56,25 @@ class WebRouterManager:
         """Discovers and registers all routes using the registry and modules."""
         logger.info("Initializing web route discovery...")
 
-        # 1. Run custom route handlers (e.g. CoreRouteHandler, ControllerRouteHandler)
+        # plans/09172026 H-04: activate the per-application registration
+        # context for the whole discovery pass so anything registering
+        # controllers during configuration writes into this application's
+        # registries, never into module-level state.
+        from quadkit.web.routing.registry import (
+            registration_context,
+        )
 
-        # 3. Run custom route handlers (e.g. legacy @route decorator handlers)
-        for handler in self._route_registry.handlers:
-            handler_name = type(handler).__name__
-            logger.debug("Running route discovery for %s", handler_name)
-            await handler.register(self, app)
+        route_registry = getattr(self.provider, "route_registry", None)
+        controller_registry = getattr(self.provider, "controller_registry", None)
+
+        with registration_context(route_registry, controller_registry):
+            # 1. Run custom route handlers (e.g. CoreRouteHandler, ControllerRouteHandler)
+
+            # 3. Run custom route handlers (e.g. legacy @route decorator handlers)
+            for handler in self._route_registry.handlers:
+                handler_name = type(handler).__name__
+                logger.debug("Running route discovery for %s", handler_name)
+                await handler.register(self, app)
 
         route_count = len(self._registered_routes)
         logger.info("Route registration complete. Total routes: %s", route_count)
@@ -193,11 +205,16 @@ class WebRouterManager:
         Uses collect_routes() if available (recommended), otherwise falls back
         to _routes attribute (legacy metaclass-based approach).
         """
-        # Mirror the controller into the global route registry so admin
-        # pages and tooling can discover the routes actually being mounted.
-        from quadkit.web.routing import register_controller
-
-        register_controller(controller_cls)
+        # Mirror the controller into this application's route registry so
+        # admin pages and tooling can discover the routes actually being
+        # mounted (plans/09172026 H-04: per-provider instances, no globals).
+        route_registry = getattr(self.provider, "route_registry", None)
+        controller_registry = getattr(self.provider, "controller_registry", None)
+        if route_registry is not None:
+            route_registry.register_controller(
+                controller_cls,
+                controller_registry=controller_registry,
+            )
 
         # Collect routes from controller
         routes = controller_cls.collect_routes()
@@ -234,6 +251,19 @@ class WebRouterManager:
                 route_meta["handler_name"],
                 container,
             )
+
+            # Deprecation wiring promised by @api_version: a controller or
+            # individual handler carrying ApiVersionMetadata(deprecated=True)
+            # gets RFC-8594-style Deprecation/Sunset headers on every route.
+            handler_fn = getattr(controller_cls, route_meta["handler_name"], None)
+            version_meta = getattr(handler_fn, "__api_version_meta__", None) or getattr(
+                controller_cls, "__api_version_meta__", None
+            )
+            if version_meta is not None and version_meta.deprecated:
+                from quadkit.web.routing.versioning import with_deprecation_headers
+
+                handler = with_deprecation_headers(handler, version_meta)
+
             full_path = (
                 raw_path
                 if raw_path.startswith(prefix)

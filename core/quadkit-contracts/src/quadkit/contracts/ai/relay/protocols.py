@@ -2,7 +2,7 @@
 
 Gateway and LLM packages consume these protocols from the container and
 never import concrete relay implementation modules.  The concrete engine
-in ``quadkit-ai-relay`` implements them.
+in ``the optional provider`` implements them.
 """
 
 from __future__ import annotations

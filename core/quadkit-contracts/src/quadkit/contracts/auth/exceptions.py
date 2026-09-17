@@ -1,13 +1,13 @@
 """Auth domain base error hierarchy.
 
 These are the base exception types that any package can catch at the
-auth-domain boundary without depending on ``quadkit-auth``.
+auth-domain boundary without depending on ``the optional provider``.
 
 Infrastructure failures (cache down, network errors, configuration errors)
 must still be raised as exceptions — do not wrap them in ``Result``.
 
 Leaf exceptions (``InvalidCredentialsError``, ``TokenExpiredError``, etc.)
-live in ``quadkit.auth.exceptions`` — import from there when you need to
+live in ``the optional provider module`` — import from there when you need to
 distinguish specific auth failure modes.
 
 Error hierarchy

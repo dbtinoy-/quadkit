@@ -77,7 +77,7 @@ class WebSocketTransportProtocol(Protocol):
     Describes the connection-handler contract for classes that manage
     the full lifecycle of a WebSocket subscription session (e.g.
     the ``graphql-transport-ws`` protocol).  It is satisfied structurally
-    by :class:`~quadkit.graphql.subscriptions.transport.GraphQLWSTransport`.
+    by :class:`~the optional provider module`.
 
     This is deliberately separate from :class:`SubscriptionHandler` which
     operates at the field-resolver level.

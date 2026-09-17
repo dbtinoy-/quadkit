@@ -10,6 +10,10 @@ while RouteRegistry stores the resolved route paths and methods.
 
 from __future__ import annotations
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 import inspect
 from typing import TYPE_CHECKING, Any
 
@@ -169,26 +173,82 @@ class RouteRegistry(Registry[str, dict[str, Any]]):
         self._controllers.clear()
 
 
-# Global registry instance — written to by @route decorators at import time.
-# WebProvider registers this instance with the container so DI resolution
-# and direct module access always return the same object.
-route_registry = RouteRegistry()
+# plans/09172026 H-04: registries are per-application instances owned by
+# the WebProvider (or whatever module builder is being configured) — there
+# is deliberately no module-level global. Decorators that need to register
+# at import time write into the *active* registration context, which the
+# provider activates while it is being configured; nothing is ever written
+# to module state.
+
+
+@dataclass(frozen=True)
+class RegistrationContext:
+    """The per-application registry pair a configuration writes to.
+
+    Fields may be ``None`` when the provider being configured does not
+    expose registries (e.g. minimal protocol implementations in tests);
+    writers treat that the same as "no context".
+    """
+
+    route_registry: RouteRegistry | None
+    controller_registry: ControllerRegistry | None
+
+
+_registration_context: ContextVar[RegistrationContext | None] = ContextVar(
+    "quadkit_web_registration_context", default=None
+)
+
+
+def active_registration_context() -> RegistrationContext | None:
+    """Return the registration context being configured, if any."""
+    return _registration_context.get()
+
+
+@contextmanager
+def registration_context(
+    route_registry: RouteRegistry | None,
+    controller_registry: ControllerRegistry | None,
+) -> Iterator[RegistrationContext]:
+    """Activate a per-application registry pair for the wrapped block.
+
+    While active, ``@controller``/``@register_controller`` decorators and
+    :func:`register_controller` write into these instances instead of any
+    module-level state. Used by ``WebRouterManager`` while routes are being
+    discovered and mounted.
+    """
+    ctx = RegistrationContext(
+        route_registry=route_registry,
+        controller_registry=controller_registry,
+    )
+    token = _registration_context.set(ctx)
+    try:
+        yield ctx
+    finally:
+        _registration_context.reset(token)
 
 
 def register_controller(controller_cls: type[Controller]) -> None:
-    """Convenience function to register a controller.
+    """Register a controller into the registry pair being configured.
 
-    Registers the controller in both RouteRegistry and ControllerRegistry,
-    ensuring synchronization and preventing lookup inconsistencies.
+    Registers the controller in both the active RouteRegistry and
+    ControllerRegistry, ensuring synchronization and preventing lookup
+    inconsistencies. With no active :func:`registration_context` this is a
+    no-op (with a warning) — import-time side effects on shared module
+    state are gone; declare controllers via ``WebProvider(controllers=...)``
+    or ``@module(controllers=...)`` instead.
     """
-    from quadkit.web.routing.controller_registry import controller_registry
+    ctx = _registration_context.get()
+    if ctx is None or ctx.route_registry is None:
+        logger.warning(
+            "register_controller_skipped_no_context",
+            controller=controller_cls.__name__,
+            hint="registries are per-application; pass controllers= to "
+            "WebProvider or @module, or register inside a "
+            "registration_context",
+        )
+        return
 
-    route_registry.register_controller(
+    ctx.route_registry.register_controller(
         controller_cls,
-        controller_registry=controller_registry,
+        controller_registry=ctx.controller_registry,
     )
-
-
-def get_route_registry() -> RouteRegistry:
-    """Get the global route registry."""
-    return route_registry

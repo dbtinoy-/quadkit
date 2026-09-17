@@ -21,7 +21,7 @@ _TEST_SECRET = "test-secret-key-32-bytes-long!!"
 # ---------------------------------------------------------------------------
 
 
-from csrf_test_support import (
+from .csrf_test_support import (
     _cookie_header,
     _make_app,
     _make_scope,

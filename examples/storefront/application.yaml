@@ -141,6 +141,7 @@ web:
   # api_docs:
   #   enabled: true  # Enable API documentation endpoints (/docs, /redoc) and auto-configure CSP for their CDN assets
   #   provider: both  # Documentation provider: 'swagger', 'redoc', or 'both'
+  #   cdn_base: null  # Base URL under which the vendored docs asset filenames are served (e.g. 'https://unpkg.com/swagger-ui-dist@5.10.3' or a private mirror). Default null: assets are served by the application itself from /docs-static/ with zero third-party requests. Its origin is automatically allowed in the CSP when set. Per-asset web.swagger_js_url / web.swagger_css_url / web.redoc_js_url overrides take precedence over this base.
   # debug_routes: false  # Enable debug routes
   # enable_debug_routes_env_gate: false  # Require explicit opt-in for debug route registration.
   # debug_routes_token: null  # Token required to access debug routes (sent as X-Debug-Token header).

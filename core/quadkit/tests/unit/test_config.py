@@ -1,5 +1,10 @@
 """Unit tests for the config module main classes."""
 
+import importlib
+
+import quadkit.app.config as app_config_module
+import quadkit.config as config_module
+import quadkit.logging.config as logging_config_module
 from quadkit.config import BaseConfig, ConfigSourceType, QuadkitConfig
 from quadkit.config.constants import (
     DEFAULT_CONFIG_FILENAMES,
@@ -9,6 +14,14 @@ from quadkit.config.constants import (
     SECRET_FIELD_PATTERNS,
     SUPPORTED_FORMATS,
 )
+
+
+def test_config_lazy_public_directory_is_available() -> None:
+    """The lazy config namespace should remain discoverable to tooling."""
+    assert "BaseConfig" in dir(config_module)
+    assert set(config_module.__dir__()) == set(config_module._LAZY_IMPORTS)
+    assert "AppConfig" in importlib.reload(app_config_module).__all__
+    assert "LoggingConfig" in importlib.reload(logging_config_module).__all__
 
 
 class TestConfigSourceType:

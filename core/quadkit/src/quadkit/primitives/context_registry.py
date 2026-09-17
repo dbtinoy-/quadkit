@@ -23,6 +23,21 @@ class ContextVarRegistry(Registry[str, contextvars.ContextVar[Any]]):
     def __init__(self, name: str = "ContextVarRegistry") -> None:
         super().__init__(name=name, allow_overwrite=False)
 
+    @classmethod
+    def _default_entries(cls) -> dict[str, contextvars.ContextVar[Any]]:
+        """Standard request-context keys — same set ``create_default_context()`` wires.
+
+        Inherited ``with_defaults()`` then constructs a fully registered
+        registry instead of raising ``NotImplementedError``, so the natural
+        onboarding call ``ContextVarRegistry.with_defaults()`` just works.
+        """
+        from quadkit.primitives.context_keys import DEFAULT_KEYS
+
+        return {
+            key.name: contextvars.ContextVar(key.name, default=key.default)
+            for key in DEFAULT_KEYS
+        }
+
     def _validate(self, key: str, value: object) -> None:
         """Validate a candidate registration value.
 

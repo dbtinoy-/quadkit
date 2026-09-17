@@ -16,7 +16,7 @@ class DocumentProtocol(Protocol):
     """Structural protocol for unified document representation.
 
     Structural protocol satisfied by any class with the required
-    fields — used across quadkit-vector and quadkit-ai-rag.
+    fields — used across the optional provider and the optional provider.
     """
 
     @property
@@ -92,7 +92,7 @@ class DocumentVectorStoreProtocol(Protocol):
     (infrastructure layer).
 
     All vector database drivers (Qdrant, ChromaDB, PGVector, etc.) are adapted
-    to this shape via ``quadkit-vector`` so callers can swap backends.
+    to this shape via ``the optional provider`` so callers can swap backends.
     """
 
     async def add(
@@ -219,7 +219,7 @@ class Document:
     """Concrete document data class shared across AI packages.
 
     Satisfies ``DocumentProtocol``.  Use this when constructing documents
-    in packages that must not depend on ``quadkit-vector``.
+    in packages that must not depend on ``the optional provider``.
     """
 
     text: str

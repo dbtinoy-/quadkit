@@ -50,19 +50,15 @@ except ImportError:
 
 @pytest.fixture(autouse=True)
 def reset_web_registries() -> None:
-    """Prevent test pollution from decorator-registered routes and controllers.
+    """Prevent test pollution from shared pipeline state.
 
-    Yields control for the test, then resets module-level registries afterward
-    so that routes and controllers registered by decorators during test module
-    import don't leak into other tests.
+    plans/09172026 H-04 removed the module-level route/controller registry
+    globals (registries are per-application instances now), so only the
+    process-global filter pipeline still needs resetting between tests.
     """
     yield
     from quadkit.web.filters.pipeline import filter_pipeline
-    from quadkit.web.routing.controller_registry import controller_registry
-    from quadkit.web.routing.registry import route_registry
 
-    route_registry.clear()
-    controller_registry.clear()
     filter_pipeline.clear()
 
 
@@ -77,10 +73,12 @@ def app():
 @pytest.fixture if pytest_asyncio is None else pytest_asyncio.fixture
 async def test_bed(app):
     """Returns a TestBed with in-memory drivers pre-configured."""
+    from quadkit.identity.di.provider import IdentityProvider
+    from quadkit.observability.di.sub_providers.observability import (
+        ObservabilityProvider,
+    )
     from quadkit.web.config import RateLimitConfig, WebConfig
     from quadkit.web.di.provider import WebProvider
-    from quadkit.identity.di.provider import IdentityProvider
-    from quadkit.observability.di.sub_providers.observability import ObservabilityProvider
 
     # Disable rate limiting for tests to avoid dependency on RateLimitProvider
     rate_limit_config = RateLimitConfig(enabled=False)
@@ -138,9 +136,7 @@ class MockRedis:
             self.data[key] = []
 
         # Remove old entries
-        self.data[key] = [
-            entry for entry in self.data[key] if entry[0] >= window_start
-        ]
+        self.data[key] = [entry for entry in self.data[key] if entry[0] >= window_start]
 
         # Count current entries
         current_count = len(self.data[key])

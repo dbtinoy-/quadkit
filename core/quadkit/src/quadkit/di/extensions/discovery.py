@@ -127,7 +127,7 @@ class ProviderScanner:
 def import_string(dotted_path: str) -> Any:
     """Import a dotted module path and return the attribute at the end.
 
-    E.g. 'quadkit.sql.DatabaseService' imports 'quadkit.sql' and returns
+    E.g. 'the optional provider module' imports 'the optional provider module' and returns
     the 'DatabaseService' attribute.
     """
     try:

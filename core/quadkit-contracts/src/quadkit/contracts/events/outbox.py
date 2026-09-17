@@ -1,7 +1,7 @@
 """Outbox pattern protocols for reliable event publishing.
 
 Defines the contracts that both in-memory (core) and database-backed
-(quadkit-sql / quadkit-messaging) outbox implementations must satisfy.
+(the optional provider / quadkit-messaging) outbox implementations must satisfy.
 
 The Outbox pattern stores domain events in the same transaction as
 business data, then relays them asynchronously to the event bus,

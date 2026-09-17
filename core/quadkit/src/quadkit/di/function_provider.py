@@ -96,16 +96,25 @@ class FunctionProvider(Provider):
             elif param.default is not inspect.Parameter.empty:
                 kwargs[param_name] = param.default
 
-        result = self._factory(**kwargs)
-        if inspect.isawaitable(result):
-            result = await result
-
         if self._scope == ServiceScope.SINGLETON:
+            # Singletons are eager by definition: materialize the product
+            # now with the boot-resolved parameters.
+            result = self._factory(**kwargs)
+            if inspect.isawaitable(result):
+                result = await result
             container.singleton(self._contract_type, result)
-        elif self._scope == ServiceScope.SCOPED:
-            container.scoped(self._contract_type, lambda: result)
         else:
-            container.transient(self._contract_type, lambda: result)
+            # Scoped/transient lifetimes re-invoke the user factory per
+            # scope/resolution; the container awaits awaitable results.
+            # Parameters stay boot-resolved (documented contract), so
+            # every production shares the same injected dependencies.
+            def _produce() -> Any:
+                return self._factory(**kwargs)
+
+            if self._scope == ServiceScope.SCOPED:
+                container.scoped(self._contract_type, _produce)
+            else:
+                container.transient(self._contract_type, _produce)
 
 
 @overload

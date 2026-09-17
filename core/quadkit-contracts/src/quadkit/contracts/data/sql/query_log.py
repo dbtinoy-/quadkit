@@ -39,7 +39,7 @@ class QueryLoggerProtocol(Protocol):
     """Protocol for logging database queries.
 
     Implement this protocol to enable query logging in database providers.
-    The concrete :class:`quadkit.sql.logging.BaseQueryLogger` implements
+    The concrete :class:`the optional provider module` implements
     this interface and adds helper methods for querying the stored entries.
     """
 

@@ -1,4 +1,5 @@
 """Tests for logging/redaction module."""
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -149,13 +150,14 @@ class TestGetRedactor:
         custom_redactor = MagicMock()
         custom_redactor.redact_dict = lambda d: d
         custom_redactor.redact_value = lambda v: v
-        
+
         token = set_redactor(custom_redactor)
         try:
             redactor = get_redactor()
             assert redactor is custom_redactor
         finally:
             from quadkit.logging.redaction import _redactor_var
+
             _redactor_var.reset(token)
 
     def test_get_redactor_after_reset_returns_noop(self) -> None:
@@ -163,11 +165,12 @@ class TestGetRedactor:
         custom_redactor = MagicMock()
         custom_redactor.redact_dict = lambda d: d
         custom_redactor.redact_value = lambda v: v
-        
+
         from quadkit.logging.redaction import _redactor_var
+
         token = set_redactor(custom_redactor)
         _redactor_var.reset(token)
-        
+
         redactor = get_redactor()
         assert isinstance(redactor, NoOpRedactor)
 
@@ -179,11 +182,12 @@ class TestSetRedactor:
         """Test set_redactor returns a token."""
         custom_redactor = MagicMock()
         token = set_redactor(custom_redactor)
-        
+
         # Token should be used for reset
         from quadkit.logging.redaction import _redactor_var
+
         _redactor_var.reset(token)
-        
+
         assert token is not None
 
 
@@ -193,14 +197,84 @@ class TestModuleExports:
     def test_noop_redactor_exported(self) -> None:
         """Test NoOpRedactor is exported."""
         from quadkit.logging.redaction import NoOpRedactor
+
         assert NoOpRedactor is not None
 
     def test_get_redactor_exported(self) -> None:
         """Test get_redactor is exported."""
         from quadkit.logging.redaction import get_redactor
+
         assert callable(get_redactor)
 
     def test_set_redactor_exported(self) -> None:
         """Test set_redactor is exported."""
         from quadkit.logging.redaction import set_redactor
+
         assert callable(set_redactor)
+
+
+class TestCookieAndBearerCoverage:
+    """plans/09172026 H-02 — cookie/session and bearer material is masked.
+
+    Walked against the actual matcher semantics: ``cookie`` variants and
+    ``bearer`` were reachable by neither the exact denylist nor the
+    segment matcher, and ``x-api-key`` escapes the trailing-``key`` rule
+    because ``x`` is not an auth-flavored prefix.
+    """
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "cookie",
+            "cookies",
+            "Cookie",
+            "Set-Cookie",
+            "set_cookie",
+            "session_cookie",
+            "bearer",
+            "Bearer",
+            "bearer_token",
+            "auth_bearer",
+            "x-api-key",
+            "X-API-Key",
+            "x_api_key",
+            "X_API_KEY",
+        ],
+    )
+    def test_secret_bearing_keys_masked(self, key: str) -> None:
+        redactor = DefaultRedactor()
+        assert redactor.redact_dict({key: "material"}) == {key: "<redacted>"}
+
+    @pytest.mark.parametrize(
+        "key",
+        [
+            "cookie_count",
+            "cookies_accepted",
+            "token_count",
+            "prompt_tokens",
+            "monkey",
+            "keyboard",
+            "user_id",
+        ],
+    )
+    def test_benign_lookalikes_flow(self, key: str) -> None:
+        redactor = DefaultRedactor()
+        assert redactor.redact_dict({key: 5}) == {key: 5}
+
+    def test_nested_cookie_material_masked(self) -> None:
+        redactor = DefaultRedactor()
+        result = redactor.redact_value(
+            {
+                "request": {
+                    "headers": {
+                        "cookie": "session=abc123;",
+                        "x-api-key": "sk-live-1",
+                        "user_agent": "test",
+                    }
+                }
+            }
+        )
+        headers = result["request"]["headers"]
+        assert headers["cookie"] == "<redacted>"
+        assert headers["x-api-key"] == "<redacted>"
+        assert headers["user_agent"] == "test"

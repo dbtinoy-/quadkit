@@ -78,21 +78,29 @@ def register_security_services(
 
 def register_routing_services(
     container: ContainerRegistrarProtocol,
+    provider: Any = None,
 ) -> None:
-    """Register routing, filtering, serialization, and background-task services."""
-    # Register the global route registry so DI resolution returns the same
-    # instance that @route decorators populated at import time.
-    from quadkit.web.routing.registry import RouteRegistry, route_registry
+    """Register routing, filtering, serialization, and background-task services.
 
+    The RouteRegistry/ControllerRegistry singletons are the provider's
+    per-application instances (plans/09172026 H-04) when a provider is
+    supplied; DI resolution and the admin pages then observe exactly the
+    routes mounted on that application. Without a provider the singletons
+    are freshly created instances (standalone container use).
+    """
+    from quadkit.web.routing.controller_registry import ControllerRegistry
+    from quadkit.web.routing.registry import RouteRegistry
+
+    # NB: explicit None checks — an empty Registry is falsy (len == 0), so
+    # an `or` fallback would silently swap in a fresh instance.
+    route_registry = getattr(provider, "route_registry", None)
+    if route_registry is None:
+        route_registry = RouteRegistry()
     container.singleton(RouteRegistry, route_registry)
 
-    # Register the global controller registry so DI resolution returns the same
-    # instance that @controller decorators populated at import time.
-    from quadkit.web.routing.controller_registry import (
-        ControllerRegistry,
-        controller_registry,
-    )
-
+    controller_registry = getattr(provider, "controller_registry", None)
+    if controller_registry is None:
+        controller_registry = ControllerRegistry()
     container.singleton(ControllerRegistry, controller_registry)
 
     # Register FilterPipeline and InterceptorPipeline as container singletons so
@@ -127,7 +135,7 @@ def register_routing_services(
     # Register BackgroundTaskRunnerProtocol — per-resolution (transient) so each
     # caller gets an independent task accumulator bound to its own Starlette context.
     # Background tasks are in-process only. Durable job submission uses explicit
-    # quadkit-tasks job APIs, not this web background-runner interface.
+    # the optional provider job APIs, not this web background-runner interface.
     from quadkit.contracts.web.protocols import BackgroundTaskRunnerProtocol
     from quadkit.web.background.tasks import StarletteBackgroundTaskRunner
 

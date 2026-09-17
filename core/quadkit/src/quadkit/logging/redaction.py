@@ -24,6 +24,10 @@ _DEFAULT_FIELD_DENYLIST: frozenset[str] = frozenset(
         "refresh_token",
         "private_key",
         "client_secret",
+        # plans/09172026 H-02: the segment matcher cannot reach x-api-key
+        # (the "x" prefix is not auth-flavored), so pin the spellings here.
+        "x-api-key",
+        "x_api_key",
     }
 )
 
@@ -41,6 +45,13 @@ _SECRET_TOKENS: frozenset[str] = frozenset(
         "credentials",
         "private",
         "dsn",
+        # plans/09172026 H-02: cookie fields carry full session material;
+        # bearer tokens ride the Authorization header value. Segment
+        # matching covers set_cookie / session_cookie / bearer_token too,
+        # while the tail-anchor rule keeps cookie_count flowing.
+        "cookie",
+        "cookies",
+        "bearer",
     }
 )
 

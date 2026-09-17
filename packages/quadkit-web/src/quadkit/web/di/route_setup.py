@@ -57,7 +57,8 @@ class RouteSetup:
         3. Canonical health endpoint (before contributors so extension
            convenience routes cannot shadow the framework contract).
         4. Web contributor mounts (admin panels, sub-apps, etc.).
-        5. Static file directory (when ``web_config.static`` is configured).
+        5. Vendored docs assets at ``/docs-static`` (local mode only).
+        6. Static file directory (when ``web_config.static`` is configured).
         6. Main controller discovery via :class:`~quadkit.web.routing.manager.WebRouterManager`.
         7. Register the Starlette app as the ASGI handler on the ``Application`` instance.
 
@@ -72,6 +73,7 @@ class RouteSetup:
         await self._mount_metrics(app, container)
         self._register_health_route(app)
         await self._mount_contributors(app, container, provider_context)
+        self._mount_docs_assets(app)
         self._mount_static(app)
         await self._router_manager.register_routes(app, container)
         await self._register_asgi_handler(app, container)
@@ -179,6 +181,49 @@ class RouteSetup:
                     error=str(mount_exc),
                     exc_type=type(mount_exc).__name__,
                 )
+
+    def _mount_docs_assets(self, app: Starlette) -> None:
+        """Mount the vendored docs assets (plans/09172026 H-03).
+
+        Served from the package's own ``static/docs`` directory whenever the
+        docs routes are enabled and no ``api_docs.cdn_base`` is configured,
+        so the default /docs and /redoc pages make no third-party requests.
+        """
+        web_config = self._web_config
+        docs_routes = getattr(web_config, "swagger_ui_url", None) or getattr(
+            web_config, "redoc_url", None
+        )
+        if not docs_routes:
+            return
+
+        api_docs = getattr(web_config, "api_docs", None)
+        if api_docs is not None and getattr(api_docs, "cdn_base", None):
+            return
+
+        from pathlib import Path
+
+        from starlette.staticfiles import StaticFiles
+
+        directory = Path(__file__).resolve().parent.parent / "static" / "docs"
+        if not directory.is_dir():
+            logger.warning(
+                "web.docs_assets_missing",
+                directory=str(directory),
+            )
+            return
+
+        app.mount(
+            "/docs-static",
+            StaticFiles(directory=str(directory)),
+            name="quadkit_docs_assets",
+        )
+        vendored = sorted(p.name for p in directory.iterdir() if p.is_file())
+        logger.info(
+            "web.docs_assets_mounted",
+            prefix="/docs-static",
+            mode="local",
+            assets=vendored,
+        )
 
     def _mount_static(self, app: Starlette) -> None:
         """Mount static file directory when configured."""

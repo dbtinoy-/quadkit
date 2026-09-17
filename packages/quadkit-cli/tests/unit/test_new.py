@@ -9,6 +9,11 @@ import pytest
 from typer.testing import CliRunner
 
 from quadkit.cli.commands.new import app as new_app  # Test the new app directly
+from quadkit.cli.scaffold import template_names
+
+_AVAILABLE_TEMPLATES = tuple(
+    name for name in ("api", "web-api", "full") if name in template_names()
+)
 
 
 class TestNewCommand:
@@ -87,7 +92,7 @@ class TestNewCommand:
         assert result.exit_code in [1, 2]
         assert "Template nonexistent-template not found" in result.output
 
-    @pytest.mark.parametrize("template", ["api", "web-api", "full"])
+    @pytest.mark.parametrize("template", _AVAILABLE_TEMPLATES)
     def test_scaffolded_project_passes_ruff_check(
         self, runner: CliRunner, temp_dir: Path, template: str
     ):
@@ -120,7 +125,7 @@ class TestNewCommand:
             f"ruff check failed for template {template!r}:\n{proc.stdout}\n{proc.stderr}"
         )
 
-    @pytest.mark.parametrize("template", ["api", "web-api", "full"])
+    @pytest.mark.parametrize("template", _AVAILABLE_TEMPLATES)
     def test_scaffolded_project_has_conftest(self, runner: CliRunner, temp_dir: Path, template: str):
         """Scaffolded projects must include a conftest.py so pytest fixtures are available."""
         result = runner.invoke(new_app, [

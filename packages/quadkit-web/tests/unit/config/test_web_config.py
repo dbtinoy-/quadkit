@@ -117,21 +117,41 @@ class TestAPIDocsConfig:
         assert config.enabled is True
         assert config.provider == "both"
 
-    def test_api_docs_get_required_domains_swagger(self):
-        """Test CSP domains for swagger"""
-        config = APIDocsConfig(enabled=True, provider="swagger")
+    def test_api_docs_default_requires_no_csp_domains(self):
+        """Local (vendored) docs assets need no CSP additions (H-03)."""
+        config = APIDocsConfig(enabled=True, provider="both")
+
+        assert config.cdn_base is None
+        assert config.get_required_domains() == {}
+
+    def test_api_docs_cdn_base_allows_its_origin(self):
+        """cdn_base opts into a CDN/mirror; its origin joins the CSP."""
+        config = APIDocsConfig(
+            enabled=True,
+            cdn_base="https://unpkg.com/swagger-ui-dist@5.10.3",
+        )
         domains = config.get_required_domains()
 
-        assert "script-src" in domains
-        assert "https://unpkg.com" in domains["script-src"]
+        assert domains["script-src"] == {"https://unpkg.com"}
+        assert domains["style-src-elem"] == {"https://unpkg.com"}
 
-    def test_api_docs_get_required_domains_redoc(self):
-        """Test CSP domains for redoc"""
-        config = APIDocsConfig(enabled=True, provider="redoc")
+    def test_api_docs_cdn_base_without_scheme(self):
+        """Scheme-less cdn_base values default to https."""
+        config = APIDocsConfig(enabled=True, cdn_base="mirror.internal/assets")
         domains = config.get_required_domains()
 
-        assert "script-src" in domains
-        assert "https://cdn.redoc.ly" in domains["script-src"]
+        assert domains["script-src"] == {"https://mirror.internal"}
+
+    def test_api_docs_assets_mode(self):
+        """assets_mode reports local/cdn/custom for the boot log."""
+        assert APIDocsConfig().assets_mode() == "local"
+        assert APIDocsConfig(cdn_base="https://x.test").assets_mode() == "cdn"
+        assert (
+            APIDocsConfig(cdn_base="https://x.test").assets_mode(
+                swagger_js_url="https://y.test/b.js"
+            )
+            == "custom"
+        )
 
 
 class TestRateLimitRuleConfig:
@@ -197,9 +217,7 @@ class TestRateLimitConfig:
 
     def test_rate_limit_get_rule_honours_path_boundary(self):
         """A '/api' rule must not match '/apifoo' (segment boundary)."""
-        config = RateLimitConfig(
-            rules={"/api": RateLimitRuleConfig(requests=100)}
-        )
+        config = RateLimitConfig(rules={"/api": RateLimitRuleConfig(requests=100)})
         assert config.get_rule("/api") is not None
         assert config.get_rule("/api/users") is not None
         assert config.get_rule("/apifoo") is None

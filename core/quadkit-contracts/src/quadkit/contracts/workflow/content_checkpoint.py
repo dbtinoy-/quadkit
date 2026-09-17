@@ -92,7 +92,7 @@ class ContentCheckpointEntry:
     """A stored checkpoint entry for a content-addressed stage output.
 
     When the output exceeds the inline threshold, ``output`` is ``None`` and
-    ``output_blob_ref`` holds the ``quadkit-storage`` blob reference.
+    ``output_blob_ref`` holds the ``the optional provider`` blob reference.
     """
 
     output: Any

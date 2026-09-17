@@ -1,8 +1,8 @@
 """Shared configuration models for resilience patterns.
 
-These live in contracts so ANY package (quadkit-events, quadkit-web, etc.)
+These live in contracts so ANY package (the optional provider, quadkit-web, etc.)
 can reference retry/circuit breaker configs without depending on
-the quadkit-resilience implementation package.
+the the optional provider implementation package.
 """
 
 from __future__ import annotations

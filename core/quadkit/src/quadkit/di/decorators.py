@@ -97,6 +97,13 @@ def injectable(
 ) -> Callable[[type[T]], type[T]] | type[T]:
     """Decorator to mark a class as injectable.
 
+    The ``scope`` metadata is honored where a descriptor is created for the
+    class: by ``discover_injectables()`` (module scanning) and by explicit
+    Provider registration. Resolving the class directly from a bare
+    ``Container`` without either step is not supported — the container only
+    auto-wires classes carrying ``@inject``-style constructor markers and
+    raises ``QK_ERR_DI_004`` otherwise.
+
     Args:
         scope_or_cls: The service scope or the class if used without parens.
         name: Optional name for the service registration.

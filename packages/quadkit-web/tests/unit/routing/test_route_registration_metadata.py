@@ -1,21 +1,29 @@
-from quadkit.web.routing.controllers import Controller
+"""Route registration captures origin metadata in debug mode."""
+
 from quadkit.web import get
-from quadkit.web.routing.registry import route_registry
+from quadkit.web.routing.controllers import Controller
+from quadkit.web.routing.registry import RouteRegistry
 
 
 def test_registry_stores_registration_metadata():
-    class C(Controller):
-        @get("/meta-test")
-        def handler(self):
-            return {}
+    registry = RouteRegistry()
+    registry._debug = True
 
-    route_registry._debug = True
+    class C(Controller):
+        @get("/meta/{item_id}")
+        async def get_item(self):
+            return {"id": "1"}
+
     try:
-        route_registry.register_controller(C)
-        routes = route_registry.get_all_routes()
-        assert "/meta-test" in routes
-        info = routes["/meta-test"]["GET"]
-        assert "registered_file" in info and info["registered_file"] is not None
-        assert "registered_stack" in info and isinstance(info["registered_stack"], list)
+        registry.register_controller(C)
+        routes = registry.get_all_routes()
+
+        assert "/meta/{item_id}" in routes
+        route_info = routes["/meta/{item_id}"]["GET"]
+        assert route_info["controller"] is C
+        assert route_info["handler_name"] == "get_item"
+        # Debug mode captures registration origin metadata.
+        assert route_info["registered_file"] is not None
+        assert route_info["registered_line"] is not None
     finally:
-        route_registry._debug = False
+        registry._debug = False

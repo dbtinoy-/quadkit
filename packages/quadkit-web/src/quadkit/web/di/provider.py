@@ -103,6 +103,17 @@ class WebProvider(Provider):
         self.middleware_manager = WebMiddlewareManager(self)
         self.router_manager: WebRouterManager = WebRouterManager(self)
 
+        # Per-application registries (plans/09172026 H-04): every provider
+        # instance owns its own route/controller registry pair so two
+        # applications in one process never see each other's routes. These
+        # are the instances registered with the DI container and mirrored
+        # by the router manager during discovery.
+        from quadkit.web.routing.controller_registry import ControllerRegistry
+        from quadkit.web.routing.registry import RouteRegistry
+
+        self._route_registry = RouteRegistry()
+        self._controller_registry = ControllerRegistry()
+
         # Internal state for routing
         self.router: Router | None = None  # Lazy loaded if needed
         self.openapi_generator: OpenAPIGenerator | None = None
@@ -131,6 +142,16 @@ class WebProvider(Provider):
     def contributor_registry(self) -> Any:
         """Expose contributor registry for route setup access."""
         return self._contributor_registry
+
+    @property
+    def route_registry(self) -> Any:
+        """This application's route registry (per-instance, plans/09172026 H-04)."""
+        return self._route_registry
+
+    @property
+    def controller_registry(self) -> Any:
+        """This application's controller registry (per-instance, H-04)."""
+        return self._controller_registry
 
     @classmethod
     def from_config(cls, config: WebConfig, **context: Any) -> WebProvider:
@@ -219,7 +240,7 @@ class WebProvider(Provider):
 
         provider_sections.register_security_services(self, container)
 
-        provider_sections.register_routing_services(container)
+        provider_sections.register_routing_services(container, self)
 
         provider_sections.register_admin_services(container)
 
@@ -269,6 +290,16 @@ class WebProvider(Provider):
 
         _debug_mode = is_debug_mode() or self.web_config.server.debug
         self.router = Router(filter_pipeline=FilterPipeline(debug=_debug_mode))
+        # Application-level exception handler mappings dispatch through the
+        # router filter pipeline: the route-level safety net resolves every
+        # route-raised error there, before built-in global filters run.
+        if self.exception_handlers:
+            from quadkit.web.filters.adapters import CallbackExceptionFilter
+
+            for exc_type, handler in self.exception_handlers.items():
+                self.router.exception_filters.add_filter(
+                    CallbackExceptionFilter(exc_type, handler)
+                )
         self._hook_registry = await container.resolve_optional(HookRegistryProtocol)
 
         # 1. Initialize OpenAPI generator
@@ -319,6 +350,15 @@ class WebProvider(Provider):
         """Configure application-level middlewares via :class:`MiddlewareSetup`."""
         setup = MiddlewareSetup(self.web_config, hooks=self._hook_registry)
         await setup.configure(app, container)
+
+        # Single-source-of-truth invariant: log the final ordered stack
+        # (outermost first) exactly once. The DI-scope layer comes from the
+        # native stack built at Starlette construction — configure() never
+        # re-adds it, so it must appear here exactly once.
+        logger.info(
+            "middleware_stack_configured",
+            middleware=[mw.cls.__name__ for mw in app.user_middleware],
+        )
 
     async def _setup_integrations(
         self, app: Starlette, container: ContainerResolverProtocol

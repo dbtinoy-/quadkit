@@ -2,7 +2,7 @@
 
 This module defines interfaces for resource managers (e.g. connection pools)
 that other packages may interact with without depending on concrete
-implementations from quadkit or quadkit-admin.
+implementations from quadkit or the optional provider.
 """
 
 from __future__ import annotations

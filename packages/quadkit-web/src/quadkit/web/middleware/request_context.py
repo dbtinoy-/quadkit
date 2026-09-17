@@ -22,6 +22,7 @@ from quadkit.primitives.context import (
     RequestContext,
     create_default_context,
 )
+from quadkit.web.middleware._headers import get_header, sanitize_request_id
 from quadkit.web.middleware.tracing import load_trace_to_context
 
 
@@ -44,15 +45,13 @@ class RequestContextMiddleware:
         self.tenant_header_name = tenant_header_name.lower().encode()
         self._ids = ids
 
-    def _resolve_tenant_id(
-        self, scope: Scope, headers: dict[bytes, bytes]
-    ) -> str | None:
+    def _resolve_tenant_id(self, scope: Scope) -> str | None:
         state = scope.get("state", {})
         tenant_id = state.get("tenant_id")
         if tenant_id is not None:
             return str(tenant_id)
 
-        tenant_header = headers.get(self.tenant_header_name)
+        tenant_header = get_header(scope, self.tenant_header_name)
         return tenant_header.decode() if tenant_header else None
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
@@ -60,21 +59,25 @@ class RequestContextMiddleware:
             await self.app(scope, receive, send)
             return
 
-        headers = dict(scope.get("headers", []))
         state = scope.setdefault("state", {})
 
         request_id = state.get("request_id")
         if not request_id:
-            request_id_bytes = headers.get(self.header_name)
-            if request_id_bytes:
-                request_id = request_id_bytes.decode()
-            else:
-                request_id = f"req_{self._ids.generate() if self._ids else uuid.uuid4().hex[:12]}"
+            inbound = get_header(scope, self.header_name)
+            # H-01: inbound ids are client-controlled — accept only short
+            # URL-safe tokens; anything else (CRLF, control chars, oversized,
+            # non-ascii) is dropped and a fresh id generated below. The
+            # rejected value is never echoed.
+            request_id = sanitize_request_id(
+                inbound.decode("ascii", "replace") if inbound is not None else None
+            )
+        if not request_id:
+            request_id = f"req_{self._ids.generate() if self._ids else uuid.uuid4().hex[:12]}"
 
         method = scope.get("method")
         path = scope.get("path")
         user_id = state.get("user_id")
-        tenant_id = self._resolve_tenant_id(scope, headers)
+        tenant_id = self._resolve_tenant_id(scope)
 
         ctx = RequestContext(
             self._registry,
@@ -85,7 +88,7 @@ class RequestContextMiddleware:
             tenant_id=tenant_id,
         )
 
-        traceparent = headers.get(b"traceparent")
+        traceparent = get_header(scope, b"traceparent")
         if traceparent:
             load_trace_to_context(ctx, traceparent.decode())
 

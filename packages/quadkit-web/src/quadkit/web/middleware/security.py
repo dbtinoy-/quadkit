@@ -160,6 +160,56 @@ class SecurityHeadersMiddleware:
         await self.app(scope, receive, send_wrapper)
 
 
+class DocsCSPMiddleware:
+    """Route-scoped Content-Security-Policy for the API docs pages.
+
+    plans/09172026 H-03: the vendored docs UIs (Swagger UI, ReDoc) run under
+    a strict ``'self'``-only policy — no ``unsafe-inline``/``unsafe-eval``,
+    no third-party CDNs, ``connect-src 'self'`` — applied to the docs HTML
+    pages and their assets. Other routes keep whatever policy the
+    application configures (``web.security.csp``), so this never loosens or
+    constrains user-served pages.
+
+    Args:
+        app: The wrapped ASGI application.
+        docs_paths: URL prefixes the policy applies to (e.g. ``/docs``,
+            ``/redoc``, ``/docs-static``).
+        policy: The serialized CSP header value.
+    """
+
+    def __init__(
+        self,
+        app: Any,
+        docs_paths: tuple[str, ...],
+        policy: str,
+    ) -> None:
+        self.app = app
+        self._docs_paths = tuple(p.rstrip("/") + "/" for p in docs_paths if p)
+        # exact matches too ("/docs" without trailing slash)
+        self._exact = tuple(p.rstrip("/") for p in docs_paths if p)
+        self._policy = policy
+
+    def _is_docs_path(self, path: str) -> bool:
+        if path in self._exact:
+            return True
+        return any(path.startswith(prefix) for prefix in self._docs_paths)
+
+    async def __call__(self, scope: Any, receive: Any, send: Any) -> None:
+        """Wrap send to attach the docs CSP header on matching responses."""
+        if scope.get("type") != "http" or not self._is_docs_path(scope.get("path", "")):
+            await self.app(scope, receive, send)
+            return
+
+        async def send_with_csp(message: Any) -> None:
+            if message["type"] == "http.response.start":
+                headers = list(message.get("headers", []))
+                headers.append([b"content-security-policy", self._policy.encode()])
+                message["headers"] = headers
+            await send(message)
+
+        await self.app(scope, receive, send_with_csp)
+
+
 def create_security_middleware(
     config: SecurityConfig,
     enabled: bool = True,
@@ -186,12 +236,12 @@ def create_development_config() -> SecurityConfig:
             enabled=True,
             directives={
                 "default-src": "'self'",
-                "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* https://unpkg.com https://cdn.jsdelivr.net",
-                "script-src-elem": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:* https://unpkg.com https://cdn.jsdelivr.net",
-                "style-src": "'self' 'unsafe-inline' http://localhost:* https://unpkg.com https://cdn.jsdelivr.net",
+                "script-src": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*",
+                "script-src-elem": "'self' 'unsafe-inline' 'unsafe-eval' http://localhost:*",
+                "style-src": "'self' 'unsafe-inline' http://localhost:*",
                 "img-src": "'self' data: http: https: blob:",
-                "font-src": "'self' data: http://localhost:* https://unpkg.com",
-                "connect-src": "'self' http://localhost:* ws://localhost:* wss://localhost:* https: wss:",
+                "font-src": "'self' data: http://localhost:*",
+                "connect-src": "'self' http://localhost:* ws://localhost:* wss://localhost:*",
                 "frame-ancestors": "'self' http://localhost:*",
             },
         ),

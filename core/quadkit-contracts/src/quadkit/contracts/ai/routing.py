@@ -1,6 +1,6 @@
 """Routing protocols for multi-provider LLM inference.
 
-Defines the protocol interfaces that decouple ``quadkit-ai-llm``'s routing
+Defines the protocol interfaces that decouple ``the optional provider``'s routing
 implementation from consumers.  All types that live in extension packages
 are represented as ``Any`` to satisfy the zero-dependency constraint of
 ``quadkit-contracts``.

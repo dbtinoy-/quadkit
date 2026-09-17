@@ -2,7 +2,7 @@
 
 Provides ``quadkit events migrate`` and ``quadkit events status`` to
 inspect and apply event-schema migrations managed by
-:class:`~quadkit.events.schema.evolution.SchemaEvolution`.
+:class:`SchemaEvolution` from the optional event provider.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ from typing import Annotated, Any
 import typer
 
 from quadkit.cli.output import OutputManager
+from quadkit.cli.package_names import module_for
 from quadkit.cli.runtime import handle_errors
 
 app = typer.Typer(name="events")
@@ -21,7 +22,7 @@ app = typer.Typer(name="events")
 def _make_evolution() -> Any:
     """Bootstrap an in-memory SchemaRegistry and SchemaEvolution.
 
-    When ``quadkit-events`` is installed and discoverable, this returns a
+    When the optional event provider is installed and discoverable, this returns a
     properly wired instance.  Raises :exc:`typer.Exit` with a readable error
     message when the package is not available.
     """
@@ -29,15 +30,16 @@ def _make_evolution() -> Any:
     try:
         import importlib as _importlib
 
-        _evo_mod = _importlib.import_module("quadkit.events.schema.evolution")
-        _reg_mod = _importlib.import_module("quadkit.events.schema.registry")
-        _store_mod = _importlib.import_module("quadkit.events.schema.store")
+        _evo_mod = _importlib.import_module(module_for('events', 'schema.evolution'))
+        _reg_mod = _importlib.import_module(module_for('events', 'schema.registry'))
+        _store_mod = _importlib.import_module(module_for('events', 'schema.store'))
         SchemaEvolution = _evo_mod.SchemaEvolution
         SchemaRegistry = _reg_mod.SchemaRegistry
         InMemorySchemaStore = _store_mod.InMemorySchemaStore
     except ImportError:
         out.error(
-            "quadkit-events is not installed.  Run `uv add quadkit-events` to add it."
+            "The optional event provider is not installed. "
+            "Install the provider before retrying."
         )
         raise typer.Exit(1) from None
 
@@ -88,8 +90,8 @@ def migrate(
             # hard cross-extension import at module level.
             import importlib as _importlib
 
-            _reg_mod = _importlib.import_module("quadkit.events.schema.registry")
-            _store_mod = _importlib.import_module("quadkit.events.schema.store")
+            _reg_mod = _importlib.import_module(module_for('events', 'schema.registry'))
+            _store_mod = _importlib.import_module(module_for('events', 'schema.store'))
             registry = _reg_mod.SchemaRegistry(store=_store_mod.InMemorySchemaStore())
             latest = await registry.get_latest_version(event_type)
             target = latest if latest is not None else from_version
@@ -192,7 +194,7 @@ def replay(
     out.print()
     out.print("Use the programmatic approach instead:")
     out.print()
-    out.print("  [cyan]from quadkit.events import EventBus[/cyan]")
+    out.print(f"  [cyan]from {module_for('events')} import EventBus[/cyan]")
     out.print("  [cyan]bus = container.resolve(EventBus)[/cyan]")
     out.print(
         "  [cyan]await bus.replay(event_type='UserCreated', since=start_time)[/cyan]"

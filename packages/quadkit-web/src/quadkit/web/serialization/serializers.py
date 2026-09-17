@@ -7,11 +7,21 @@ from typing import TYPE_CHECKING, Any
 
 from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
 
+from quadkit.logging import get_logger
+from quadkit.web.transport.responses import (
+    HTMLResponse as QuadkitHTMLResponse,
+)
+from quadkit.web.transport.responses import (
+    JSONResponse as QuadkitJSONResponse,
+)
+
 if TYPE_CHECKING:
     from starlette.requests import Request as StarletteRequest
 
     from quadkit.contracts.events import CommandBusProtocol, QueryBusProtocol
     from quadkit.contracts.mapping import ObjectMapperProtocol
+
+logger = get_logger(__name__)
 
 
 class AbstractMediaSerializer(ABC):
@@ -53,11 +63,10 @@ class JSONSerializer(AbstractMediaSerializer):
         request: StarletteRequest,
         status_code: int = 200,
     ) -> JSONResponse:
-        from quadkit.web.transport.responses import JSONResponse
-
         # quadkit.web.transport.responses.JSONResponse handles high-performance
         # serialization (orjson/Pydantic) via core quadkit.serialization.
-        return JSONResponse(content=data, status_code=status_code)  # type: ignore[return-value]
+        # Bound at module import — this runs once per response.
+        return QuadkitJSONResponse(content=data, status_code=status_code)  # type: ignore[return-value]
 
 
 class HTMLSerializer(AbstractMediaSerializer):
@@ -75,13 +84,12 @@ class HTMLSerializer(AbstractMediaSerializer):
         request: StarletteRequest,
         status_code: int = 200,
     ) -> HTMLResponse:
-        from quadkit.web.transport.responses import HTMLResponse
-
+        # Bound at module import — this runs once per response.
         # Convert to string if not already
         if not isinstance(data, str):
             data = str(data)
 
-        return HTMLResponse(content=data, status_code=status_code)  # type: ignore[return-value]
+        return QuadkitHTMLResponse(content=data, status_code=status_code)  # type: ignore[return-value]
 
 
 class PlainTextSerializer(AbstractMediaSerializer):
@@ -203,11 +211,8 @@ class ResponseSerializer:
 
         Uses injected dependencies instead of service locator pattern.
         """
-        from quadkit.logging import get_logger
         from quadkit.result import Result
         from quadkit.web.transport.responses import HTMLContent, JSONResponse
-
-        logger = get_logger(__name__)
 
         # 0. Handle None → 204 No Content
         # (Status code from decorator is ignored for None, as 204 is semantic for NO content)

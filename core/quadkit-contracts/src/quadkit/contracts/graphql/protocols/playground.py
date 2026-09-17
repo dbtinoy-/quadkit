@@ -10,7 +10,7 @@ class GraphQLPlaygroundProtocol(Protocol):
     """Contract for the GraphQL playground page service.
 
     The web layer mounts the playground route against this contract only;
-    the ``quadkit-graphql`` package registers the concrete service. This
+    the ``the optional provider`` package registers the concrete service. This
     keeps the web package free of any direct dependency on the graphql
     extension (extension independence — see ``.importlinter``).
 

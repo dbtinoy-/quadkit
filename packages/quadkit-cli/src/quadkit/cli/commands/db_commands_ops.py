@@ -89,8 +89,8 @@ def inspect_(
                         out.table(["Column", "Type", "Nullable"], rows)
 
         except ImportError as e:
-            out.error(f"quadkit-sql not installed: {e}")
-            out.info("Install with: pip install quadkit-sql")
+            out.error(f"The optional database provider is not installed: {e}")
+            out.info("Install the provider before retrying")
             raise typer.Exit(1) from None
         except Exception as e:  # noqa: BLE001 — any inspect failure is a CLI error
             out.error(f"Failed to inspect database: {e}")

@@ -1,7 +1,7 @@
 """Workflow protocols for the Quadkit Framework.
 
 Defines the structural contracts for the workflow graph execution
-engine in ``quadkit-ai-workflow``.
+engine in ``the optional provider``.
 """
 
 from __future__ import annotations

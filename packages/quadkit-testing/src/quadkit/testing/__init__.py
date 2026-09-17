@@ -86,7 +86,6 @@ from quadkit.testing.harness.container import QuadkitContainerHarness
 
 # Re-export from harness decorators
 from quadkit.testing.harness.decorators import override, testbed
-from quadkit.testing.harness.environment import IntegrationEnvironment
 from quadkit.testing.harness.testbed import AppTestBed
 
 # Re-export from integration (markers and probes)
@@ -229,3 +228,8 @@ __all__ = [
     "requires_redis",
     "testbed",
 ]
+
+# Optional public projection modules are intentionally absent when their
+# private production package is not exported. Keep star-imports usable rather
+# than advertising names that are not present in the installed package.
+__all__ = [name for name in __all__ if name in globals()]

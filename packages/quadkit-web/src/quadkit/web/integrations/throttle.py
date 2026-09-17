@@ -177,10 +177,12 @@ class RateLimitModule:
                 (recommended for production); ``"memory``" uses a
                 process-local sliding window (suitable for development and
                 single-process deployments).
-            default_limit: Optional default rate limit applied globally (not
-                yet enforced by the module — provided for future middleware
-                use).  Accepts the same rate string format as
-                :func:`throttle`.
+            default_limit: Optional default rate limit validated at module
+                configuration time. Scope note: global (all-routes) enforcement
+                lives in the ASGI ``RateLimitMiddleware``, configured through
+                the ``[web.rate_limit]`` section of ``application.yaml`` —
+                this kwarg does not wire that middleware; per-route limits are
+                enforced by :func:`throttle` with the module-provided limiter.
             redis_client: Pre-built Redis client.  Only used when
                 ``backend="redis"``.  When *None*, the provider tries to
                 resolve a ``"redis_client"`` binding from the container at
@@ -197,7 +199,7 @@ class RateLimitModule:
             # Validate at module-configuration time so errors surface early.
             _parse_rate(default_limit)
 
-        provider_kwargs: dict[str, Any] = {"enabled": enabled}
+        provider_kwargs: dict[str, Any] = {"enabled": enabled, "backend": backend}
         if backend == "redis" and redis_client is not None:
             provider_kwargs["redis_client"] = redis_client
 

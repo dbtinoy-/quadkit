@@ -6,6 +6,7 @@ from quadkit.concurrency.exceptions import (
     AsyncError,
     ChannelClosedError,
     ChannelFullError,
+    DispatcherError,
     StructuredParallelismError,
     TaskGroupError,
     CancellationScopeError,
@@ -43,6 +44,12 @@ class TestChannelFullError:
         exc = ChannelFullError(capacity=10)
         assert exc.capacity == 10
         assert exc.details.get("capacity") == 10
+
+
+class TestDispatcherError:
+    def test_code(self) -> None:
+        exc = DispatcherError()
+        assert exc.code == "QK_ERR_CONC_005"
 
 
 class TestStructuredParallelismError:

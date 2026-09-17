@@ -15,6 +15,7 @@ import importlib
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, ClassVar, get_args, get_origin
 
+from quadkit.cli.package_names import module_for, provider_available
 from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
@@ -24,29 +25,34 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# Registry: maps YAML section key → (import_path, config_class_name)
-# This defines the canonical set of Quadkit subpackage configs.
+# Registry: maps YAML section key → (provider feature, config class name).
+# Optional entries are materialized only when their provider is installed.
+_CONFIG_SPECS: dict[str, tuple[str, str]] = {
+    "database": ("sql", "DatabaseConfig"),
+    "web": ("web", "WebConfig"),
+    "auth": ("auth", "AuthConfig"),
+    "cache": ("cache", "CacheConfig"),
+    "storage": ("storage", "StorageConfig"),
+    "tasks": ("tasks", "TaskConfig"),
+    "events": ("events", "EventsConfig"),
+    "search": ("search", "SearchConfig"),
+    "ai": ("ai", "AIConfig"),
+    "monitor": ("monitor", "MonitorConfig"),
+    "messaging": ("messaging", "MessagingConfig"),
+    "feature_flags": ("features", "FeatureFlagsConfig"),
+    "graphql": ("graphql", "GraphQLConfig"),
+}
 PACKAGE_CONFIGS: dict[str, str] = {
-    "database": "quadkit.sql.config:DatabaseConfig",
-    "web": "quadkit.web.config:WebConfig",
-    "auth": "quadkit.auth.config:AuthConfig",
-    "cache": "quadkit.cache.config:CacheConfig",
-    "storage": "quadkit.storage.config:StorageConfig",
-    "tasks": "quadkit.tasks.config:TaskConfig",
-    "events": "quadkit.events.config:EventsConfig",
-    "search": "quadkit.search.config:SearchConfig",
-    "ai": "quadkit.ai.config:AIConfig",
-    "monitor": "quadkit.monitor.config:MonitorConfig",
-    "messaging": "quadkit.messaging.config:MessagingConfig",
-    "feature_flags": "quadkit.features.config:FeatureFlagsConfig",
-    "graphql": "quadkit.graphql.config:GraphQLConfig",
+    key: f"{module_for(feature, 'config')}:{class_name}"
+    for key, (feature, class_name) in _CONFIG_SPECS.items()
+    if feature == "web" or provider_available(feature)
 }
 
 
 def _import_config_class(import_path: str) -> type[Any]:
-    """Import a config class from a dotted path like 'quadkit.sql.config:DatabaseConfig'.
+    """Import a config class from a dotted path like 'quadkit.<provider>.config:ConfigClass'.
 
-    Raises ImportError if quadkit-domain is not installed.
+    Raises ImportError if the optional domain-model provider is not installed.
     """
     module_path, class_name = import_path.rsplit(":", 1)
 
@@ -235,7 +241,7 @@ def generate_package_config(
 
     Args:
         package_key: The YAML section key (e.g. 'database').
-        import_path: Import path like 'quadkit.sql.config:DatabaseConfig'.
+        import_path: Import path like 'quadkit.<provider>.config:ConfigClass'.
         with_comments: Include field descriptions as comments.
 
     Returns:
@@ -244,10 +250,10 @@ def generate_package_config(
     try:
         config_cls = _import_config_class(import_path)
     except ImportError as e:
-        if "quadkit.domain" in str(e) or "DomainModel" in str(e):
+        if module_for("domain") in str(e) or "DomainModel" in str(e):
             error_msg = (
-                "quadkit-domain is required for config generation — "
-                "install it with: uv add quadkit-domain"
+                "The optional domain-model provider is required for config "
+                "generation; install the provider before retrying."
             )
             return f"# Error: {error_msg}\n# Original error: {e}\n{package_key}: {{}}\n"
         return f"# Failed to import {import_path}: {e}\n{package_key}: {{}}\n"

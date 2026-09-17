@@ -287,3 +287,23 @@ class TestAsyncCallableObjectDetection:
         assert sink == ["starlette_exec_obj"], (
             "Async callable object was not executed correctly via Starlette runner"
         )
+
+
+class TestTaskPipelineWiring:
+    """(payload, BackgroundTasks) tuple returns attach work to the response."""
+
+    @pytest.mark.asyncio
+    async def test_to_starlette_task_runs_with_context(self) -> None:
+        from starlette.background import BackgroundTask
+
+        from quadkit.web.background.tasks import BackgroundTasks
+
+        done: list[str] = []
+        tasks = BackgroundTasks()
+        tasks.add(done.append, "ran")
+
+        task = tasks._to_starlette_task()  # noqa: SLF001
+        assert isinstance(task, BackgroundTask)
+
+        await task()
+        assert done == ["ran"]

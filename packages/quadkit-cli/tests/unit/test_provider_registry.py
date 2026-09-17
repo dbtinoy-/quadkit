@@ -22,7 +22,7 @@ class TestProviderInstallerConfigMerging:
         config_file.write_text("app:\n  name: my-app\n")
 
         registry = ProviderRegistry.with_defaults()
-        provider = registry.get("database")
+        provider = registry.get("web")
         assert provider is not None
 
         result = ProviderInstaller.add_provider_config(
@@ -33,22 +33,22 @@ class TestProviderInstallerConfigMerging:
         content = yaml.safe_load(config_file.read_text())
         # Original key preserved
         assert content["app"]["name"] == "my-app"
-        # New database key was added
-        assert "database" in content
+        # New web key was added
+        assert "web" in content
 
     def test_does_not_overwrite_existing_keys(self, tmp_path: Path) -> None:
         """Existing config keys are NOT overwritten by add_provider_config."""
         config_file = tmp_path / "application.yaml"
-        # Pre-configure a database section with custom value
+        # Pre-configure a web section with custom value
         existing_config = {
-            "database": {
-                "url": "postgresql://my-custom-host:5432/my_db",
+            "web": {
+                "host": "custom.example.test",
             }
         }
         config_file.write_text(yaml.dump(existing_config))
 
         registry = ProviderRegistry.with_defaults()
-        provider = registry.get("database")
+        provider = registry.get("web")
         assert provider is not None
 
         result = ProviderInstaller.add_provider_config(
@@ -57,13 +57,13 @@ class TestProviderInstallerConfigMerging:
         assert result is True
 
         content = yaml.safe_load(config_file.read_text())
-        # Custom URL must not be overwritten by provider's default
-        assert content["database"]["url"] == "postgresql://my-custom-host:5432/my_db"
+        # Custom host must not be overwritten by provider's default
+        assert content["web"]["host"] == "custom.example.test"
 
     def test_returns_false_when_config_file_missing(self, tmp_path: Path) -> None:
         """add_provider_config() returns False if config file doesn't exist."""
         registry = ProviderRegistry.with_defaults()
-        provider = registry.get("cache")
+        provider = registry.get("resilience")
         assert provider is not None
 
         result = ProviderInstaller.add_provider_config(
@@ -77,7 +77,7 @@ class TestProviderInstallerConfigMerging:
         config_file.write_text("{}\n")
 
         registry = ProviderRegistry.with_defaults()
-        provider = registry.get("cache")
+        provider = registry.get("resilience")
         assert provider is not None
 
         result = ProviderInstaller.add_provider_config(
@@ -96,25 +96,25 @@ class TestProviderInstallerConfigMerging:
         config_file.write_text("{}\n")
 
         registry = ProviderRegistry.with_defaults()
-        db_provider = registry.get("database")
-        cache_provider = registry.get("cache")
-        assert db_provider is not None
-        assert cache_provider is not None
+        web_provider = registry.get("web")
+        resilience_provider = registry.get("resilience")
+        assert web_provider is not None
+        assert resilience_provider is not None
 
         ProviderInstaller.add_provider_config(
-            db_provider, config_path=str(config_file)
+            web_provider, config_path=str(config_file)
         )
         ProviderInstaller.add_provider_config(
-            cache_provider, config_path=str(config_file)
+            resilience_provider, config_path=str(config_file)
         )
 
         content = yaml.safe_load(config_file.read_text()) or {}
         # Both providers' top-level keys must be present
-        db_keys = set(db_provider.get_info().config)
-        cache_keys = set(cache_provider.get_info().config)
-        for key in db_keys:
+        web_keys = set(web_provider.get_info().config)
+        resilience_keys = set(resilience_provider.get_info().config)
+        for key in web_keys:
             assert key in content
-        for key in cache_keys:
+        for key in resilience_keys:
             assert key in content
 
 
@@ -124,9 +124,9 @@ class TestProviderRegistry:
     def test_get_known_provider(self) -> None:
         """get() returns the provider for a known name."""
         reg = ProviderRegistry.with_defaults()
-        provider = reg.get("database")
+        provider = reg.get("web")
         assert provider is not None
-        assert provider.get_info().name == "database"
+        assert provider.get_info().name == "web"
 
     def test_get_unknown_provider_returns_none(self) -> None:
         """get() returns None for an unregistered name."""
@@ -138,7 +138,7 @@ class TestProviderRegistry:
         """get_choices() includes all default provider names."""
         reg = ProviderRegistry.with_defaults()
         choices = reg.get_choices()
-        expected = {"database", "auth", "ai", "cache", "messaging", "events"}
+        expected = {"http", "resilience", "testing", "web"}
         for name in expected:
             assert name in choices, f"'{name}' missing from get_choices()"
 

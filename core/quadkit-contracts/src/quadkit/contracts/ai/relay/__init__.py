@@ -2,7 +2,7 @@
 
 This package holds the canonical intermediate representation (IR), wire
 DTOs, conversion context, and service protocols shared by the converter
-engine implemented in the ``quadkit-ai-relay`` extension package.
+engine implemented in the ``the optional provider`` extension package.
 """
 
 from __future__ import annotations

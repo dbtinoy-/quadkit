@@ -59,7 +59,7 @@ class AgentResponse:
     Contains the final message, the full reasoning trace (steps),
     all tool calls made, token usage, cost, and timing metadata.
 
-    Note: ToolCall and ReasoningStep are defined in quadkit-ai-agents
+    Note: ToolCall and ReasoningStep are defined in the optional provider
     and imported here for use in this type's field annotations.
     """
 

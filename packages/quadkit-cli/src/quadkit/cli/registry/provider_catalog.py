@@ -10,6 +10,8 @@ import abc
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from quadkit.cli.package_names import package_for
+
 
 @dataclass
 class ProviderInfo:
@@ -39,7 +41,7 @@ class DatabaseService(Provider):
     """Database provider."""
 
     name = "database"
-    package = "quadkit-sql"
+    package = package_for("sql", default="")
     description = "Database ORM and migrations"
     config = {
         "database": {
@@ -61,7 +63,7 @@ class AuthProvider(Provider):
     """Authentication provider."""
 
     name = "auth"
-    package = "quadkit-auth"
+    package = package_for("auth", default="")
     description = "Authentication and authorization"
     config = {
         "auth": {
@@ -84,7 +86,7 @@ class AIProvider(Provider):
     """AI/LLM provider."""
 
     name = "ai"
-    package = "quadkit-ai"
+    package = package_for("ai", default="")
     description = "AI and LLM integration"
     config = {
         "ai": {
@@ -106,7 +108,7 @@ class CacheProvider(Provider):
     """Caching provider."""
 
     name = "cache"
-    package = "quadkit-cache"
+    package = package_for("cache", default="")
     description = "Caching layer"
     config = {
         "cache": {
@@ -127,7 +129,7 @@ class QueueProvider(Provider):
     """Queue/broker provider."""
 
     name = "queue"
-    package = "quadkit-queue"
+    package = package_for("queue", default="")
     description = "Message broker and queues"
     config = {
         "queue": {
@@ -149,7 +151,7 @@ class MessagingProvider(Provider):
     """Messaging provider (notifications + email)."""
 
     name = "messaging"
-    package = "quadkit-notification"
+    package = package_for("notification", default="")
     description = "Email and notification delivery"
     config = {
         "notification": {
@@ -171,7 +173,7 @@ class NotificationProvider(Provider):
     """Notification provider."""
 
     name = "notification"
-    package = "quadkit-notification"
+    package = package_for("notification", default="")
     description = "SMS + push notifications"
     config = {
         "notification": {
@@ -193,7 +195,7 @@ class EventsProvider(Provider):
     """Events provider."""
 
     name = "events"
-    package = "quadkit-events"
+    package = package_for("events", default="")
     description = "Event handling and dispatch"
     config = {
         "events": {
@@ -214,7 +216,7 @@ class SearchProvider(Provider):
     """Search provider."""
 
     name = "search"
-    package = "quadkit-search"
+    package = package_for("search", default="")
     description = "Full-text search"
     config = {
         "search": {
@@ -236,7 +238,7 @@ class StorageProvider(Provider):
     """Storage provider."""
 
     name = "storage"
-    package = "quadkit-storage"
+    package = package_for("storage", default="")
     description = "File storage"
     config = {
         "storage": {
@@ -258,7 +260,7 @@ class MonitorProvider(Provider):
     """Monitoring provider."""
 
     name = "monitor"
-    package = "quadkit-monitor"
+    package = package_for("monitor", default="")
     description = "Monitoring and observability"
     config = {
         "monitor": {
@@ -279,7 +281,7 @@ class TasksProvider(Provider):
     """Background tasks provider."""
 
     name = "tasks"
-    package = "quadkit-tasks"
+    package = package_for("tasks", default="")
     description = "Background task processing"
     config = {
         "tasks": {
@@ -300,7 +302,7 @@ class GraphQLProvider(Provider):
     """GraphQL provider."""
 
     name = "graphql"
-    package = "quadkit-graphql"
+    package = package_for("graphql", default="")
     description = "GraphQL API support"
     config = {
         "graphql": {
@@ -349,7 +351,7 @@ class MonitoringProvider(Provider):
     """Monitoring and observability provider."""
 
     name = "monitoring"
-    package = "quadkit-monitoring"
+    package = package_for("monitoring", default="")
     description = "Monitoring and observability"
     config = {
         "monitoring": {
@@ -374,7 +376,7 @@ class WebProvider(Provider):
     """Web framework provider."""
 
     name = "web"
-    package = "quadkit-web"
+    package = package_for("web")
     description = "Web framework"
     config = {
         "web": {
@@ -396,7 +398,7 @@ class AdminProvider(Provider):
     """Admin panel provider."""
 
     name = "admin"
-    package = "quadkit-admin"
+    package = package_for("admin", default="")
     description = "Admin panel"
     config = {
         "admin": {
@@ -439,7 +441,7 @@ class CommonProvider(Provider):
     """Common utilities provider."""
 
     name = "common"
-    package = "quadkit-common"
+    package = package_for("common", default="")
     description = "Core utilities"
     config = {
         "common": {
@@ -460,7 +462,7 @@ class TestingProvider(Provider):
     """Testing utilities provider."""
 
     name = "testing"
-    package = "quadkit-testing"
+    package = package_for("testing")
     description = "Testing utilities"
     config = {
         "testing": {

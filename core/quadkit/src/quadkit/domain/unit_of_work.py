@@ -8,7 +8,7 @@ This base is deliberately storage-agnostic -- it imports no database driver --
 so in-memory and SQL implementations can share it:
 
 - ``quadkit.testing.memory.uow.InMemoryUnitOfWork`` supplies a no-op flush.
-- ``quadkit-sql``'s ``SQLUnitOfWork`` flushes through the active session.
+- ``the optional provider``'s ``SQLUnitOfWork`` flushes through the active session.
 """
 
 from __future__ import annotations

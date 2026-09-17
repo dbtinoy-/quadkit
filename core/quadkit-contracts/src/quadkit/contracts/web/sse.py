@@ -95,7 +95,7 @@ class ReactiveSseBridgeProtocol(Protocol):
     Implementations are provided by ``quadkit-web``
     (``quadkit.web.transport.reactive.sse_from_stream``) and registered in
     the DI container during ``WebProvider.register()``.  Consumers such as
-    ``quadkit-admin`` resolve this protocol instead of importing the
+    ``the optional provider`` resolve this protocol instead of importing the
     bridge from ``quadkit-web`` directly.
 
     Example::

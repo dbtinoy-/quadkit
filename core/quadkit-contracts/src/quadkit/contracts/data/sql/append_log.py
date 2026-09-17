@@ -1,7 +1,7 @@
 """Append log protocols for event sourcing.
 
 This module defines protocols for append-only event log storage,
-used by the event sourcing infrastructure in quadkit-events.
+used by the event sourcing infrastructure in the optional provider.
 """
 
 from __future__ import annotations

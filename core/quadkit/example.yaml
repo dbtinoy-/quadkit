@@ -5,7 +5,7 @@
 # Top-level env var prefix: QK_  (nested delimiter: __)
 #
 # Core fields are declared at the top level of this file.
-# Extension packages (quadkit-cache, quadkit-sql, etc.) each add their own
+# Extension packages (the optional provider, the optional provider, etc.) each add their own
 # top-level section (e.g. cache:, sql:, ai:) read by their own Config class.
 
 # -- Application Identity --------------------------------------------------
@@ -243,7 +243,7 @@ security:
     pbkdf2_iterations: 600000
 
 # -- Observability ---------------------------------------------------------
-# NEW -- Core observability hooks. Full OTLP/Prometheus config is in quadkit-monitor.
+# NEW -- Core observability hooks. Full OTLP/Prometheus config is in the optional provider.
 
 observability:
   # Master switch. When false, no-op implementations are used unconditionally.

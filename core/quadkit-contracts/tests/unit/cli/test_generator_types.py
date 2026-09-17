@@ -13,7 +13,7 @@ def test_make_derives_title_from_snake_case_name() -> None:
     d = GeneratorDefinition.make(
         "auth_guard",
         description="Guard",
-        generator_path="quadkit.auth.cli.generators.guard:AuthGuardGenerator",
+        generator_path="pkg.mod:AuthGuardGenerator",
     )
     assert d.title == "Generate Auth Guard"
     assert d.name == "auth_guard"

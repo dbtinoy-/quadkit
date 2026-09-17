@@ -14,7 +14,7 @@ from quadkit.contracts.ai.exceptions import RAGError
 class LoaderError(RAGError):
     """Raised when document loading fails in an expected, recoverable way.
 
-    Extended in quadkit-ai-rag with specific failures like unsupported
+    Extended in the optional provider with specific failures like unsupported
     format, parse errors, network failures, etc.
     """
 

@@ -5,7 +5,7 @@ data leaks and memory issues.
 
 This middleware:
 1. Creates a child container for each request
-2. Attaches it to request.state.container
+2. Attaches it to the request state (``request.state.container``)
 3. Properly disposes of scoped resources after the request
 """
 
@@ -14,9 +14,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, cast
 import uuid
 
-from starlette.requests import Request
-
 from quadkit.logging import get_logger
+from quadkit.web.middleware._headers import get_header, sanitize_request_id
 
 logger = get_logger(__name__)
 
@@ -40,8 +39,7 @@ class DIScopeMiddleware:
         container: Container | None = None,
         scoped_services: list[type] | None = None,
     ):
-        """
-        Initialize the DI scope middleware.
+        """Initialize the DI scope middleware.
 
         Args:
             app: The ASGI application
@@ -60,9 +58,21 @@ class DIScopeMiddleware:
             await self.app(scope, receive, send)
             return
 
-        # Extract request info from ASGI scope
-        headers = dict(scope.get("headers", []))
-        request_id = headers.get(b"x-request-id", str(uuid.uuid4()).encode()).decode()
+        # One request identity per request: an outer middleware (the
+        # request-context layer) resolves the id exactly once and stores it
+        # in the shared ASGI state. Reuse it instead of minting a second,
+        # differently-formatted id; the fallbacks below only run when this
+        # middleware is mounted standalone (e.g. without request context).
+        state = scope.setdefault("state", {})
+        request_id = state.get("request_id")
+        if not request_id:
+            inbound = get_header(scope, b"x-request-id")
+            request_id = sanitize_request_id(
+                inbound.decode("ascii", "replace") if inbound is not None else None
+            )
+            if not request_id:
+                request_id = f"req_{uuid.uuid4().hex[:12]}"
+            state["request_id"] = request_id
 
         # Create request-scoped container
         request_container: Any = None
@@ -92,23 +102,12 @@ class DIScopeMiddleware:
                 raise RuntimeError("Failed to create request scope") from exc
 
         try:
-            # Create a minimal Request object for DI scope
-            request = Request(scope, receive)
-
-            # Attach scoped container and request to request state
-            request.state.container = request_container
-            request.state.root_container = self.container
-            request.state.request_id = request_id
-
-            # Use service_scope for disposal check later
-
-            # Also make available via the container if possible
-            if request_container is not None and hasattr(
-                request_container,
-                "__setitem__",
-            ):
-                request_container["request"] = request
-                request_container["request_id"] = request_id
+            # Attach the scoped container to the shared ASGI state. Starlette's
+            # ``Request`` exposes the very same dict as ``request.state``, so
+            # handlers and inner middleware read these entries without this
+            # middleware having to construct a Request wrapper of its own.
+            state["container"] = request_container
+            state["root_container"] = self.container
 
             # Process request with scoped container
             await self.app(scope, receive, send)

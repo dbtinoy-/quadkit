@@ -1,7 +1,7 @@
 """Workflow-domain exception classes.
 
 Exceptions that cross extension-package boundaries live here so that core
-``quadkit``, ``quadkit-workflow``, and all extension packages can import
+``quadkit``, ``the optional provider``, and all extension packages can import
 them without cross-extension dependencies.
 """
 

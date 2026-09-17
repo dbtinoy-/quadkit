@@ -190,9 +190,11 @@ def use_guards(*guards: type[Any] | Any) -> Any:
                             request = arg
                             break
                 if request is None:
+                    qualname = getattr(target, "__qualname__", repr(target))
                     raise RuntimeError(
-                        "GuardProtocol requires request context. Ensure the handler "
-                        "declares 'request: Request' as a parameter.",
+                        "GuardProtocol requires request context for "
+                        f"{qualname!r}. Ensure the handler declares "
+                        "'request: Request' as a parameter.",
                     )
 
                 result = await execute_guards(guard_instances, request)

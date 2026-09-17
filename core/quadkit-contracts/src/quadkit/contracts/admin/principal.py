@@ -27,7 +27,7 @@ class AdminPrincipal:
 
 @runtime_checkable
 class AdminPrincipalProviderProtocol(Protocol):
-    """Bridge implemented ONCE by the application; consumed by quadkit-admin.
+    """Bridge implemented ONCE by the application; consumed by the optional provider.
 
     Distinct from ``RoleResolverProtocol`` (quadkit-web PEP for app-user API
     routes): this is the PANEL identity seam.

@@ -75,13 +75,24 @@ class TestSecurityHeadersConfig:
 class TestCSPConfigMerge:
     """Test CSPConfig merges partial directives with framework defaults."""
 
-    def test_defaults_have_unsafe_inline_on_style_src_elem(self) -> None:
-        """Defaults must include style-src-elem with 'unsafe-inline'."""
+    def test_defaults_are_strict_no_unsafe_no_cdn(self) -> None:
+        """Defaults must not include 'unsafe-*' or third-party CDN hosts."""
         from quadkit.web.security.config import CSPConfig
 
         config = CSPConfig()
         assert "'self'" in config.directives["style-src-elem"]
-        assert "'unsafe-inline'" in config.directives["style-src-elem"]
+        assert "'unsafe-inline'" not in config.directives["style-src-elem"]
+        assert "'unsafe-eval'" not in config.directives["script-src"]
+        joined = " ".join(str(v) for v in config.directives.values())
+        for host in (
+            "unpkg.com",
+            "cdn.jsdelivr.net",
+            "cdn.redoc.ly",
+            "cdn.plot.ly",
+            "fonts.googleapis.com",
+            "fonts.gstatic.com",
+        ):
+            assert host not in joined
 
     def test_partial_directives_fall_back_to_defaults(self) -> None:
         """A partial directives dict keeps defaults for omitted directives."""
@@ -90,7 +101,6 @@ class TestCSPConfigMerge:
         config = CSPConfig(directives={"style-src": "'self'"})
         assert config.directives["style-src"] == "'self'"
         assert "'self'" in config.directives["style-src-elem"]
-        assert "'unsafe-inline'" in config.directives["style-src-elem"]
         assert config.directives["default-src"] == "'self'"
 
     def test_user_directives_override_defaults_per_key(self) -> None:
@@ -99,7 +109,7 @@ class TestCSPConfigMerge:
 
         config = CSPConfig(directives={"default-src": "'none'"})
         assert config.directives["default-src"] == "'none'"
-        assert "'unsafe-inline'" in config.directives["style-src-elem"]
+        assert config.directives["style-src-elem"] == "'self'"
 
 
 class TestCORSMiddlewareFactory:

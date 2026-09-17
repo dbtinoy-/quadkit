@@ -1,0 +1,51 @@
+name: Docs site
+
+# Builds the mkdocs site on every docs change and publishes it to GitHub
+# Pages when a release tag lands. The prose gates (scripts/check_public_*)
+# run in public-validation.yml — this workflow's job is the site build.
+
+# Trigger on release tags and manual dispatch: the export pipeline pushes
+# with a token that does not retrigger `push` workflows, so each release
+# tag is the dependable signal to rebuild and publish the site.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install the site toolchain
+        run: pip install mkdocs-material==9.5.34
+      - name: Build the site (strict)
+        run: mkdocs build --strict --site-dir site
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+  deploy:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

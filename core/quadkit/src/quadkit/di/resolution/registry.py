@@ -40,6 +40,7 @@ class ServiceRegistry:
         self._type_hint_resolver = type_hint_resolver
         self._store = ServiceStore()
         self._validator = GraphValidator(self._store, type_hint_resolver)
+        self._attribution: dict[type, type] = {}
 
     # -- Store access ------------------------------------------------------
 
@@ -47,6 +48,22 @@ class ServiceRegistry:
     def store(self) -> ServiceStore:
         """The underlying descriptor store."""
         return self._store
+
+    # -- Module attribution ------------------------------------------------
+
+    def attribute(self, service_type: type, module_class: type | None) -> None:
+        """Record the module whose provider registered *service_type*.
+
+        Called at registration time with the active module context, if any.
+        Standalone and framework registrations leave no attribution, which
+        the visibility gate treats as unrestricted.
+        """
+        if module_class is not None:
+            self._attribution[service_type] = module_class
+
+    def providing_module(self, service_type: type) -> type | None:
+        """Return the module that registered *service_type*, or ``None``."""
+        return self._attribution.get(service_type)
 
     # -- Core operations ---------------------------------------------------
 

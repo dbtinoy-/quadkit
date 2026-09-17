@@ -2,7 +2,7 @@
 
 Provides an in-memory Outbox for testing and local development.
 For production with database persistence, use the OutboxEventStore
-from the quadkit-events extension.
+from the the optional provider extension.
 
 The Outbox pattern ensures events are stored in the same transaction
 as business data, then relayed asynchronously for publishing.

@@ -1,4 +1,4 @@
-"""Admin-specific test helpers for quadkit-admin tests."""
+"""Admin-specific test helpers for the optional provider tests."""
 
 from __future__ import annotations
 
@@ -42,7 +42,7 @@ class AdminResponse:
 
 
 class AdminTestClient:
-    """Test client with helpers for quadkit-admin endpoints.
+    """Test client with helpers for the optional provider endpoints.
 
     Wraps a Starlette ``TestClient`` (or any httpx-compatible sync client)
     and provides assertion helpers and convenience methods for CRUD operations.

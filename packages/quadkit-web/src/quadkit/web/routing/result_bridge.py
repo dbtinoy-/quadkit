@@ -15,6 +15,20 @@ Usage::
         return await self.service.find(user_id)
         # If Err(NotFoundError(...)) → HTTP 404
         # If Ok(user) → HTTP 200 with serialized user
+
+Policy boundary: this module owns error→status mapping for the
+Result-return path only. The throw path (``raise`` inside a handler) is
+owned by ``DefaultExceptionFilter`` (web.filters.builtin), which covers
+the built-in contract error families and does not read the registry
+below. The two paths agree on the seven built-in families, so the same
+contract error yields the same status in either style; a custom
+``register``/``@error_status`` mapping applies to Result-returning
+handlers only.
+
+Registry lifetime: ``_ERROR_STATUS_REGISTRY`` is module-level and
+process-wide. Registrations are startup wiring — perform them at import
+time, before the application begins serving, so every host and worker in
+the process observes the same mapping.
 """
 
 from __future__ import annotations

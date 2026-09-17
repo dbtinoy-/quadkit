@@ -10,32 +10,21 @@ from quadkit.validation import ConfigDict, Field, model_validator
 
 _DEFAULT_DIRECTIVES: dict[str, str] = {
     "default-src": "'self'",
-    # Safe CDN hosts used by the framework's own templates (Swagger UI,
-    # ReDoc, quadkit-admin, quadkit-ui): see UI_CSP_REQUIREMENTS and
-    # APIDocsConfig.SWAGGER_DOMAINS / REDOC_DOMAINS.
-    "script-src": (
-        "'self' 'unsafe-inline' 'unsafe-eval' "
-        "https://unpkg.com https://cdn.jsdelivr.net "
-        "https://cdn.redoc.ly https://cdn.plot.ly"
-    ),
-    "script-src-elem": (
-        "'self' 'unsafe-inline' 'unsafe-eval' "
-        "https://unpkg.com https://cdn.jsdelivr.net "
-        "https://cdn.redoc.ly https://cdn.plot.ly"
-    ),
-    "style-src": (
-        "'self' 'unsafe-inline' "
-        "https://unpkg.com https://cdn.jsdelivr.net "
-        "https://fonts.googleapis.com"
-    ),
-    "style-src-elem": (
-        "'self' 'unsafe-inline' "
-        "https://unpkg.com https://cdn.jsdelivr.net "
-        "https://fonts.googleapis.com"
-    ),
+    # plans/09172026 H-03: docs UI assets (Swagger UI, ReDoc) are vendored
+    # and served from this application under /docs-static, so the default
+    # policy needs no third-party origins and no 'unsafe-inline'/'unsafe-eval'
+    # (the docs pages load scripts and styles as plain external files).
+    # Operators who opt into a CDN via web.api_docs.cdn_base (or per-asset
+    # URL overrides) get that origin merged in automatically at boot.
+    "script-src": "'self'",
+    "script-src-elem": "'self'",
+    "style-src": "'self'",
+    "style-src-elem": "'self'",
     "img-src": "'self' data: https: blob:",
-    "font-src": "'self' data: https://fonts.googleapis.com https://fonts.gstatic.com",
-    "connect-src": "'self' https: wss: ws: https://unpkg.com",
+    "font-src": "'self' data:",
+    "connect-src": "'self'",
+    # ReDoc spawns its search worker from a Blob URL.
+    "worker-src": "'self' blob:",
     "frame-ancestors": "'none'",
     "base-uri": "'self'",
     "form-action": "'self'",

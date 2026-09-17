@@ -48,6 +48,7 @@ from quadkit.cli.layout import (
 from quadkit.cli.layout import (
     root_output_dirs as _layout_root_output_dirs,
 )
+from quadkit.cli.package_names import module_for, packages_for, provider_available
 
 TEMPLATE_ALIASES = {
     "fullstack": "full",
@@ -75,6 +76,26 @@ def _spec(
     return ProjectTemplateSpec(name, description, dependencies, features, notes)
 
 
+def _dependencies(*features: str, tools: tuple[str, ...] = ()) -> tuple[str, ...]:
+    """Build template dependencies from installed provider discovery."""
+
+    return (*packages_for(*features), *tools)
+
+
+def _template_is_available(spec: ProjectTemplateSpec) -> bool:
+    """Hide templates whose optional providers are absent from this install."""
+
+    return all(
+        provider_available(feature) or feature in {"web", "testing"}
+        for feature in spec.features
+    )
+
+
+_WEB_API_FEATURES = frozenset(
+    {"web", "sql"} if provider_available("sql") else {"web"}
+)
+
+
 TEMPLATES: dict[str, ProjectTemplateSpec] = {
     "minimal": _spec(
         "minimal",
@@ -84,14 +105,14 @@ TEMPLATES: dict[str, ProjectTemplateSpec] = {
     "api": _spec(
         "api",
         "REST API with the web framework",
-        ("quadkit", "quadkit-web", "uvicorn"),
+        _dependencies("web", tools=("uvicorn",)),
         frozenset({"web"}),
     ),
     "web-api": _spec(
         "web-api",
-        "REST API with web + SQL persistence",
-        ("quadkit", "quadkit-web", "quadkit-sql", "uvicorn"),
-        frozenset({"web", "sql"}),
+        "REST API with optional persistence",
+        _dependencies("web", "sql", tools=("uvicorn",)),
+        _WEB_API_FEATURES,
         (
             (
                 "Controllers are auto-discovered from src/<app>/controllers "
@@ -103,7 +124,7 @@ TEMPLATES: dict[str, ProjectTemplateSpec] = {
     "graphql": _spec(
         "graphql",
         "GraphQL API with web + SQL + GraphQL",
-        ("quadkit", "quadkit-web", "quadkit-sql", "quadkit-graphql", "uvicorn"),
+        _dependencies("web", "sql", "graphql", tools=("uvicorn",)),
         frozenset({"web", "sql", "graphql"}),
         (
             (
@@ -115,7 +136,7 @@ TEMPLATES: dict[str, ProjectTemplateSpec] = {
     "worker": _spec(
         "worker",
         "Background job processor",
-        ("quadkit", "quadkit-queue", "quadkit-tasks", "quadkit-sql"),
+        _dependencies("queue", "tasks", "sql"),
         frozenset({"queue", "tasks", "sql"}),
         (
             (
@@ -127,17 +148,7 @@ TEMPLATES: dict[str, ProjectTemplateSpec] = {
     "full": _spec(
         "full",
         "Full application with auth, admin, feature flags, cache, tasks, and SQL",
-        (
-            "quadkit",
-            "quadkit-web",
-            "quadkit-sql",
-            "quadkit-auth",
-            "quadkit-admin",
-            "quadkit-features",
-            "quadkit-cache",
-            "quadkit-tasks",
-            "uvicorn",
-        ),
+        _dependencies("web", "sql", "auth", "admin", "features", "cache", "tasks", tools=("uvicorn",)),
         frozenset({"web", "sql", "auth", "admin", "features", "cache", "tasks"}),
         (
             (
@@ -151,7 +162,11 @@ TEMPLATES: dict[str, ProjectTemplateSpec] = {
         ),
     ),
 }
-TEMPLATES["fullstack"] = TEMPLATES["full"]
+TEMPLATES = {
+    name: spec for name, spec in TEMPLATES.items() if _template_is_available(spec)
+}
+if "full" in TEMPLATES:
+    TEMPLATES["fullstack"] = TEMPLATES["full"]
 
 
 def template_names() -> list[str]:
@@ -363,29 +378,29 @@ def _module_imports(features: frozenset[str]) -> list[str]:
     """Alphabetical import lines for the feature modules."""
     names: list[str] = []
     if "web" in features:
-        names.append("from quadkit.web import WebModule")
+        names.append(f"from {module_for('web')} import WebModule")
     if "sql" in features:
-        names.append("from quadkit.sql import DatabaseModule")
+        names.append(f"from {module_for('sql')} import DatabaseModule")
     if "graphql" in features:
-        names.append("from quadkit.graphql import GraphQLModule")
+        names.append(f"from {module_for('graphql')} import GraphQLModule")
     if "auth" in features:
-        names.append("from quadkit.auth import AuthModule")
+        names.append(f"from {module_for('auth')} import AuthModule")
     if "admin" in features:
-        names.append("from quadkit.admin import AdminModule")
+        names.append(f"from {module_for('admin')} import AdminModule")
         names.append(
-            "from quadkit.admin.config import AdminAuthConfig, AdminConfig, "
-            "AdminSecurityConfig"
+            f"from {module_for('admin', 'config')} import AdminAuthConfig, "
+            "AdminConfig, AdminSecurityConfig"
         )
     if "cache" in features:
-        names.append("from quadkit.cache import CacheModule")
+        names.append(f"from {module_for('cache')} import CacheModule")
     if "features" in features:
-        names.append("from quadkit.features import FeatureFlagsModule")
+        names.append(f"from {module_for('features')} import FeatureFlagsModule")
     if "tasks" in features:
-        names.append("from quadkit.tasks import TasksModule")
+        names.append(f"from {module_for('tasks')} import TasksModule")
     if "queue" in features:
-        names.append("from quadkit.queue import QueueModule")
+        names.append(f"from {module_for('queue')} import QueueModule")
     if "monitor" in features:
-        names.append("from quadkit.monitor import MonitorModule")
+        names.append(f"from {module_for('monitor')} import MonitorModule")
     names.sort()
     return names
 
@@ -695,9 +710,9 @@ def _app_py(
         "from quadkit.config import QuadkitConfig",
     ]
     if "web" in features:
-        imports.append("from quadkit.web import WebModule")
+        imports.append(f"from {module_for('web')} import WebModule")
     if "graphql" in features:
-        imports.append("from quadkit.graphql import GraphQLModule")
+        imports.append(f"from {module_for('graphql')} import GraphQLModule")
     local_imports = [
         f"from {package_name}.infrastructure import infrastructure_modules",
         f"from {package_name}.modules import MODULES",
@@ -958,7 +973,7 @@ def _env_example(project_name: str) -> str:
 # QK_WEB__SERVER__HOST=127.0.0.1
 # QK_WEB__SERVER__PORT=8000
 
-# Database URL (sql.backend) — consumed by quadkit-sql
+# Database URL (the configured database provider)
 # QK_SQL__BACKEND__URL=sqlite:///./dev.db
 
 # Auth secret — set a real value before deploying with auth enabled

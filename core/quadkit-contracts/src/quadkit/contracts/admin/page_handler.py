@@ -1,4 +1,4 @@
-"""Management page handler protocols for quadkit-admin contributors.
+"""Management page handler protocols for the optional provider contributors.
 
 ``handle_action`` is duck-typed (not part of the protocol) so that
 handlers with only ``handle`` satisfy ``isinstance(handler, ManagementPageHandler)``.

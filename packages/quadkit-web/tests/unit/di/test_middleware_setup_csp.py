@@ -1,9 +1,12 @@
 """Tests for automatic CSP configuration of API documentation.
 
-Covers:
-- ``MiddlewareSetup._configure_csp`` merges the Swagger/ReDoc CDN domains
-  into the CSP by default (``APIDocsConfig.enabled`` defaults to True), so
-  ``/docs`` and ``/redoc`` render for every quadkit-web application.
+Covers (plans/09172026 H-03):
+
+- The default WebConfig keeps the CSP strict: docs assets are vendored and
+  served by the application itself, so no CDN origins are merged and the
+  boot log reports the ``local`` assets mode.
+- Setting ``api_docs.cdn_base`` opts into a CDN: its origin is merged into
+  the CSP for scripts and styles.
 - Explicitly disabling ``api_docs`` leaves the CSP untouched.
 - Pre-existing directives (str or set) are preserved during the merge.
 """
@@ -17,17 +20,36 @@ from quadkit.web.di.middleware_setup import MiddlewareSetup
 
 
 @pytest.mark.asyncio
-async def test_default_config_auto_configures_csp_for_docs() -> None:
-    """The default WebConfig merges docs CDN domains into the CSP."""
+async def test_default_config_keeps_csp_strict_for_docs() -> None:
+    """The default WebConfig adds no CDN domains and stays local."""
     config = WebConfig()
     setup = MiddlewareSetup(config=config)
 
     await setup._configure_csp()
 
     directives = config.security.csp.directives
-    assert "https://unpkg.com" in directives["script-src"]
-    assert "https://unpkg.com" in directives["style-src"]
-    assert "https://cdn.redoc.ly" in directives["script-src"]
+    assert "https://unpkg.com" not in directives["script-src"]
+    assert "https://cdn.redoc.ly" not in directives["script-src"]
+    assert "https://fonts.googleapis.com" not in directives["style-src"]
+    assert "'unsafe-eval'" not in directives["script-src"]
+    assert "'unsafe-inline'" not in directives["style-src-elem"]
+    assert "connect-src" not in directives or "https:" not in directives["connect-src"]
+
+
+@pytest.mark.asyncio
+async def test_cdn_base_merges_origin_into_csp() -> None:
+    """Opting into a CDN via cdn_base allows exactly that origin."""
+    config = WebConfig()
+    config.api_docs.cdn_base = "https://mirror.example.com/assets"
+    setup = MiddlewareSetup(config=config)
+
+    await setup._configure_csp()
+
+    directives = config.security.csp.directives
+    assert "https://mirror.example.com" in directives["script-src"]
+    assert "https://mirror.example.com" in directives["script-src-elem"]
+    assert "https://mirror.example.com" in directives["style-src"]
+    assert "https://unpkg.com" not in directives["script-src"]
 
 
 @pytest.mark.asyncio
@@ -50,8 +72,9 @@ async def test_api_docs_disabled_skips_csp_merge() -> None:
 
 @pytest.mark.asyncio
 async def test_existing_directive_values_are_preserved() -> None:
-    """Custom str/set directives keep their values while docs domains are added."""
+    """Custom str/set directives keep their values while CDN origins are added."""
     config = WebConfig()
+    config.api_docs.cdn_base = "https://mirror.example.com"
     config.security.csp.directives = {
         "script-src": "'self' 'unsafe-inline'",
         "style-src": {"'self'", "https://cdn.jsdelivr.net"},
@@ -62,7 +85,7 @@ async def test_existing_directive_values_are_preserved() -> None:
 
     directives = config.security.csp.directives
     assert "'self' 'unsafe-inline'" in directives["script-src"]
-    assert "https://unpkg.com" in directives["script-src"]
+    assert "https://mirror.example.com" in directives["script-src"]
     assert "'self'" in directives["style-src"]
     assert "https://cdn.jsdelivr.net" in directives["style-src"]
-    assert "https://unpkg.com" in directives["style-src"]
+    assert "https://mirror.example.com" in directives["style-src"]

@@ -19,7 +19,7 @@ class TenantResolverProtocol(Protocol):
     """Resolves tenant identity from request context.
 
     Implementations are tried in priority order by
-    :class:`~quadkit.tenancy.resolution.chain.CompositeResolver`.
+    :class:`~the optional provider module`.
     Lower ``priority`` value = tried first = higher trust level.
 
     Attributes:
@@ -49,9 +49,9 @@ class TenantProviderProtocol(Protocol):
 
     Applications may supply their own implementation by binding a class to
     this protocol in the DI container.  The default implementations are
-    :class:`~quadkit.tenancy.stores.memory.InMemoryTenantProvider` (for
+    :class:`~the optional provider module` (for
     testing/dev) and ``SQLTenantProvider`` (when
-    ``quadkit-tenancy[sql]`` is installed).
+    ``the optional provider[sql]`` is installed).
     """
 
     async def get_tenant(self, tenant_id: str) -> TenantInfo | None:
@@ -186,7 +186,7 @@ class TenantConfigProviderProtocol(Protocol):
     """Per-tenant configuration key-value store.
 
     Provides a low-level get/set interface.  The higher-level
-    :class:`~quadkit.tenancy.config_overrides.service.TenantConfigService`
+    :class:`~the optional provider module`
     adds default fallback and event emission on top of this protocol.
     """
 

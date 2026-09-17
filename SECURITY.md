@@ -47,5 +47,6 @@ The framework follows these security practices across the codebase:
 - **Dependencies** — pinned and scanned; baseline guards fail CI on new
   unbounded pins.
 
-See `core/quadkit/docs/SECURITY.md` for the core package's full threat
-model and security configuration guidance.
+See the security guides on the documentation site for secure
+configuration guidance and the full vulnerability-reporting process:
+https://dbtinoy-.github.io/quadkit/security/

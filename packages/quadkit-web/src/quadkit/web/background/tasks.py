@@ -63,6 +63,18 @@ class BackgroundTasks:
     def __bool__(self) -> bool:
         return bool(self._tasks)
 
+    def _to_starlette_task(self) -> Any:
+        """Adapt to a Starlette ``BackgroundTask``.
+
+        Internal method for the web routing layer: handlers may return
+        ``(payload, BackgroundTasks)`` and the request pipeline attaches the
+        adapted task to the outgoing response, so queued work runs after the
+        bytes hit the wire with the captured request context restored.
+        """
+        from starlette.background import BackgroundTask
+
+        return BackgroundTask(self._execute_all)
+
 
 class StarletteBackgroundTaskRunner(BackgroundTaskRunnerProtocol):
     """Starlette-backed implementation of BackgroundTaskRunnerProtocol.
@@ -129,7 +141,14 @@ class StarletteBackgroundTaskRunner(BackgroundTaskRunnerProtocol):
 
 
 class BackgroundTaskScope:
-    """Dependency injection scope for BackgroundTasks."""
+    """Dependency injection scope for BackgroundTasks.
+
+    The primary, transport-agnostic pattern is returning
+    ``(payload, BackgroundTasks)`` from a handler — the request pipeline
+    attaches the tasks to the outgoing response. This scope exists for apps
+    that prefer wires-through-DI: carry one per request and hand
+    ``scope.tasks`` to whichever path drains it.
+    """
 
     def __init__(self) -> None:
         self._tasks = BackgroundTasks()

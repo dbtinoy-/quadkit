@@ -4,10 +4,10 @@ from quadkit.contracts.cli.contributions import SchemaSetupContribution
 
 def test_schema_setups_aggregates_across_contributors():
     contribution = SchemaSetupContribution(
-        name="admin.tenant_configs",
+        name="example.tenant_configs",
         description="Tenant-scoped settings storage",
-        setup_fn_path="quadkit.admin.cli.schema_setup:ensure_tenant_configs",
-        contributor="admin",
+        setup_fn_path="example_app.schema_setup:ensure_tenant_configs",
+        contributor="example",
     )
 
     class FakeContributor:

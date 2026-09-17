@@ -1,0 +1,24 @@
+# Generated public-repository ignore rules.
+# Private monorepo paths are intentionally not referenced here.
+
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+.venv/
+venv/
+.env
+.env.*
+!.env.example
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.log
+.DS_Store
+.idea/
+.vscode/

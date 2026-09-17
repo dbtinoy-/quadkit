@@ -2,7 +2,7 @@
 
 Storage exceptions shared across packages. Per the framework's
 single-definition rule, exceptions referenced by more than one package
-live in contracts; ``quadkit-storage`` re-exports them from here.
+live in contracts; ``the optional provider`` re-exports them from here.
 """
 
 from __future__ import annotations

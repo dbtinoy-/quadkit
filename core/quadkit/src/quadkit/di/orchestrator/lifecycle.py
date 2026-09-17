@@ -106,8 +106,14 @@ class LifecycleManager:
 
             async def _register_one(p: Provider) -> None:
                 t0 = time.perf_counter()
-                await self._inject_provider_config(p, registrar)
-                await p.register(registrar)
+                tokens = set_module_context(
+                    self._find_module_class(p), self._registry._compiled_graph
+                )
+                try:
+                    await self._inject_provider_config(p, registrar)
+                    await p.register(registrar)
+                finally:
+                    clear_module_context(tokens)
                 p._state = ProviderState.REGISTERED
                 elapsed_ms = round((time.perf_counter() - t0) * 1000, 2)
                 logger.debug(
@@ -126,10 +132,13 @@ class LifecycleManager:
 
         Phases:
             1. register_all — all providers bind into the container.
-            2. container.freeze() — no further registrations allowed.
+            2. container.freeze() — registration closes to user code.
             3. container.validate() — dependency graph checked for issues.
             4. _validate_modules() — checks module export matching.
-            5. boot_only — providers initialize in dependency order.
+            5. boot_only — providers initialize in dependency order, inside
+               a framework-managed registration window so boot-time
+               materializers (``@provide`` factories) can bind their
+               products. The window re-freezes on exit.
 
         Args:
             container: The DI container (implements both registrar and resolver).
@@ -147,7 +156,13 @@ class LifecycleManager:
         if all_issues:
             raise ContainerValidationError(all_issues)
 
-        await self.boot_only(container)
+        registrar = getattr(container, "registrar", container)
+        registration_window = getattr(registrar, "_registration_window", None)
+        if registration_window is None:
+            await self.boot_only(container)
+        else:
+            with registration_window():
+                await self.boot_only(container)
 
     async def boot_only(self, resolver: BootContainerProtocol) -> None:
         """Phase 2: Boot all registered providers.

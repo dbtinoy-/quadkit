@@ -39,10 +39,10 @@ class TestStubOverrideRoot:
         web = GeneratorBase._stub_override_root(
             "quadkit.web.cli.generators.controller", tmp_path
         )
-        sql = GeneratorBase._stub_override_root(
-            "quadkit.sql.cli.generators.model", tmp_path
+        cli = GeneratorBase._stub_override_root(
+            "quadkit.cli.generators.scaffold", tmp_path
         )
-        assert web != sql
+        assert web != cli
 
     def test_none_without_anchor(self) -> None:
         assert (

@@ -1,0 +1,16 @@
+version: 2
+
+updates:
+  # GitHub Actions bumps only, on purpose: this repository is generated from
+  # a private monorepo at each release, so python dependency updates belong
+  # upstream and arrive here with the next export. Workflow action bumps are
+  # small, reviewable, and replayed upstream like any other contribution —
+  # see CONTRIBUTING.md ("This repository is generated").
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 3
+    groups:
+      actions:
+        patterns: ["*"]

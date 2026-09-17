@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import ClassVar
+from urllib.parse import urlparse
 
 from quadkit.config import BaseConfig
 from quadkit.validation import ConfigDict, Field
@@ -13,8 +14,13 @@ from quadkit.validation import ConfigDict, Field
 class APIDocsConfig(BaseConfig):
     """API documentation configuration.
 
-    Automatically configures CSP directives for API documentation endpoints
-    (/docs for Swagger UI, /redoc for ReDoc) when enabled.
+    Documentation assets (Swagger UI, ReDoc) are vendored inside the
+    ``quadkit-web`` package and served by the application itself under
+    ``/docs-static/`` (plans/09172026 H-03): the default docs pages make no
+    third-party requests and the default CSP needs no CDN origins.
+
+    Set ``cdn_base`` to load the same vendored filenames from a CDN or
+    private mirror instead (the origin is then auto-allowed in the CSP).
     """
 
     model_config: ClassVar[ConfigDict] = ConfigDict(extra="ignore")
@@ -23,49 +29,67 @@ class APIDocsConfig(BaseConfig):
         default=True,
         description=(
             "Enable API documentation endpoints (/docs, /redoc) and auto-configure "
-            "CSP for their CDN assets"
+            "CSP for their assets"
         ),
     )
     provider: str = Field(
         default="both",
         description="Documentation provider: 'swagger', 'redoc', or 'both'",
     )
-
-    # Domains needed for API docs
-    SWAGGER_DOMAINS: ClassVar[dict[str, set[str]]] = {
-        "script-src": {"https://unpkg.com"},
-        "script-src-elem": {"https://unpkg.com"},  # For <script src> elements
-        "style-src": {"https://unpkg.com"},
-        "style-src-elem": {"https://unpkg.com"},  # For <link rel=stylesheet> elements
-    }
-
-    REDOC_DOMAINS: ClassVar[dict[str, set[str]]] = {
-        "script-src": {"https://cdn.redoc.ly"},
-        "script-src-elem": {"https://cdn.redoc.ly"},  # For <script src> elements
-        "style-src": {"https://fonts.googleapis.com"},
-        "style-src-elem": {
-            "https://fonts.googleapis.com"
-        },  # For <link rel=stylesheet> elements
-        "font-src": {"https://fonts.gstatic.com"},
-        "worker-src": {"blob:"},
-    }
+    cdn_base: str | None = Field(
+        default=None,
+        description=(
+            "Base URL under which the vendored docs asset filenames are served "
+            "(e.g. 'https://unpkg.com/swagger-ui-dist@5.10.3' or a private "
+            "mirror). Default null: assets are served by the application itself "
+            "from /docs-static/ with zero third-party requests. Its origin is "
+            "automatically allowed in the CSP when set. Per-asset "
+            "web.swagger_js_url / web.swagger_css_url / web.redoc_js_url "
+            "overrides take precedence over this base."
+        ),
+    )
 
     def get_required_domains(self) -> dict[str, set[str]]:
-        """Get required CSP domains based on provider setting."""
-        result: dict[str, set[str]] = {}
+        """Get required CSP domains for the docs assets.
 
-        # Determine which providers to include
-        providers = {"swagger", "redoc"} if self.provider == "both" else {self.provider}
+        Returns an empty mapping in the default (vendored, local) mode: local
+        assets are covered by ``'self'`` and require no CSP additions. When
+        ``cdn_base`` is set, its origin is allowed for scripts and styles.
+        """
+        if not self.cdn_base:
+            return {}
 
-        if "swagger" in providers:
-            for key, values in self.SWAGGER_DOMAINS.items():
-                result.setdefault(key, set()).update(values)
+        parsed = urlparse(
+            self.cdn_base if "//" in self.cdn_base else f"https://{self.cdn_base}"
+        )
+        if not parsed.netloc:
+            return {}
 
-        if "redoc" in providers:
-            for key, values in self.REDOC_DOMAINS.items():
-                result.setdefault(key, set()).update(values)
+        origin = f"{parsed.scheme}://{parsed.netloc}"
+        return {
+            "script-src": {origin},
+            "script-src-elem": {origin},
+            "style-src": {origin},
+            "style-src-elem": {origin},
+        }
 
-        return result
+    def assets_mode(
+        self,
+        swagger_js_url: str | None = None,
+        swagger_css_url: str | None = None,
+        redoc_js_url: str | None = None,
+    ) -> str:
+        """Report which asset mode the docs pages will use.
+
+        Returns ``"local"`` (vendored assets served by the app), ``"cdn"``
+        (``cdn_base`` set) or ``"custom"`` (explicit per-asset URLs) — used
+        for the boot log so operators can see the active mode.
+        """
+        if swagger_js_url or swagger_css_url or redoc_js_url:
+            return "custom"
+        if self.cdn_base:
+            return "cdn"
+        return "local"
 
 
 @dataclass(init=False)

@@ -12,20 +12,44 @@ installed.
 
 from __future__ import annotations
 
+import importlib.util
 import socket
 from typing import Any
 
 import pytest
 
+
+def _available_fixture_plugins() -> list[str]:
+    """Return fixture plugins that exist in this source projection.
+
+    The monorepo has optional fixture modules for integrations that are not
+    exported publicly. Resolving the list from installed files keeps pytest's
+    entry-point plugin loadable in both projections without naming missing
+    modules in the public runtime configuration.
+    """
+    package = __name__.split(".plugins", maxsplit=1)[0]
+    suffixes = (
+        "fixtures.core",
+        "fixtures.web",
+        "fixtures.ai",
+        "fixtures.db",
+        "fixtures.tasks",
+        "integration.fixtures",
+    )
+    plugins: list[str] = []
+    for suffix in suffixes:
+        module_name = f"{package}.{suffix}"
+        try:
+            available = importlib.util.find_spec(module_name) is not None
+        except (ImportError, ModuleNotFoundError):
+            available = False
+        if available:
+            plugins.append(module_name)
+    return plugins
+
+
 # Fixture modules whose fixtures become globally available.
-pytest_plugins = [
-    "quadkit.testing.fixtures.core",
-    "quadkit.testing.fixtures.ai",
-    "quadkit.testing.fixtures.db",
-    "quadkit.testing.fixtures.web",
-    "quadkit.testing.fixtures.tasks",
-    "quadkit.testing.integration.fixtures",
-]
+pytest_plugins = _available_fixture_plugins()
 
 # Marker declarations registered via config.addinivalue_line("markers", ...).
 _MARKERS: list[str] = [

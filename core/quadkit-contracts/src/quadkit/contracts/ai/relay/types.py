@@ -4,7 +4,7 @@ This module owns the stable enums, JSON aliases, usage accounting, loss
 records, conversion results, and payload unions that cross every relay
 wire format.  Concrete wire DTOs live in ``relay.dto``; the canonical IR
 lives in ``relay.ir``; engine-side services live in the
-``quadkit-ai-relay`` extension package.
+``the optional provider`` extension package.
 """
 
 from __future__ import annotations

@@ -1,0 +1,9 @@
+# Configuration for the docs/guides examples: these are JSON APIs tested
+# with a machine client, so cookie-based CSRF protection is disabled.
+# Leave it enabled (the framework default) for browser-facing apps.
+name: guide-examples
+version: 0.1.0
+
+web:
+  security:
+    enable_csrf: false

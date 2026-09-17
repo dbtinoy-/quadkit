@@ -5,7 +5,13 @@ Provides async service availability probes and pytest skip-markers.
 
 from __future__ import annotations
 
-from quadkit.testing.harness.environment import IntegrationEnvironment
+try:
+    from quadkit.testing.harness.environment import IntegrationEnvironment
+except ImportError:
+    # The environment adapter targets private service packages and is omitted
+    # from the public projection. Markers and probes remain public utilities.
+    pass
+
 from quadkit.testing.integration.config import IntegrationTestConfig
 from quadkit.testing.integration.markers import (
     requires_elasticsearch,
@@ -38,3 +44,5 @@ __all__ = [
     "requires_redis",
     "requires_smtp",
 ]
+
+__all__ = [name for name in __all__ if name in globals()]

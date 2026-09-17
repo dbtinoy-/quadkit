@@ -1,0 +1,30 @@
+{
+  "name": "Quadkit",
+  "image": "mcr.microsoft.com/devcontainers/python:3.11",
+  "features": {
+    "ghcr.io/astral-sh/uv:0": {}
+  },
+  // Matches CONTRIBUTING.md: the lockfile is committed, so --locked both
+  // installs and verifies the environment a contributor needs.
+  "postCreateCommand": "uv sync --locked",
+  "postStartCommand": "uv run python -c \"import quadkit, quadkit.web; print('quadkit', quadkit.__version__, 'ready')\"",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "charliermarsh.ruff",
+        "ms-python.python",
+        "ms-python.mypy",
+        "tamasfe.even-better-toml"
+      ],
+      "settings": {
+        "[python]": {
+          "editor.defaultFormatter": "charliermarsh.ruff",
+          "editor.formatOnSave": true,
+          "editor.codeActionsOnSave": {
+            "source.organizeImports.ruff": "explicit"
+          }
+        }
+      }
+    }
+  }
+}

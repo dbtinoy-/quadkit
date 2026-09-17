@@ -1,10 +1,12 @@
 from __future__ import annotations
 
+import importlib.metadata
 from typing import Annotated
 
 import typer
 
 from quadkit.cli.constants import __version__
+from quadkit.cli.package_names import installed_quadkit_distributions
 from quadkit.cli.output import OutputManager
 from quadkit.cli.registry.command import CommandEntry, CommandRegistry
 
@@ -84,30 +86,7 @@ def version(
     out = OutputManager()
     out.print(f"quadkit {__version__}")
     if all_packages:
-        import importlib.metadata
-
-        packages = [
-            "quadkit",
-            "quadkit-cli",
-            "quadkit-web",
-            "quadkit-sql",
-            "quadkit-auth",
-            "quadkit-cache",
-            "quadkit-events",
-            "quadkit-notification",
-            "quadkit-queue",
-            "quadkit-monitor",
-            "quadkit-tasks",
-            "quadkit-graphql",
-            "quadkit-ai",
-            "quadkit-resilience",
-            "quadkit-http",
-            "quadkit-features",
-            "quadkit-search",
-            "quadkit-storage",
-            "quadkit-admin",
-            "quadkit-testing",
-        ]
+        packages = installed_quadkit_distributions()
         rows = []
         for pkg in packages:
             try:

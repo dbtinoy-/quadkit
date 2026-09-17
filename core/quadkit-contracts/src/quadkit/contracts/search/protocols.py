@@ -20,7 +20,7 @@ class SearchEngineProtocol(Protocol):
     first argument of every method. This matches the shape implemented by
     every concrete backend (Meilisearch, Elasticsearch, SQLite FTS,
     PostgreSQL FTS, MySQL FTS) and by the
-    :class:`~quadkit.search.engine.engine.DefaultSearchEngine` facade,
+    :class:`~the optional provider module` facade,
     which delegates to backends using these signatures.
 
     (The previous revision declared a single-index shape with optional

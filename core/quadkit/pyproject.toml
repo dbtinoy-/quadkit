@@ -10,10 +10,7 @@
 #   - Structured logging foundation
 #
 # It does NOT contain:
-#   - Database code          → quadkit-sql
-#   - Auth/JWT/crypto        → quadkit-auth
 #   - HTTP/ASGI/routing      → quadkit-web
-#   - Message queue / email  → quadkit-queue / quadkit-mailer / quadkit-notification
 #   - Any domain-specific feature
 #
 # Core should be lightweight. `pip install quadkit` should take seconds,
@@ -30,7 +27,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit"
-version = "0.0.2"
+version = "0.0.3"
 description = "Async-first DI/IoC framework for Python — core package"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -130,7 +127,7 @@ web = [
 # events, tasks, monitor, graphql) were removed. Those packages are not
 # published, so the extras resolved against name-reservation placeholders
 # that contain no code: `pip install quadkit[cache]` succeeded and then
-# `import quadkit.cache` raised ModuleNotFoundError. Install extension
+# `import the optional provider module` raised ModuleNotFoundError. Install extension
 # packages directly once they are published.
 
 # =============================================================================
@@ -138,9 +135,9 @@ web = [
 # =============================================================================
 
 [project.urls]
-Homepage = "https://quadkit.dev"
+Homepage = "https://dbtinoy-.github.io/quadkit/"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://quadkit.dev"
+Documentation = "https://dbtinoy-.github.io/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 
@@ -286,4 +283,3 @@ show_missing = true
 
 [tool.uv.sources]
 quadkit-contracts = { workspace = true }
-

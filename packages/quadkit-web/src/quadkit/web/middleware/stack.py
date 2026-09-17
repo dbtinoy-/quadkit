@@ -49,7 +49,9 @@ class DefaultMiddlewareStack:
             include in the stack.  They are adapted to Starlette
             ``Middleware`` wrappers via
             :class:`~quadkit.web.middleware.registry.MiddlewareAdapterRegistry`
-            and inserted before the built-in defaults.
+            and follow ``DIScopeMiddleware`` in user-supplied order — the
+            DI-scope layer always stays outermost so request-scoped
+            resolution is available to every later layer.
 
     Example::
 

@@ -1,5 +1,7 @@
 """Tests for logging config classes - SamplingConfig."""
 
+import re
+
 import pytest
 
 from quadkit.logging.config.sampling import SamplingConfig
@@ -19,8 +21,8 @@ class TestSamplingConfig:
     def test_custom_values(self) -> None:
         """Test SamplingConfig accepts custom values."""
         rules = {
-            "quadkit.sql": 0.5,
-            "quadkit.http": 0.1,
+            "quadkit.web": 0.5,
+            "quadkit.cli": 0.1,
         }
         config = SamplingConfig(
             enabled=True,
@@ -34,12 +36,12 @@ class TestSamplingConfig:
 
     def test_rate_clamping_above_max(self) -> None:
         """Test SamplingConfig rejects rate above 1.0."""
-        with pytest.raises(ValueError, match="must be less than or equal to 1.0"):
+        with pytest.raises(ValueError, match=re.escape("must be less than or equal to 1.0")):
             SamplingConfig(default_rate=1.5)
 
     def test_rate_clamping_below_min(self) -> None:
         """Test SamplingConfig rejects rate below 0.0."""
-        with pytest.raises(ValueError, match="must be greater than or equal to 0.0"):
+        with pytest.raises(ValueError, match=re.escape("must be greater than or equal to 0.0")):
             SamplingConfig(default_rate=-0.5)
 
     def test_rate_boundary_values(self) -> None:
@@ -59,25 +61,25 @@ class TestSamplingConfig:
     def test_single_rule(self) -> None:
         """Test SamplingConfig with single rule."""
         config = SamplingConfig(
-            rules={"quadkit.sql": 0.5},
+            rules={"quadkit.web": 0.5},
         )
         
         assert len(config.rules) == 1
-        assert config.rules["quadkit.sql"] == 0.5
+        assert config.rules["quadkit.web"] == 0.5
 
     def test_multiple_rules(self) -> None:
         """Test SamplingConfig with multiple rules."""
         rules = {
-            "quadkit.sql": 0.5,
-            "quadkit.http": 0.1,
-            "quadkit.cache": 0.8,
+            "quadkit.web": 0.5,
+            "quadkit.cli": 0.1,
+            "quadkit.testing": 0.8,
             "custom.logger": 0.3,
         }
         config = SamplingConfig(rules=rules)
         
         assert len(config.rules) == 4
-        assert config.rules["quadkit.sql"] == 0.5
-        assert config.rules["quadkit.http"] == 0.1
+        assert config.rules["quadkit.web"] == 0.5
+        assert config.rules["quadkit.cli"] == 0.1
 
     def test_enabled_with_default_rate(self) -> None:
         """Test SamplingConfig enabled with default rate."""

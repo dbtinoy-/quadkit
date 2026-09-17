@@ -1,7 +1,7 @@
 """Workflow orchestration protocols for Quadkit Framework.
 
 Defines protocols for pipeline execution, bulk processing, and saga
-coordination. These are the contracts that quadkit-workflow implements.
+coordination. These are the contracts that the optional provider implements.
 """
 
 from __future__ import annotations

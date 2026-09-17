@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus, ProviderPriority
 from quadkit.contracts.web import WebRateLimiterProtocol
@@ -33,16 +33,21 @@ class RateLimitProvider(Provider):
         self,
         redis_client: Any = None,
         enabled: bool = True,
+        backend: Literal["redis", "memory"] = "redis",
     ) -> None:
         """Initialize rate limit provider.
 
         Args:
             redis_client: Optional pre-built Redis client for rate limiting.
             enabled: When ``False`` the provider skips all registration/boot.
+            backend: ``"redis"`` uses the Redis-backed limiter (previous and
+                default behaviour); ``"memory"`` binds the process-local
+                sliding-window :class:`MemoryLimiter` and never touches Redis.
         """
         super().__init__(name=self.name, priority=ProviderPriority.INFRASTRUCTURE)
         self.redis_client = redis_client
         self.enabled = enabled
+        self.backend = backend
         self.limiter: RateLimiter | None = None
 
     async def register(self, container: ContainerRegistrarProtocol) -> None:
@@ -60,6 +65,15 @@ class RateLimitProvider(Provider):
     async def boot(self, container: ContainerResolverProtocol) -> None:
         """Start the rate limit provider, resolving Redis from the container if needed."""
         if not self.enabled:
+            return
+
+        if self.backend == "memory":
+            # RateLimiter with no Redis and no cache backend runs its
+            # process-local sliding-window fallback branch — exactly the
+            # "memory" mode the module docs promise, protocol-shaped
+            # (check_rate_limit) for ambient @throttle resolution.
+            self.limiter = RateLimiter(None)
+            logger.info("RateLimitProvider started (memory backend)")
             return
 
         if self.redis_client is None:

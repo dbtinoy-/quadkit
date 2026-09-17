@@ -2,7 +2,7 @@
 
 These primitives live in the core ``quadkit`` package so that any extension
 package can build pipeline-compatible steps without depending on
-``quadkit-workflow``.
+``the optional provider``.
 """
 
 from __future__ import annotations

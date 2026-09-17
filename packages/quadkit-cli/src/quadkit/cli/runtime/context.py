@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from quadkit.cli.exceptions import CliError
-from quadkit.cli.lib.config_loader import find_config, load_config_yaml_async
 from quadkit.cli.output.manager import OutputManager
 
 if TYPE_CHECKING:
@@ -44,6 +43,14 @@ class CLIContext:
     async def load_config_data(self) -> dict[str, Any]:
         """Lazily load and return config data asynchronously."""
         if self._config_data is None:
+            # Deferred (plans/09172026 C-03): the config-loader chain
+            # (aiofiles, jinja2 via cli.lib) is only needed once a config
+            # is actually loaded, not on every CLI context construction.
+            from quadkit.cli.lib.config_loader import (
+                find_config,
+                load_config_yaml_async,
+            )
+
             path = find_config(explicit_path=self._config_path)
             self._config_data = await load_config_yaml_async(path)
         return self._config_data

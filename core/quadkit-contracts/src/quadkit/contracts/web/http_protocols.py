@@ -227,7 +227,7 @@ class InterceptorProtocol(Protocol):
     """Protocol for request/response interceptors.
 
     Interceptors are applied to every request/response cycle in
-    :class:`~quadkit.http.HTTPClient`.  Implementations receive typed
+    :class:`~the optional provider module`.  Implementations receive typed
     ``RequestContext`` objects and may modify them before the request is
     dispatched, or inspect / annotate the raw response after it arrives.
 
@@ -246,7 +246,7 @@ class InterceptorProtocol(Protocol):
         """Called before a request is dispatched.
 
         Args:
-            context: :class:`~quadkit.http.RequestContext` for the outbound
+            context: :class:`~the optional provider module` for the outbound
                 request.  Implementations may mutate and return it.
 
         Returns:

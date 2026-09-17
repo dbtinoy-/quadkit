@@ -122,7 +122,7 @@ class TestManagementPageDefinition:
             title="Cache Management",
             contributor="cache",
             route_path="/admin/framework/cache",
-            handler="quadkit.cache.admin.pages:cache_overview",
+            handler="example_app.admin.pages:cache_overview",
         )
         assert page.category == PageCategory.INFRASTRUCTURE
         assert page.icon == "settings"
@@ -136,7 +136,7 @@ class TestSettingsPanelDefinition:
             title="Cache Configuration",
             contributor="cache",
             route_path="/admin/settings/cache",
-            handler="quadkit.cache.admin.pages:cache_settings",
+            handler="example_app.admin.pages:cache_settings",
         )
         assert panel.category == "General"
         assert panel.order == 100
@@ -159,7 +159,7 @@ class TestAdminActionDefinition:
             name="flush_cache",
             title="Flush All Caches",
             contributor="cache",
-            handler="quadkit.cache.admin.actions:flush_all",
+            handler="example_app.admin.actions:flush_all",
         )
         assert action.destructive is False
         assert action.confirmation_message is None

@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
-
 import pytest
 from starlette.requests import Request
 from starlette.responses import PlainTextResponse
@@ -162,3 +160,48 @@ class TestGetVersion:
     def test_defaults_to_1_when_not_set(self) -> None:
         req = _make_request()
         assert get_version(req) == "1"
+
+
+class TestDeprecationHeaderWiring:
+    """`@api_version(deprecated=True)` must emit RFC-8594-style headers.
+
+    The decorator stored the metadata but no routing layer consumer existed —
+    the promised ``Deprecation``/``Sunset`` headers were never sent. The
+    wiring (with_deprecation_headers + manager hook) pins the contract here.
+    """
+
+    @pytest.mark.asyncio
+    async def test_wrapper_sets_headers(self) -> None:
+        from quadkit.web.routing.versioning import (
+            ApiVersionMetadata,
+            with_deprecation_headers,
+        )
+
+        async def endpoint(request):  # pragma: no cover - trivial stub
+            return PlainTextResponse("ok")
+
+        wrapped = with_deprecation_headers(
+            endpoint, ApiVersionMetadata(version=1, deprecated=True, sunset="2030-01-01")
+        )
+        response = await wrapped(_make_request())
+
+        assert response.headers["Deprecation"] == "true"
+        assert response.headers["Sunset"] == "2030-01-01"
+
+    @pytest.mark.asyncio
+    async def test_wrapper_without_sunset_omits_header(self) -> None:
+        from quadkit.web.routing.versioning import (
+            ApiVersionMetadata,
+            with_deprecation_headers,
+        )
+
+        async def endpoint(request):
+            return PlainTextResponse("ok")
+
+        wrapped = with_deprecation_headers(
+            endpoint, ApiVersionMetadata(version=1, deprecated=True)
+        )
+        response = await wrapped(_make_request())
+
+        assert response.headers["Deprecation"] == "true"
+        assert "Sunset" not in response.headers

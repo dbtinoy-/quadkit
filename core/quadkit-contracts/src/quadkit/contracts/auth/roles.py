@@ -1,4 +1,4 @@
-"""The single role model shared by quadkit-auth and quadkit-admin."""
+"""The single role model shared by the optional provider and the optional provider."""
 
 from __future__ import annotations
 

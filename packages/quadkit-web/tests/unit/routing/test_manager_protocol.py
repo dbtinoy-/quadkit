@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import sys
 from unittest.mock import MagicMock
 
 from quadkit.web.routing.controller_registry import ControllerRegistry
 from quadkit.web.routing.manager import WebRouterManager
 from quadkit.web.routing.registry import RouteRegistry
-
-routes_registry_mod = sys.modules["quadkit.web.routing.registry"]
-controller_registry_mod = sys.modules["quadkit.web.routing.controller_registry"]
 
 
 class _FakeController:
@@ -178,20 +174,22 @@ class TestWebRouterManagerProtocols:
         assert manager.provider is not None
 
     async def test_register_controller_routes_mirrors_into_registry(
-        self, monkeypatch
+        self,
     ) -> None:
-        """Mounted controllers are mirrored into the global RouteRegistry."""
+        """Mounted controllers are mirrored into the provider's registries.
+
+        plans/09172026 H-04: the mirror target is the per-application
+        registry pair owned by the provider — there is no module-level
+        global to write into.
+        """
         fresh = RouteRegistry()
-        monkeypatch.setattr(routes_registry_mod, "route_registry", fresh)
-        monkeypatch.setattr(
-            controller_registry_mod,
-            "controller_registry",
-            ControllerRegistry(),
-        )
+        controllers = ControllerRegistry()
 
         mock_provider = MagicMock()
         mock_provider.starlette = MagicMock()
         mock_provider.fail_on_route_conflict = False
+        mock_provider.route_registry = fresh
+        mock_provider.controller_registry = controllers
         mock_provider.router = MagicMock()
         mock_provider.router._create_endpoint = MagicMock(return_value=MagicMock())
 
@@ -202,3 +200,4 @@ class TestWebRouterManagerProtocols:
         routes = fresh.get_all_routes()
         assert "GET" in routes["/fake"]
         assert routes["/fake"]["GET"]["controller"] is _FakeController
+        assert controllers.get("_FakeController") is _FakeController

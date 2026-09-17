@@ -24,10 +24,10 @@ def test_schema_setup_outcome_carries_failure_message():
 
 def test_schema_setup_contribution_fields():
     contribution = SchemaSetupContribution(
-        name="admin.tenant_configs",
+        name="example.tenant_configs",
         description="Tenant-scoped settings storage",
-        setup_fn_path="quadkit.admin.cli.schema_setup:ensure_tenant_configs",
-        contributor="admin",
+        setup_fn_path="example_app.schema_setup:ensure_tenant_configs",
+        contributor="example",
     )
-    assert contribution.name == "admin.tenant_configs"
+    assert contribution.name == "example.tenant_configs"
     assert contribution.category == "general"

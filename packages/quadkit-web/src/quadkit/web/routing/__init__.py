@@ -6,7 +6,6 @@ from quadkit.web.routing.controller import GenericController
 from quadkit.web.routing.controller_registry import (
     ControllerRegistry,
     controller,
-    controller_registry,
 )
 from quadkit.web.routing.controllers import Controller
 from quadkit.web.routing.cqrs import CQRSController
@@ -46,7 +45,6 @@ from quadkit.web.routing.pipeline import RequestPipeline
 from quadkit.web.routing.registry import (
     RouteRegistry,
     register_controller,
-    route_registry,
 )
 from quadkit.web.routing.router import Router
 from quadkit.web.routing.versioning import (
@@ -86,7 +84,6 @@ __all__ = [
     "api_version",
     "body",
     "controller",
-    "controller_registry",
     "cookie",
     "delete",
     "discover_controllers",
@@ -104,7 +101,6 @@ __all__ = [
     "put",
     "query",
     "register_controller",
-    "route_registry",
     "trace",
     "version",
     "websocket",

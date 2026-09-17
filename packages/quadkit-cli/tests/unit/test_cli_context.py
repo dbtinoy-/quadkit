@@ -29,9 +29,11 @@ class TestGlobalFlags:
     def test_version_command(self):
         from quadkit.cli.runtime.main import app
         runner = CliRunner()
+        from quadkit.cli.constants import __version__
+
         result = runner.invoke(app, ["version"])
         assert result.exit_code == 0
-        assert "0.1" in result.output
+        assert f"quadkit {__version__}" in result.output
 
     def test_version_all(self):
         from quadkit.cli.runtime.main import app

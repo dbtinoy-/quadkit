@@ -31,7 +31,7 @@ class HTTPApplicationProtocol(Protocol):
     """Minimal protocol for an ASGI-compatible HTTP application.
 
     Extension packages that need to mount sub-applications (e.g.
-    ``quadkit-graphql`` mounting a ``/graphql`` endpoint) must depend on
+    ``the optional provider`` mounting a ``/graphql`` endpoint) must depend on
     this protocol — NOT on ``quadkit-web`` — to avoid cross-extension imports.
     The web provider implements this protocol; the container resolves it.
     """
@@ -151,8 +151,8 @@ class WebContributorProtocol(Protocol):
 
     Extension packages can implement this protocol to register their HTTP
     controllers and middleware components with the web provider via
-    entry-point discovery. This allows packages like ``quadkit-graphql``
-    and ``quadkit-admin`` to expose web routes without requiring the
+    entry-point discovery. This allows packages like ``the optional provider``
+    and ``the optional provider`` to expose web routes without requiring the
     web provider to explicitly import them.
 
     Example:

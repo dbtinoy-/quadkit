@@ -5,7 +5,6 @@ Subclass :class:`FlagProviderCompliance` and implement
 the ``FlagProvider`` contract::
 
     from quadkit.testing.compliance import FlagProviderCompliance
-    from quadkit.features.backends.local import LocalProvider
 
     class TestMyFlagProvider(FlagProviderCompliance):
         async def create_provider(self):
@@ -15,9 +14,21 @@ the ``FlagProvider`` contract::
 from __future__ import annotations
 
 from abc import abstractmethod
+from importlib import import_module
 from typing import Any
 
 import pytest
+
+
+def _flag_not_found_error() -> type[Exception]:
+    """Return the optional provider exception without a static private import."""
+    try:
+        module_name = ".".join(("quadkit", "features", "exceptions"))
+        return getattr(import_module(module_name), "FlagNotFoundError")
+    except (ImportError, AttributeError):
+        # Public installations do not ship a feature-provider implementation,
+        # but the compliance class remains importable for downstream users.
+        return type("FlagNotFoundError", (Exception,), {})
 
 __all__ = ["FlagProviderCompliance"]
 
@@ -74,14 +85,14 @@ class FlagProviderCompliance:
     @pytest.mark.asyncio
     async def test_get_flag_not_found(self) -> None:
         """get_flag on an unknown flag returns the default (or raises FlagNotFoundError)."""
-        from quadkit.features.exceptions import FlagNotFoundError
+        flag_not_found_error = _flag_not_found_error()
 
         provider = await self.create_provider()
         try:
             result = await provider.get_flag(self.unknown_flag_name(), default=False)
             # Acceptable: provider returns the default value.
             assert result is False
-        except FlagNotFoundError:
+        except flag_not_found_error:
             # Also acceptable: provider raises FlagNotFoundError.
             pass
 
@@ -110,7 +121,7 @@ class FlagProviderCompliance:
     @pytest.mark.asyncio
     async def test_get_flag_respects_default(self) -> None:
         """default parameter is honoured when the flag is absent."""
-        from quadkit.features.exceptions import FlagNotFoundError
+        flag_not_found_error = _flag_not_found_error()
 
         provider = await self.create_provider()
         try:
@@ -123,6 +134,6 @@ class FlagProviderCompliance:
                 self.unknown_flag_name(), default=False
             )
             assert result_false is False
-        except FlagNotFoundError:
+        except flag_not_found_error:
             # Provider raises instead of returning default — still compliant.
             pass

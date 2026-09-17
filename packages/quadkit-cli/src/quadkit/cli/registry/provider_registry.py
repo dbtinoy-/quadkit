@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import subprocess
 
+from quadkit.cli.package_names import provider_available
 from quadkit.cli.registry.provider_catalog import (
     AdminProvider,
     AIProvider,
@@ -61,8 +62,21 @@ class ProviderRegistry:
 
     @classmethod
     def _default_entries(cls) -> tuple[type[Provider], ...]:
-        """The complete in-package built-in set, declared exactly once."""
-        return (
+        """Return core providers plus providers advertised by installed plugins.
+
+        Optional provider classes remain available to the integrated workspace,
+        but are not registered in a public installation unless their provider
+        distribution is actually installed. This keeps ``quadkit add`` from
+        advertising unavailable packages.
+        """
+
+        core_entries: tuple[type[Provider], ...] = (
+            ConnectProvider,
+            ResilienceProvider,
+            TestingProvider,
+            WebProvider,
+        )
+        optional_entries: tuple[type[Provider], ...] = (
             DatabaseService,
             AuthProvider,
             AIProvider,
@@ -76,13 +90,12 @@ class ProviderRegistry:
             MonitorProvider,
             TasksProvider,
             GraphQLProvider,
-            ResilienceProvider,
             MonitoringProvider,
-            WebProvider,
             AdminProvider,
-            ConnectProvider,
             CommonProvider,
-            TestingProvider,
+        )
+        return core_entries + tuple(
+            entry for entry in optional_entries if provider_available(entry.name)
         )
 
     @classmethod

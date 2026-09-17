@@ -226,7 +226,8 @@ class ServiceResolver:
             name = repr(service_type)
             raise UnresolvableDependencyError(
                 f"Cannot resolve '{name}': not a class and not registered in the container. "
-                "Register it via container.register() or a Provider before resolving.",
+                "Register it via a Provider or a container lifetime call "
+                "(singleton/transient/scoped/bind) before resolving.",
                 dependency=name,
             )
 
@@ -240,8 +241,9 @@ class ServiceResolver:
         name = getattr(service_type, "__name__", repr(service_type))
         raise UnresolvableDependencyError(
             f"'{name}' is not registered in the container. "
-            f"Register it with container.register({name}, ...) or via a Provider. "
-            "If this is an auto-wirable service, decorate it with @inject.",
+            f"Register it via a Provider or a container lifetime call — "
+            f"container.singleton({name}), container.transient({name}, factory), "
+            "or container.scoped(...) — or mark it auto-wirable with @inject.",
             dependency=name,
         )
 

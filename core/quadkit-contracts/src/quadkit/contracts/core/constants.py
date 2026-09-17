@@ -43,26 +43,32 @@ EP_MODULES = "quadkit.modules"
 EP_MIDDLEWARE = "quadkit.middleware"
 """HTTP and event middleware auto-registration."""
 
+def _extension_group(feature: str, capability: str) -> str:
+    """Build an extension entry-point group from its public capability name."""
+
+    return f"quadkit.{feature}.{capability}"
+
+
 # ---------------------------------------------------------------------------
 # AI subsystem discovery
 # ---------------------------------------------------------------------------
 
-EP_AI_SUBSYSTEMS = "quadkit.ai.subsystems"
+EP_AI_SUBSYSTEMS = _extension_group("ai", "subsystems")
 """AI sub-package providers (LLM, Vector, RAG, Agents, Memory, etc.)."""
 
-EP_AI_TOOLS = "quadkit.ai.tools"
+EP_AI_TOOLS = _extension_group("ai", "tools")
 """AI tool and skill providers."""
 
-EP_AI_STRATEGIES = "quadkit.ai.strategies"
+EP_AI_STRATEGIES = _extension_group("ai", "strategies")
 """Agent reasoning strategy implementations."""
 
-EP_AI_GUARDS = "quadkit.ai.guards"
+EP_AI_GUARDS = _extension_group("ai", "guards")
 """AI content safety guard implementations."""
 
-EP_AI_BACKENDS_MEMORY = "quadkit.ai.backends.memory"
+EP_AI_BACKENDS_MEMORY = _extension_group("ai", "backends.memory")
 """Pluggable memory storage backends."""
 
-EP_AI_BACKENDS_EMBEDDING = "quadkit.ai.backends.embedding"
+EP_AI_BACKENDS_EMBEDDING = _extension_group("ai", "backends.embedding")
 """Pluggable embedding and chunking backends."""
 
 # ---------------------------------------------------------------------------
@@ -76,41 +82,41 @@ EP_PLUGINS = "quadkit.plugins"
 # Infrastructure backend discovery
 # ---------------------------------------------------------------------------
 
-EP_CACHE_BACKENDS = "quadkit.cache.backends"
+EP_CACHE_BACKENDS = _extension_group("cache", "backends")
 """Cache backend implementations (Redis, Memcached, in-memory, etc.)."""
 
-EP_DB_BACKENDS = "quadkit.sql.backends"
+EP_DB_BACKENDS = _extension_group("sql", "backends")
 """Database client implementations."""
 
-EP_SEARCH_BACKENDS = "quadkit.search.backends"
+EP_SEARCH_BACKENDS = _extension_group("search", "backends")
 """Search engine backend implementations."""
 
-EP_MESSAGING_BACKENDS = "quadkit.messaging.backends"
+EP_MESSAGING_BACKENDS = _extension_group("messaging", "backends")
 """Message queue backend implementations."""
 
-EP_MONITORING_BACKENDS = "quadkit.monitoring.backends"
+EP_MONITORING_BACKENDS = _extension_group("monitoring", "backends")
 """Observability backend implementations."""
 
-EP_TASKS_BACKENDS = "quadkit.tasks.backends"
+EP_TASKS_BACKENDS = _extension_group("tasks", "backends")
 """Background task queue backend implementations."""
 
-EP_STORAGE_BACKENDS = "quadkit.storage.backends"
+EP_STORAGE_BACKENDS = _extension_group("storage", "backends")
 """Object storage backend implementations."""
 
 # ---------------------------------------------------------------------------
 # Strategy discovery
 # ---------------------------------------------------------------------------
 
-EP_CHUNKING_STRATEGIES = "quadkit.chunking.strategies"
+EP_CHUNKING_STRATEGIES = _extension_group("chunking", "strategies")
 """RAG document chunking strategy implementations."""
 
-EP_RETRIEVAL_STRATEGIES = "quadkit.retrieval.strategies"
+EP_RETRIEVAL_STRATEGIES = _extension_group("retrieval", "strategies")
 """RAG retrieval and ranking strategy implementations."""
 
-EP_AGENT_STRATEGIES = "quadkit.agent.strategies"
+EP_AGENT_STRATEGIES = _extension_group("agent", "strategies")
 """Agent reasoning strategy implementations."""
 
-EP_AUTH_STRATEGIES = "quadkit.auth.strategies"
+EP_AUTH_STRATEGIES = _extension_group("auth", "strategies")
 """Authentication method implementations."""
 
 # ---------------------------------------------------------------------------

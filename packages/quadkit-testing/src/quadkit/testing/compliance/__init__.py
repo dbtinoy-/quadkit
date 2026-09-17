@@ -45,10 +45,15 @@ from quadkit.testing.compliance.notification import NotificationChannelComplianc
 from quadkit.testing.compliance.queue_backend import QueueBackendCompliance
 from quadkit.testing.compliance.repository import RepositoryCompliance
 from quadkit.testing.compliance.search import SearchEngineCompliance
-from quadkit.testing.compliance.secrets import (
-    StoreConformanceSuite,
-    parametrize_rotatable_store,
-)
+try:
+    from quadkit.testing.compliance.secrets import (
+        StoreConformanceSuite,
+        parametrize_rotatable_store,
+    )
+except ImportError:
+    # Secret-store compliance depends on a private production extension and is
+    # omitted from the public projection.
+    pass
 from quadkit.testing.compliance.task_queue import TaskQueueCompliance
 from quadkit.testing.compliance.vector_store import VectorStoreCompliance
 from quadkit.testing.compliance.webhook import (
@@ -77,3 +82,5 @@ __all__ = [
     "WebhookSubscriptionStoreCompliance",
     "parametrize_rotatable_store",
 ]
+
+__all__ = [name for name in __all__ if name in globals()]

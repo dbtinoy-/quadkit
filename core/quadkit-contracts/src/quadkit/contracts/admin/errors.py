@@ -1,6 +1,6 @@
 """Admin contract errors — base exceptions for the admin domain.
 
-Leaf exceptions live in quadkit-admin, not here. Admin errors are returned as
+Leaf exceptions live in the optional provider, not here. Admin errors are returned as
 frozen dataclass values in Result.Err(), not raised as exceptions.
 """
 
@@ -14,7 +14,7 @@ from quadkit.contracts.exceptions.base import QuadkitError
 class AdminError(QuadkitError):
     """Base exception for all admin-domain errors.
 
-    Extended by leaf exceptions in quadkit-admin.
+    Extended by leaf exceptions in the optional provider.
     """
 
     _code = "QK_ERR_ADMIN_001"

@@ -1,7 +1,7 @@
 """Authentication data models and protocols.
 
 Shared auth data models (pure dataclasses with no external deps) live here
-so both quadkit-auth and other packages can reference them without
+so both the optional provider and other packages can reference them without
 creating cross-extension imports.
 """
 
@@ -28,7 +28,7 @@ class UserSession:
     """User session data model.
 
     Tracks a specific device/session for a user.  Defined in contracts so
-    both quadkit-auth and other packages can share the type without
+    both the optional provider and other packages can share the type without
     creating a cross-extension dependency.
     """
 

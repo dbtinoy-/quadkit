@@ -99,6 +99,8 @@ class TestPublicExports:
 
     def test_all_test_beds_are_exported(self) -> None:
         """Verify all test bed and client classes are exported."""
+        import importlib.util
+
         import quadkit.testing
 
         testbed_required = [
@@ -110,14 +112,33 @@ class TestPublicExports:
             "DatabaseTestClient",
             "AITestBed",
             "AITestClient",
-            "TaskTestBed",
-            "TaskTestClient",
         ]
 
         for testbed_name in testbed_required:
             assert hasattr(quadkit.testing, testbed_name), (
                 f"Missing test bed export: {testbed_name}"
             )
+
+        # Capability-gated exports: the tasks test support only ships when
+        # the optional provider client module is present alongside
+        # quadkit-testing. The package __init__ guards this import the same
+        # way, so the export must mirror the gate.
+        gated = {
+            "quadkit.testing.clients.tasks.bed": ["TaskTestBed"],
+            "quadkit.testing.clients.tasks.client": ["TaskTestClient"],
+        }
+        for module_name, exported_names in gated.items():
+            try:
+                spec = importlib.util.find_spec(module_name)
+            except ModuleNotFoundError:
+                # The client package itself is absent from this installation.
+                continue
+            if spec is None:
+                continue
+            for name in exported_names:
+                assert hasattr(quadkit.testing, name), (
+                    f"Missing gated test bed export: {name}"
+                )
 
     def test_all_container_helpers_are_exported(self) -> None:
         """Verify container helpers are exported."""
@@ -216,7 +237,8 @@ class TestPublicExports:
     def test_ai_mocks_are_exported(self) -> None:
         """Verify optional AI mock classes are exported (if available).
 
-        These may not be available if quadkit-ai is not installed.
+        These may not be available when the extras providing them are
+        not installed.
         """
         import quadkit.testing
 

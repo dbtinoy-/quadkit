@@ -78,12 +78,15 @@ class VersionExtractor:
         """Extract version from Accept header media type."""
         accept = request.headers.get("Accept", "")
 
-        # Parse media type like: application/vnd.api.v1+json
+        # Parse media types like application/vnd.api.v1+json and
+        # application/vnd.api.v1.json alike: the version segment may carry a
+        # structured-syntax suffix, which is not part of the version.
         if self.config.media_type_prefix in accept:
             parts = accept.split(".")
             for part in parts:
-                if part.startswith("v") and part[1:].replace("+", "").isdigit():
-                    return part[1:].split("+")[0]
+                version_token = part[1:].split("+")[0] if part.startswith("v") else ""
+                if version_token.isdigit():
+                    return version_token
 
         return self.config.default_version
 
@@ -117,10 +120,13 @@ def version(api_version: str) -> Callable[[Any], Any]:
 
 
 class VersioningMiddleware:
-    """
-    Middleware to handle API versioning.
+    """Extraction-only version middleware.
 
-    Extracts version from request and stores it in request state.
+    Reads the negotiated version (header/query/URI/media-type per config)
+    and stamps ``request.state.api_version`` for handlers and diagnostics.
+    Route selection is the router's job (mount per-version controllers with
+    :func:`api_version`); this middleware deliberately performs no
+    negotiation or rewriting.
     """
 
     def __init__(self, config: VersioningConfig):
@@ -264,3 +270,27 @@ __all__ = [
     "get_version",
     "version",
 ]
+
+
+def with_deprecation_headers(
+    endpoint: Callable[..., Any], meta: ApiVersionMetadata
+) -> Callable[..., Any]:
+    """Wrap an endpoint so deprecated versions advertise themselves.
+
+    Used by the routing layer when a controller (or individual handler)
+    carries an :class:`ApiVersionMetadata` with ``deprecated=True`` — the
+    response gains ``Deprecation: true`` and, when set,
+    ``Sunset: <date>`` headers (RFC 8594 / draft-polli-ratelimit-headers
+    conventions).
+    """
+    from functools import wraps
+
+    @wraps(endpoint)
+    async def wrapper(request: Any) -> Any:
+        response = await endpoint(request)
+        response.headers["Deprecation"] = "true"
+        if meta.sunset:
+            response.headers["Sunset"] = meta.sunset
+        return response
+
+    return wrapper

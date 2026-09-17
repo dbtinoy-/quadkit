@@ -8,12 +8,13 @@ from typing import Any
 import typer
 
 from quadkit.cli.output import OutputManager
+from quadkit.cli.package_names import module_for
 
 
 async def _bootstrap_migration_runner() -> tuple[Any, Any, Any]:
     """Used for direct migration execution (run/rollback/status) via the DI container.
 
-    Prefers the DI-managed runner when quadkit-sql is available so that
+    Prefers the DI-managed runner when the database provider is available so that
     connection pooling and observability hooks are active.  Falls back to the
     legacy factory when the package is not installed.
 
@@ -30,7 +31,7 @@ async def _bootstrap_migration_runner() -> tuple[Any, Any, Any]:
         from quadkit.di.container import Container
         from quadkit.di.orchestrator import ProviderOrchestrator
 
-        sql_provider_mod = importlib.import_module("quadkit.sql.di.provider")
+        sql_provider_mod = importlib.import_module(module_for('sql', 'di.provider'))
         DBDIProvider = sql_provider_mod.DatabaseProvider
 
         container = Container()
@@ -45,15 +46,15 @@ async def _bootstrap_migration_runner() -> tuple[Any, Any, Any]:
         return runner, orchestrator, container
 
     except ImportError:
-        # quadkit-sql not installed — fall back to legacy direct factory.
+        # Database provider not installed — fall back to legacy direct factory.
         try:
-            db_cli = importlib.import_module("quadkit.sql.cli")
+            db_cli = importlib.import_module(module_for('sql', 'cli'))
             manager = db_cli.create_cli_migration_manager(db_url)
             return manager, None, None
         except ImportError as e:
             out = OutputManager()
             out.error(
-                f"quadkit-sql is required for database commands — install it with: uv add quadkit-sql ({e})"
+                f"The optional database provider is required for database commands ({e})"
             )
             raise typer.Exit(1) from None
 
@@ -77,9 +78,9 @@ async def _bootstrap_db_provider() -> tuple[Any, Any]:
         from quadkit.di.container import Container
         from quadkit.di.orchestrator import ProviderOrchestrator
 
-        sql_provider_mod = importlib.import_module("quadkit.sql.di.provider")
+        sql_provider_mod = importlib.import_module(module_for('sql', 'di.provider'))
         DatabaseProvider = sql_provider_mod.DatabaseProvider
-        sql_config_mod = importlib.import_module("quadkit.sql.config")
+        sql_config_mod = importlib.import_module(module_for('sql', 'config'))
         DatabaseConfig = sql_config_mod.DatabaseConfig
 
         container = Container()
@@ -99,7 +100,7 @@ async def _bootstrap_db_provider() -> tuple[Any, Any]:
     except ImportError as e:
         out = OutputManager()
         out.error(
-            f"quadkit-sql is required for database commands — install it with: uv add quadkit-sql ({e})"
+            f"The optional database provider is required for database commands ({e})"
         )
         raise typer.Exit(1) from None
 
@@ -114,12 +115,12 @@ async def get_migration_manager() -> Any:
     try:
         import os
 
-        db_cli = importlib.import_module("quadkit.sql.cli")
+        db_cli = importlib.import_module(module_for('sql', 'cli'))
         db_url = os.environ.get("DATABASE_URL", "sqlite:///./dev.db")
         return db_cli.create_cli_migration_manager(db_url)
     except ImportError as e:
         out = OutputManager()
-        out.error(f"Failed to import quadkit-sql: {e}")
+        out.error(f"Failed to import the optional database provider: {e}")
         raise typer.Exit(1) from None
 
 

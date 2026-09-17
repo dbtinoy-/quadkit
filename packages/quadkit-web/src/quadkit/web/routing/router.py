@@ -212,6 +212,50 @@ class Router:
         self._signature_cache[cache_key] = result
         return result
 
+    def _compute_simple_binding(
+        self,
+        controller_cls: type,
+        method_name: str,
+    ) -> dict[str, str] | None:
+        """Precompute the parameter-binding fast path (plans/09172026 R-05).
+
+        Returns a ``{param_name: "request" | "context"}`` plan when every
+        handler parameter (besides ``self``) is a request or execution-context
+        injection — the signature shapes for which full parameter binding and
+        request validation are provably no-ops. Returns ``None`` for any other
+        signature so the general binder path stays untouched.
+
+        Computed once at route-wrap time, not per request.
+        """
+        try:
+            sig_info = self._get_handler_signature(controller_cls, method_name)
+        except Exception:  # noqa: BLE001 — fast path is best-effort; the binder handles the rest
+            return None
+
+        sig = sig_info["sig"]
+        hints = sig_info.get("hints") or {}
+
+        from quadkit.web.protocols import ExecutionContextProtocol
+        from quadkit.web.routing.execution_context import WebExecutionContext
+        from quadkit.web.routing.parameter_binder import ParameterBinder
+
+        binder = ParameterBinder(sig, hints)
+        plan: dict[str, str] = {}
+        for name, param in sig.parameters.items():
+            if name == "self":
+                continue
+            annotation = hints.get(name, param.annotation)
+            if annotation in (WebExecutionContext, ExecutionContextProtocol):
+                plan[name] = "context"
+                continue
+            if binder._is_request_type(annotation, name):  # noqa: SLF001 — reuse of the binder's own request-detection
+                plan[name] = "request"
+                continue
+            # Any other parameter (path/query/body/DI/default) needs the
+            # full binder: it may bind from the request or the container.
+            return None
+        return plan
+
     def _set_container(self, container: Any) -> None:
         """Set the DI container and preload singleton controllers."""
         self._container = container
@@ -290,6 +334,10 @@ class Router:
         cached_controller_instance = None
         # Skip pre-resolving controllers at startup - they may have async dependencies
         # Controllers will be resolved per-request instead
+        # plans/09172026 R-05: compute the zero-binding fast path once at wrap
+        # time so request-time parameter binding can be skipped entirely for
+        # handlers whose only parameters are request/context injections.
+        simple_binding = self._compute_simple_binding(controller_cls, method_name)
         if container is not None:
             try:
                 hasattr(
@@ -324,9 +372,26 @@ class Router:
                 route = self._get_route_for_handler(handler, method_name)
 
                 # 4. Collect Guards, Interceptors, and Filters
-                # Attached via decorators like @use_guards, @intercept, @use_pipes, @use_filters
+                # Attached via decorators like @use_guards, @use_interceptors, @use_filters
                 guards = getattr(handler, "__guards__", [])
-                interceptors = getattr(handler, "__interceptors__", [])
+                handler_interceptors = getattr(handler, "__interceptors__", None)
+                if handler_interceptors is None:
+                    handler_interceptors = getattr(
+                        controller_cls, "__interceptors__", []
+                    )
+                interceptors = list(handler_interceptors)
+                # Application-wide interceptors live on the container-registered
+                # InterceptorPipeline singleton and run before route-level ones.
+                try:
+                    from quadkit.web.interceptors.pipeline import InterceptorPipeline
+
+                    global_pipeline = await effective_container.resolve(
+                        InterceptorPipeline
+                    )
+                except (LookupError, RuntimeError):
+                    global_pipeline = None
+                if global_pipeline is not None:
+                    interceptors = list(global_pipeline.interceptors) + interceptors
                 filters = getattr(handler, "__filters__", [])
 
                 # 5. Build Execution Context
@@ -341,6 +406,7 @@ class Router:
                         "sig_info": sig_info,
                         "route": route,
                         **(route.metadata if route else {}),
+                        "simple_binding": simple_binding,
                     },
                     container=effective_container,
                 )

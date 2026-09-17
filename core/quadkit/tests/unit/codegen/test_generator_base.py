@@ -94,17 +94,17 @@ class TestNameContainment:
     """Path-traversal and content-injection guards (spec finding 15)."""
 
     def test_snake_case_rejects_path_separators(self) -> None:
-        gen = _StubGenerator(output_dir="out")
+        gen = _StubGenerator(output_dir=Path.cwd() / "out")
         with pytest.raises(ValueError, match="Invalid generator name"):
             gen._validate_component_name("../../evil")
 
     def test_snake_case_rejects_absolute(self) -> None:
-        gen = _StubGenerator(output_dir="out")
+        gen = _StubGenerator(output_dir=Path.cwd() / "out")
         with pytest.raises(ValueError, match="Invalid generator name"):
             gen._validate_component_name("/etc/passwd")
 
     def test_valid_names_pass(self) -> None:
-        gen = _StubGenerator(output_dir="out")
+        gen = _StubGenerator(output_dir=Path.cwd() / "out")
         assert gen._validate_component_name("PetController") == "PetController"
         assert gen._validate_component_name("my-widget") == "my-widget"
 
@@ -116,36 +116,6 @@ class TestNameContainment:
             gen.write_file(escape, "x = 1\n")
 
     def test_write_file_allows_inside(self, tmp_path: Path) -> None:
-        out = tmp_path / "out"
-        gen = _StubGenerator(output_dir=str(out))
-        result = gen.write_file(out / "ok.py", "x = 1\n")
-        assert result.files_created == [out / "ok.py"]
-
-    """Path-traversal and content-injection guards (spec finding 15)."""
-
-    def test_snake_case_rejects_path_separators(self) -> None:
-        gen = _StubGenerator(output_dir="out")
-        with pytest.raises(ValueError, match="Invalid generator name"):
-            gen._validate_component_name("../../evil")
-
-    def test_snake_case_rejects_absolute(self) -> None:
-        gen = _StubGenerator(output_dir="out")
-        with pytest.raises(ValueError, match="Invalid generator name"):
-            gen._validate_component_name("/etc/passwd")
-
-    def test_valid_names_pass(self) -> None:
-        gen = _StubGenerator(output_dir="out")
-        assert gen._validate_component_name("PetController") == "PetController"
-        assert gen._validate_component_name("my-widget") == "my-widget"
-
-    def test_write_file_rejects_escape(self, tmp_path) -> None:
-        out = tmp_path / "out"
-        gen = _StubGenerator(output_dir=str(out))
-        escape = out / ".." / "evil.py"
-        with pytest.raises(ValueError, match="escapes output directory"):
-            gen.write_file(escape, "x = 1\n")
-
-    def test_write_file_allows_inside(self, tmp_path) -> None:
         out = tmp_path / "out"
         gen = _StubGenerator(output_dir=str(out))
         result = gen.write_file(out / "ok.py", "x = 1\n")

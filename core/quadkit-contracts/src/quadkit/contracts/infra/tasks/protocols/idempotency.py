@@ -12,8 +12,8 @@ if TYPE_CHECKING:
 class IdempotencyManagerProtocol(Protocol):
     """Manages idempotency keys for task submissions.
 
-    Implementations (e.g. ``quadkit-tasks``
-    :class:`~quadkit.tasks.execution.manager.IdempotencyManager`) generate
+    Implementations (e.g. ``the optional provider``
+    :class:`~the optional provider module`) generate
     deterministic keys from task parameters and detect duplicate
     submissions against an :class:`IdempotencyStoreProtocol` backend.
     """
@@ -74,8 +74,8 @@ class IdempotencyManagerProtocol(Protocol):
 class IdempotentTaskManagerProtocol(Protocol):
     """Task manager with idempotency protection.
 
-    Implementations (e.g. ``quadkit-tasks``
-    :class:`~quadkit.tasks.execution.manager.IdempotentTaskManager`)
+    Implementations (e.g. ``the optional provider``
+    :class:`~the optional provider module`)
     enqueue tasks while preventing duplicate submissions under the same
     idempotency key.
     """

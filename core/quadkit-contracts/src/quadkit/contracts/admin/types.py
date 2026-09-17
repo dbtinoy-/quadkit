@@ -223,7 +223,7 @@ class WidgetParams:
     """Typed query parameters passed to a widget handler.
 
     Pure value object — no parsing, no validation logic, no I/O.
-    Parsing belongs in ``quadkit.admin.params.parse_widget_params``.
+    Parsing belongs in ``the optional provider module``.
     """
 
     page: int = 1

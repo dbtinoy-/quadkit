@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from importlib.metadata import PackageNotFoundError, distribution
+from importlib.metadata import PackageNotFoundError, distribution, entry_points
 from pathlib import Path
 from typing import Any
+
+from quadkit.cli.package_names import module_for
 
 from quadkit.cli.registry.health_checks.base import (
     CheckResult,
@@ -12,23 +14,15 @@ from quadkit.cli.registry.health_checks.base import (
     HealthCheck,
 )
 
-#: Maps application.yaml provider keys to the package that implements them.
-_PROVIDER_PACKAGES: dict[str, str] = {
-    "ai": "quadkit-ai",
-    "auth": "quadkit-auth",
-    "cache": "quadkit-cache",
-    "database": "quadkit-sql",
-    "events": "quadkit-events",
-    "graphql": "quadkit-graphql",
-    "queue": "quadkit-queue",
-    "mailer": "quadkit-notification",
-    "notification": "quadkit-notification",
-    "monitor": "quadkit-monitor",
-    "search": "quadkit-search",
-    "storage": "quadkit-storage",
-    "tasks": "quadkit-tasks",
-    "web": "quadkit-web",
-}
+def _provider_packages() -> dict[str, str]:
+    """Discover provider distributions from the installed provider plugins."""
+
+    return {
+        point.name: point.dist.name
+        for point in entry_points(group="quadkit.providers")
+        if point.dist is not None
+    }
+
 
 
 class ProviderPackagesCheck(HealthCheck):
@@ -67,7 +61,7 @@ class ProviderPackagesCheck(HealthCheck):
         missing: list[str] = []
         present: list[str] = []
 
-        for provider_key, pkg_name in _PROVIDER_PACKAGES.items():
+        for provider_key, pkg_name in _provider_packages().items():
             if provider_key not in config:
                 continue
             try:
@@ -101,22 +95,22 @@ class CrossExtensionImportCheck(HealthCheck):
 
     Scans every ``*.py`` file under ``src/`` using Python's ``ast`` module
     and flags any ``import`` or ``from … import`` that crosses the boundary
-    between two quadkit extension namespaces (e.g. ``quadkit.web`` importing
-    from ``quadkit.sql`` directly instead of through contracts).
+    between two optional extension namespaces instead of going through
+    contracts.
     """
 
     #: (source prefix, forbidden_import_prefix) pairs.
     _FORBIDDEN_PAIRS: list[tuple[str, str]] = [
-        ("quadkit.web", "quadkit.sql"),
-        ("quadkit.web", "quadkit.cache"),
-        ("quadkit.web", "quadkit.tasks"),
-        ("quadkit.auth", "quadkit.sql"),
-        ("quadkit.auth", "quadkit.cache"),
-        ("quadkit.cache", "quadkit.sql"),
-        ("quadkit.tasks", "quadkit.sql"),
-        ("quadkit.tasks", "quadkit.web"),
-        ("quadkit.search", "quadkit.sql"),
-        ("quadkit.search", "quadkit.cache"),
+        (module_for("web"), module_for("sql")),
+        (module_for("web"), module_for("cache")),
+        (module_for("web"), module_for("tasks")),
+        (module_for("auth"), module_for("sql")),
+        (module_for("auth"), module_for("cache")),
+        (module_for("cache"), module_for("sql")),
+        (module_for("tasks"), module_for("sql")),
+        (module_for("tasks"), module_for("web")),
+        (module_for("search"), module_for("sql")),
+        (module_for("search"), module_for("cache")),
     ]
 
     def get_name(self) -> str:

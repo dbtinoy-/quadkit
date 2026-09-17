@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 
 import pytest
 
+from quadkit.config.base import BaseConfig, _unknown_config_keys
 from quadkit.config.exceptions import ConfigSourceError
 from quadkit.config.main import QuadkitConfig
 
@@ -78,9 +79,7 @@ def test_missing_file_returns_defaults(capsys) -> None:
 # ── Mode 4: missing section ─────────────────────────────────────────────
 
 
-def test_missing_section_returns_model_defaults(
-    tmp_path, monkeypatch, capsys
-) -> None:
+def test_missing_section_returns_model_defaults(tmp_path, monkeypatch, capsys) -> None:
     from quadkit.config import main as cfg_main
 
     calls: list[tuple[str, dict]] = []
@@ -98,3 +97,20 @@ def test_missing_section_returns_model_defaults(
     # Observability must survive global logging reconfigurations from other
     # tests — assert on the module logger directly.
     assert any(e == "config.section_defaults" for e, _ in calls)
+
+
+class PlainAnnotationSection(BaseConfig):
+    """Extension models declared with plain annotations stay valid."""
+
+    tax_rate: float = 0.07
+    prefix: str = "dead"
+
+
+def test_unknown_keys_still_flagged_for_plain_annotation_models() -> None:
+    data = {"tax_rate": 0.15, "tax_rte": 0.15}
+    assert _unknown_config_keys(data, PlainAnnotationSection) == ["tax_rte"]
+
+
+def test_declared_annotation_keys_pass_strict_check() -> None:
+    data = {"tax_rate": 0.15, "prefix": "yaml"}
+    assert _unknown_config_keys(data, PlainAnnotationSection) == []

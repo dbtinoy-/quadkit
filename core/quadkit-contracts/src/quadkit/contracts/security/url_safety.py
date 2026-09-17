@@ -1,8 +1,8 @@
 """SSRF URL-safety primitive shared by every outbound HTTP consumer.
 
 Pure standard-library only (``ipaddress``, ``socket``, ``urllib.parse``) so
-that any extension package — including ``quadkit-webhook``, ``quadkit-ai-rag``
-and ``quadkit-ai-mcp``, which may not import ``quadkit.security`` — can
+that any extension package — including ``the optional provider``, ``the optional provider``
+and ``the optional provider``, which may not import ``quadkit.security`` — can
 consume it directly. Keep this file stdlib-only (import-linter Contract 1).
 """
 

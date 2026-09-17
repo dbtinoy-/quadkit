@@ -19,7 +19,7 @@ class ChatMessageProtocol(Protocol):
     """Structural protocol for chat message objects.
 
     Any object with ``role`` and ``content`` attributes satisfies this
-    protocol.  Implemented concretely by ``quadkit.ai.llm.types.ChatMessage``.
+    protocol.  Implemented concretely by ``the optional provider module``.
     """
 
     @property
@@ -36,7 +36,7 @@ class CompletionProtocol(Protocol):
     """Structural protocol for LLM completion objects.
 
     Any object with ``content`` and ``model`` attributes satisfies this
-    protocol.  Implemented concretely by ``quadkit.ai.llm.types.Completion``.
+    protocol.  Implemented concretely by ``the optional provider module``.
     """
 
     @property
@@ -317,7 +317,7 @@ class PromptAssemblerProtocol(Protocol):
 class PromptRendererProtocol(Protocol):
     """Renders a prompt template with provided variables.
 
-    Consumed by: quadkit-ai-prompt, quadkit-ai-rag.
+    Consumed by: the optional provider, the optional provider.
     """
 
     def render(self, template: str, variables: dict[str, Any]) -> str:
@@ -337,7 +337,7 @@ class PromptRendererProtocol(Protocol):
 class PromptOptimizerProtocol(Protocol):
     """Optimizes a rendered prompt for a specific model.
 
-    Consumed by: quadkit-ai-prompt.
+    Consumed by: the optional provider.
     """
 
     async def optimize(self, prompt: str, model: str, max_tokens: int) -> str:

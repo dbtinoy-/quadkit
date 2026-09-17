@@ -86,7 +86,14 @@ class ControllerRegistry(Registry[str, type]):
 
 
 def controller(name: str | None = None) -> Any:
-    """Decorator to automatically register a controller class.
+    """Decorator to register a controller class with the app being configured.
+
+    Registers the class by name in the active application's
+    ControllerRegistry (plans/09172026 H-04: registries are per-application
+    instances — there is no module-level global to write to). When no
+    registration context is active the class is returned unchanged and a
+    warning is logged; declare controllers via ``WebProvider(controllers=...)``
+    or ``@module(controllers=...)`` to have them mounted.
 
     Args:
         name: Optional controller name, defaults to class name
@@ -100,20 +107,26 @@ def controller(name: str | None = None) -> Any:
     """
 
     def decorator(cls: type) -> type:
-        # Register with controller registry
-        controller_name = name or cls.__name__
-        controller_registry.register(controller_name, cls)
+        from quadkit.web.routing.registry import active_registration_context
 
-        logger.debug(
-            "Auto-registered controller %s from %s.%s",
-            controller_name,
-            cls.__module__,
-            cls.__name__,
-        )
+        controller_name = name or cls.__name__
+        ctx = active_registration_context()
+        if ctx is not None and ctx.controller_registry is not None:
+            ctx.controller_registry.register(controller_name, cls)
+            logger.debug(
+                "Auto-registered controller %s from %s.%s",
+                controller_name,
+                cls.__module__,
+                cls.__name__,
+            )
+        else:
+            logger.warning(
+                "controller_registration_skipped_no_context",
+                controller=controller_name,
+                hint="registries are per-application; pass controllers= to "
+                "WebProvider or @module, or register inside a "
+                "registration_context",
+            )
         return cls
 
     return decorator
-
-
-# Global controller registry instance
-controller_registry = ControllerRegistry()

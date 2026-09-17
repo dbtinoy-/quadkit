@@ -4,7 +4,7 @@ Provides advisory, TTL-based distributed locks backed by a persistent store
 (SQL advisory locks, a SQL ``locks`` table, Redis, etc.), allowing multiple
 services to coordinate exclusive access to shared resources.
 
-Implementations ship in ``quadkit-sql`` (``quadkit.sql.stores``) so they can
+Implementations ship in ``the optional provider`` (``the optional provider module``) so they can
 share the application's database connection pool without creating a lateral
 cross-extension dependency.
 

@@ -2,7 +2,7 @@
 
 These define the interface boundary for all vector store backends.
 Application code depends on these protocols. Concrete implementations
-live in ``quadkit-vector``.
+live in ``the optional provider``.
 
 Basic Usage:
     ```python

@@ -83,7 +83,7 @@ def entry_point_catalog() -> dict[str, list[dict[str, str]]]:
     of entry-point metadata dicts.
 
     Returns:
-        ``{"quadkit.cache.backends": [{"name": "redis", "value": "..."}]}``
+        ``{"the optional provider module": [{"name": "redis", "value": "..."}]}``
     """
     catalog: dict[str, list[dict[str, str]]] = {}
 

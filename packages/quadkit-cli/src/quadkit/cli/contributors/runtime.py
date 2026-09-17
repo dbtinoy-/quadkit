@@ -15,6 +15,7 @@ from quadkit.contracts.cli.contributions import (
 )
 from quadkit.contracts.cli.protocols import CliContributorProtocol
 from quadkit.contracts.cli.types import GeneratorDefinition
+from quadkit.cli.package_names import PUBLIC_DISTRIBUTIONS
 
 ENTRY_POINT_GROUP = "quadkit.cli.contributors"
 
@@ -23,36 +24,7 @@ _BUILTIN_DIST = "quadkit-cli"
 _RESERVED_COMMANDS: dict[str, str] = {
     "search": "search",
 }
-_SCOPE_DISTS: frozenset[str] = frozenset(
-    {
-        "quadkit",
-        "quadkit-contracts",
-        "quadkit-ai",
-        "quadkit-ai-mcp",
-        "quadkit-vector",
-        "quadkit-web",
-        "quadkit-sql",
-        "quadkit-cache",
-        "quadkit-auth",
-        "quadkit-events",
-        "quadkit-queue",
-        "quadkit-tasks",
-        "quadkit-http",
-        "quadkit-resilience",
-        "quadkit-storage",
-        "quadkit-search",
-        "quadkit-notification",
-        "quadkit-monitor",
-        "quadkit-webhook",
-        "quadkit-tenancy",
-        "quadkit-features",
-        "quadkit-audit",
-        "quadkit-graphql",
-        "quadkit-nosql",
-        "quadkit-workflow",
-        "quadkit-testing",
-    }
-)
+_SCOPE_DISTS = PUBLIC_DISTRIBUTIONS
 
 
 @dataclass(frozen=True)

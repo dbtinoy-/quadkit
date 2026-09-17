@@ -16,9 +16,7 @@ from typing import Any, cast
 import aiofiles
 import yaml
 
-from quadkit import serialization as json
 from quadkit.cli.exceptions import CliError, ConfigNotFoundError
-from quadkit.config.lib.merge import interpolate_string
 
 _CONFIG_NAMES = ["application.yaml", "application.yml"]
 
@@ -70,6 +68,10 @@ def find_config(
 
 def _interpolate_env_vars(text: str) -> str:
     """Replace ${VAR} and ${VAR:default} patterns with environment values."""
+    # Deferred (plans/09172026 C-03): quadkit.config pulls the framework
+    # config/security chain (~100 ms) — only pay it when a config is read.
+    from quadkit.config.lib.merge import interpolate_string
+
     return interpolate_string(text)
 
 
@@ -129,6 +131,10 @@ class ConfigLoader:
 
     async def load_config(self, path: Path) -> dict[str, Any]:
         """Load and parse a JSON config file asynchronously."""
+        # Deferred (plans/09172026 C-03): quadkit.serialization drags the
+        # core framework import chain; only pay it when JSON is read.
+        from quadkit import serialization as json
+
         async with aiofiles.open(path, "rb") as file_handle:
             content = await file_handle.read()
         decoded = json.loads(content)
@@ -138,6 +144,8 @@ class ConfigLoader:
 
     async def save_config(self, path: Path, config: dict[str, Any]) -> None:
         """Save config to a JSON file asynchronously."""
+        from quadkit import serialization as json
+
         await asyncio.to_thread(path.parent.mkdir, parents=True, exist_ok=True)
         content: Any = json.dumps(config)
         if isinstance(content, bytes):

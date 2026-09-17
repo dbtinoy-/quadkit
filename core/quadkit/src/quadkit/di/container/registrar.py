@@ -2,11 +2,16 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, TypeVar
 
 from quadkit.contracts.exceptions import ContainerError
+from quadkit.di.context import get_current_module
 from quadkit.di.resolution.registry import ServiceRegistry
 from quadkit.logging import get_logger
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 if TYPE_CHECKING:
     from quadkit.di.types import ServiceFactory
@@ -40,6 +45,24 @@ class ContainerRegistrarImpl:
         """Prevent any further service registrations."""
         self._frozen = True
 
+    @contextlib.contextmanager
+    def _registration_window(self) -> Iterator[None]:
+        """Framework-managed window that reopens registration for the boot phase.
+
+        ``freeze()`` closes registration to user code permanently. Providers
+        that materialize services during boot (e.g. ``@provide`` factories)
+        bind their products after the container has frozen, which the
+        lifecycle manager performs inside this window. The window restores
+        the frozen state on exit — including on error — so the freeze
+        guarantee outside the boot phase is unchanged.
+        """
+        was_frozen = self._frozen
+        self._frozen = False
+        try:
+            yield
+        finally:
+            self._frozen = was_frozen
+
     def clear(self) -> None:
         """Clear all registered services.
 
@@ -71,6 +94,7 @@ class ContainerRegistrarImpl:
                 "Cannot register transient service after container is frozen",
             )
         self._registry.transient(service_type, factory, validate=validate)
+        self._registry.attribute(service_type, get_current_module())
 
     def singleton(
         self,
@@ -104,6 +128,7 @@ class ContainerRegistrarImpl:
             factory=factory,
             validate=validate,
         )
+        self._registry.attribute(service_type, get_current_module())
 
     def scoped(
         self,
@@ -129,6 +154,7 @@ class ContainerRegistrarImpl:
                 "Cannot register scoped service after container is frozen",
             )
         self._registry.scoped(service_type, factory, validate=validate, name=name)
+        self._registry.attribute(service_type, get_current_module())
 
     def override(self, service_type: type[T], instance: T) -> None:
         """Replace a service registration for testing purposes.

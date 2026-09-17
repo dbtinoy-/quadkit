@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-testing"
-version = "0.0.2"
+version = "0.0.3"
 description = "Centralized testing infrastructure for Quadkit Framework - Fixtures, factories, and utilities"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -78,9 +78,9 @@ integration = [
 ]
 
 [project.urls]
-Homepage = "https://quadkit.dev"
+Homepage = "https://dbtinoy-.github.io/quadkit/"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://quadkit.dev"
+Documentation = "https://dbtinoy-.github.io/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 
@@ -162,12 +162,6 @@ overrides = [
 workspace = true
 
 [tool.uv.sources.quadkit-contracts]
-workspace = true
-
-[tool.uv.sources.quadkit-secrets]
-workspace = true
-
-[tool.uv.sources.quadkit-sql]
 workspace = true
 
 [tool.pytest.ini_options]

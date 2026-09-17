@@ -209,7 +209,7 @@ class PromptCompressorProtocol(Protocol):
     fits within target_token_count.
 
     Placement note: Lives in ai/rag.py because its primary consumer is the
-    RAG context compression stage. Also consumed by quadkit-ai-memory.
+    RAG context compression stage. Also consumed by the optional provider.
     """
 
     async def compress(

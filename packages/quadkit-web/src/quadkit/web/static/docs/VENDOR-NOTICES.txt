@@ -1,0 +1,30 @@
+Vendored documentation UI assets
+================================
+
+These files are vendored so the /docs and /redoc pages make no third-party
+requests by default (plans/09172026 H-03). They are served by the application
+itself under /docs-static/ and can be swapped for a CDN or private mirror via
+web.api_docs.cdn_base (or the per-asset web.swagger_js_url /
+web.swagger_css_url / web.redoc_js_url overrides).
+
+swagger-ui-dist 5.10.3 — Apache License 2.0
+  swagger-ui.css
+  swagger-ui-bundle.js
+  swagger-ui-standalone-preset.js
+  oauth2-redirect.html
+  Source: https://registry.npmjs.org/swagger-ui-dist/-/swagger-ui-dist-5.10.3.tgz
+  License: https://www.apache.org/licenses/LICENSE-2.0
+  Copyright 2024 SmartBear Software Inc.
+
+redoc 2.5.4 — MIT License
+  redoc.standalone.js
+  Source: https://registry.npmjs.org/redoc/-/redoc-2.5.4.tgz
+  License text: https://opensource.org/licenses/MIT
+  Copyright 2023 Rebilly Inc and contributors
+
+quadkit-authored files (Apache License 2.0, same as the package):
+  swagger-init.js   — CSP-clean Swagger UI boot from data attributes
+  docs.css          — shared docs page chrome (replaces inline styles)
+
+Local modifications: none. The upstream files are byte-for-byte copies of
+the referenced npm tarball contents.

@@ -37,5 +37,5 @@ class TestCliError:
 
     def test_provider_not_installed_error(self):
         from quadkit.cli.exceptions import ProviderNotInstalledError
-        err = ProviderNotInstalledError("quadkit-sql")
-        assert "quadkit-sql" in err.message
+        err = ProviderNotInstalledError("quadkit-example")
+        assert "quadkit-example" in err.message

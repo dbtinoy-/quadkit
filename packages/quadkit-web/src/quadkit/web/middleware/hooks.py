@@ -25,7 +25,10 @@ class WebHooksMiddleware:
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Emit canonical hooks for HTTP requests and prepared responses."""
-        if scope["type"] != "http":
+        if scope["type"] != "http" or self._hooks is None:
+            # Unconfigured hook emission must not cost anything: pass the
+            # request through untouched — no send-wrapper closure, no hook
+            # payload objects.
             await self.app(scope, receive, send)
             return
 

@@ -8,6 +8,7 @@ import typer
 import yaml
 
 from quadkit.cli.lib.console import console
+from quadkit.cli.package_names import installed_quadkit_distributions
 from quadkit.cli.registry.health import (
     CheckResult,
     CheckStatus,
@@ -46,7 +47,7 @@ def info() -> None:
         console.print("Project Config: [warning]Not found[/warning]")
 
     console.print("\n[bold]Core Packages:[/bold]")
-    for pkg in ["quadkit-common", "quadkit-auth", "quadkit-sql", "quadkit-web"]:
+    for pkg in installed_quadkit_distributions():
         console.print(f"- {pkg}")
 
 

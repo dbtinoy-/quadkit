@@ -4,9 +4,12 @@ from __future__ import annotations
 
 from typing import (
     TYPE_CHECKING,
+    Annotated,
     Any,
     TypeVar,
     cast,
+    get_args,
+    get_origin,
     overload,
 )
 
@@ -403,6 +406,17 @@ class Container(
                 consumer_name = module.__name__ if module else "unknown"
                 graph = _module_graph.get()
 
+                if get_origin(service_type) is Annotated:
+                    annotated_args = get_args(service_type)
+                    if annotated_args:
+                        service_type = annotated_args[0]
+
+                providing_module = self._registry.providing_module(service_type)
+                if providing_module is module and module is not None:
+                    # Private to the consuming module itself — no
+                    # cross-module surface is involved.
+                    return await self.__service_resolver.resolve(service_type)
+
                 if (
                     graph is not None
                     and module is not None
@@ -421,27 +435,44 @@ class Container(
                     exporting_names = [node.name for node in exporting_nodes]
 
                     if not exporting_names:
-                        return await self.__service_resolver.resolve(service_type)
-
-                    exported_types = sorted(
-                        {
-                            export.__name__
-                            for node in exporting_nodes
-                            for export in getattr(node, "exports", [])
-                        }
-                    )
-                    message = format_visibility_error(
-                        consumer_module=consumer_name,
-                        consumer_provider=consumer_name,
-                        provider_module=exporting_names,
-                        service_type=service_type.__name__,
-                        exported_types=exported_types,
-                        consumer_imports=consumer_imports,
-                    )
-                    hint = (
-                        f"Import one of {exporting_names or ['the exporting module']} "
-                        f"into {consumer_name}, or make it global."
-                    )
+                        if providing_module is None:
+                            # Not registered through any module and not
+                            # exported anywhere — a standalone or framework
+                            # service, outside the module surface.
+                            return await self.__service_resolver.resolve(service_type)
+                        providing_name = getattr(
+                            providing_module, "__name__", "its provider module"
+                        )
+                        message = (
+                            f"Module '{consumer_name}' cannot resolve "
+                            f"'{service_type.__name__}': provided by "
+                            f"'{providing_name}' but not exported by it"
+                        )
+                        hint = (
+                            f"Export {service_type.__name__} from "
+                            f"'{providing_name}', or provide it from a "
+                            "global module."
+                        )
+                    else:
+                        exported_types = sorted(
+                            {
+                                export.__name__
+                                for node in exporting_nodes
+                                for export in getattr(node, "exports", [])
+                            }
+                        )
+                        message = format_visibility_error(
+                            consumer_module=consumer_name,
+                            consumer_provider=consumer_name,
+                            provider_module=exporting_names,
+                            service_type=service_type.__name__,
+                            exported_types=exported_types,
+                            consumer_imports=consumer_imports,
+                        )
+                        hint = (
+                            f"Import one of {exporting_names} "
+                            f"into {consumer_name}, or make it global."
+                        )
                 else:
                     message = (
                         f"Module '{consumer_name}' cannot resolve "

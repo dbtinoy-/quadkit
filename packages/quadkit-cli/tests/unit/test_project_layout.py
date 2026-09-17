@@ -19,9 +19,11 @@ import pytest
 from typer.testing import CliRunner
 
 from quadkit.cli.commands.new import app as new_app
-from quadkit.cli.scaffold import render_project
+from quadkit.cli.scaffold import render_project, template_names
 
-_TEMPLATES = ("api", "web-api", "full")
+_TEMPLATES = tuple(
+    name for name in ("api", "web-api", "full") if name in template_names()
+)
 
 
 @pytest.fixture

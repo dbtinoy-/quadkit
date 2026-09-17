@@ -55,9 +55,14 @@ class MiddlewareSetup:
         3. CORS.
         4. CSRF (opt-in).
         5. Request context propagation.
-        6. DI scope (request-scoped container).
-        7. Request body size limit.
-        8. Web hook emission middleware (outermost for broad coverage).
+        6. Request body size limit.
+        7. Web hook emission middleware (outermost for broad coverage).
+
+        The DI-scope layer is deliberately **not** added here: it is supplied
+        exactly once by the native middleware stack built at Starlette
+        construction (``DefaultMiddlewareStack`` via ``WebProvider``). Adding
+        it here as well would execute it twice per request, creating two DI
+        scopes and overwriting ``request.state.container``.
 
         Args:
             app: The Starlette application to configure.
@@ -66,11 +71,11 @@ class MiddlewareSetup:
         """
         await self._configure_csp()
         self._add_security_headers(app)
+        self._add_docs_csp(app)
         self._add_host_validation(app)
         self._add_cors(app)
         await self._add_csrf(app, container)
         self._add_request_context(app, container)
-        self._add_di_scope(app, container)
         self._add_body_limit(app)
         self._add_hooks(app)
 
@@ -84,14 +89,31 @@ class MiddlewareSetup:
         if not api_docs or not api_docs.enabled:
             return
 
-        required_domains = api_docs.get_required_domains()
-        if not required_domains:
-            return
+        # plans/09172026 H-03: state which docs asset mode is active. The
+        # default is "local" (vendored assets served by the app, no
+        # third-party requests); "cdn" / "custom" are explicit opt-ins.
+        logger.info(
+            "api_docs_assets_mode",
+            mode=api_docs.assets_mode(
+                swagger_js_url=getattr(self._config, "swagger_js_url", None),
+                swagger_css_url=getattr(self._config, "swagger_css_url", None),
+                redoc_js_url=getattr(self._config, "redoc_js_url", None),
+            ),
+            cdn_base=getattr(api_docs, "cdn_base", None),
+        )
 
+        # Docs enabled implies security headers on: the default security
+        # config carries the strict CSP that covers the vendored assets.
+        # (This also held before H-03 — the merge below used to be the only
+        # place the default SecurityConfig was materialised.)
         if not hasattr(self._config, "security") or not self._config.security:
             from quadkit.web.security.config import SecurityConfig
 
             self._config.security = SecurityConfig()
+
+        required_domains = api_docs.get_required_domains()
+        if not required_domains:
+            return
 
         csp = self._config.security.csp
         directives = csp.directives if hasattr(csp, "directives") else {}
@@ -114,6 +136,48 @@ class MiddlewareSetup:
             directives={
                 k: list(v) if isinstance(v, set) else v for k, v in directives.items()
             },
+        )
+
+    def _add_docs_csp(self, app: Starlette) -> None:
+        """Serve the docs pages under a strict route-scoped CSP (H-03).
+
+        Applies only to the docs HTML pages and their vendored assets; every
+        other route keeps the application's own policy untouched.
+        """
+        api_docs = getattr(self._config, "api_docs", None)
+        if not api_docs or not api_docs.enabled:
+            return
+
+        docs_paths = [
+            p
+            for p in (
+                getattr(self._config, "swagger_ui_url", None),
+                getattr(self._config, "redoc_url", None),
+                "/docs-static",
+            )
+            if p
+        ]
+        if not docs_paths:
+            return
+
+        from quadkit.web.middleware.security import DocsCSPMiddleware
+        from quadkit.web.security.config.csp import CSPConfig
+
+        directives: dict[str, Any] = dict(CSPConfig().directives)
+        for directive, domains in api_docs.get_required_domains().items():
+            merged = set(directives.get(directive, set())) | set(domains)
+            directives[directive] = merged
+
+        policy = CSPConfig(enabled=True, directives=directives).build_header()
+        app.add_middleware(
+            DocsCSPMiddleware,
+            docs_paths=tuple(docs_paths),
+            policy=policy,
+        )
+        logger.info(
+            "docs_csp_applied",
+            paths=docs_paths,
+            policy=policy,
         )
 
     def _add_security_headers(self, app: Starlette) -> None:
@@ -250,19 +314,6 @@ class MiddlewareSetup:
 
         context = cast("Any", container).resolve_sync(Context)
         app.add_middleware(RequestContextMiddleware, context=context)
-
-    def _add_di_scope(
-        self,
-        app: Starlette,
-        container: ContainerResolverProtocol,
-    ) -> None:
-        """Add DI scope middleware for request-scoped container resolution."""
-        from quadkit.web.middleware.di_scope import DIScopeMiddleware
-
-        app.add_middleware(
-            DIScopeMiddleware,
-            container=cast("Any", container),
-        )
 
     def _add_hooks(self, app: Starlette) -> None:
         """Add outermost web hook middleware for request/response events."""

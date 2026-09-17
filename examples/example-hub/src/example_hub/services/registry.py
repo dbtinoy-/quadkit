@@ -18,10 +18,13 @@ class DemoService:
         port: Port used when the demo runs standalone (informational only —
             embedded mode serves everything from the hub's own port).
         kind: ``web`` for live browser consoles.
-        group: Top-level grouping — ``standard`` (single-package) or
-            ``multi-module`` (multi-package composition).
+        group: Top-level grouping — ``starter`` (canonical starter
+            templates), ``standard`` (single-package), or ``multi-module``
+            (multi-package composition).
         blurb: One-line description for the card grid.
-        demo_dir: Directory under ``examples/`` containing this demo.
+        demo_dir: Directory under ``examples/`` containing this demo;
+            entries whose directory is absent (the dev-only fleet, when
+            the hub ships in the public export) are filtered out.
         app_path: Dotted path of the demo's ``app`` module exposing
             ``create_app()`` — the composition root (starter pattern).
         readme_path: Path to the demo's README.md relative to the demos root.
@@ -61,6 +64,95 @@ class ServiceRegistry:
 
     def __init__(self) -> None:
         self.services: list[DemoService] = [
+            # ── Starter templates ────────────────────────────────────────────
+            # The canonical src/ layout demos: the same blueprint every
+            # template copy starts from. They come first because they are
+            # the recommended reading order for a first Quadkit project.
+            DemoService(
+                "minimal-api",
+                "Minimal API",
+                8120,
+                "web",
+                "starter",
+                "Two routes and one typed-config knob — the smallest honest service",
+                "minimal-api",
+                "minimal_api.app",
+                "minimal-api/README.md",
+                capabilities=("http", "typed config"),
+            ),
+            DemoService(
+                "websocket-echo",
+                "Websocket Echo",
+                8121,
+                "web",
+                "starter",
+                "Websocket rooms with membership, live stats, and a member cap",
+                "websocket-echo",
+                "websocket_echo.app",
+                "websocket-echo/README.md",
+                capabilities=("websocket", "services"),
+            ),
+            DemoService(
+                "auth-tokens",
+                "Auth Tokens",
+                8122,
+                "web",
+                "starter",
+                "Bearer-token sessions with Result/ProblemDetail 401s",
+                "auth-tokens",
+                "auth_tokens.app",
+                "auth-tokens/README.md",
+                capabilities=("auth seam", "Result bridge"),
+            ),
+            DemoService(
+                "database-tasks",
+                "Database Tasks",
+                8123,
+                "web",
+                "starter",
+                "SQLite CRUD behind a repository, handlers off the event loop",
+                "database-tasks",
+                "database_tasks.app",
+                "database-tasks/README.md",
+                capabilities=("repository", "DI lifecycle"),
+            ),
+            DemoService(
+                "background-worker",
+                "Background Worker",
+                8124,
+                "web",
+                "starter",
+                "A bounded worker pool off the request path, with live counters",
+                "background-worker",
+                "background_worker.app",
+                "background-worker/README.md",
+                capabilities=("asyncio queue", "lifecycle"),
+            ),
+            DemoService(
+                "multi-tenant-notes",
+                "Multi-Tenant Notes",
+                8125,
+                "web",
+                "starter",
+                "Per-tenant note storage keyed on the X-Tenant-Id header",
+                "multi-tenant-notes",
+                "multi_tenant_notes.app",
+                "multi-tenant-notes/README.md",
+                capabilities=("tenancy seam", "custom error mapping"),
+            ),
+            DemoService(
+                "ai-assistant",
+                "AI Assistant",
+                8126,
+                "web",
+                "starter",
+                "An OpenAI-compatible chat client behind a protocol seam",
+                "ai-assistant",
+                "ai_assistant.app",
+                "ai-assistant/README.md",
+                capabilities=("external integration", "test seam"),
+            ),
+            # ── Standard / multi-module fleet ─────────────────────────────────
             DemoService(
                 "realtime-monitor",
                 "Realtime Monitor",
@@ -492,6 +584,27 @@ class ServiceRegistry:
                 featured=True,
             ),
         ]
+        # The catalog is the full dev fleet (42 entries). The hub ships in
+        # the public export with only the public examples present, so the
+        # *served* list drops entries whose demo directory is absent —
+        # the public hub serves exactly the demos that exist, never
+        # "down" cards for demos it cannot boot.
+        self._catalog: list[DemoService] = self.services
+        self.services = [
+            svc
+            for svc in self._catalog
+            if not svc.demo_dir or (_DEMOS_ROOT / svc.demo_dir).is_dir()
+        ]
+
+    @property
+    def catalog(self) -> list[DemoService]:
+        """Every catalogued demo, present or not (the full dev fleet).
+
+        Assertions about the fleet's shape (ports, groups, showcases)
+        belong here; anything user-facing goes through :attr:`services`
+        or :meth:`web_services` so the public export only sees itself.
+        """
+        return self._catalog
 
     def web_services(self) -> list[DemoService]:
         """Return entries that the fleet can boot and embed."""

@@ -48,10 +48,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Parameters
     "body": ("quadkit.web.routing.parameters", "body"),
     "controller": ("quadkit.web.routing.controller_registry", "controller"),
-    "controller_registry": (
-        "quadkit.web.routing.controller_registry",
-        "controller_registry",
-    ),
     "cookie": ("quadkit.web.routing.parameters", "cookie"),
     "file": ("quadkit.web.routing.parameters", "file"),
     "form": ("quadkit.web.routing.parameters", "form"),
@@ -60,7 +56,6 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "path": ("quadkit.web.routing.parameters", "path"),
     "query": ("quadkit.web.routing.parameters", "query"),
     "register_controller": ("quadkit.web.routing.registry", "register_controller"),
-    "route_registry": ("quadkit.web.routing.registry", "route_registry"),
     "version": ("quadkit.web.routing.versioning", "version"),
     # HTTP Methods (from decorators)
     "delete": ("quadkit.web.routing.decorators", "delete"),
@@ -130,6 +125,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # Rate limiting sugar
     "throttle": ("quadkit.web.integrations.throttle", "throttle"),
     "RateLimitModule": ("quadkit.web.integrations.throttle", "RateLimitModule"),
+    # Interceptor attachment
+    "use_interceptors": (
+        "quadkit.web.interceptors.decorators",
+        "use_interceptors",
+    ),
     # Quickstart
     "app": ("quadkit.web.quickstart", "app"),
     # DI decorators — quickstart-aware versions that also register in the
@@ -256,7 +256,6 @@ __all__ = [
     "background",
     "body",
     "controller",
-    "controller_registry",
     "cookie",
     "delete",
     "discover_controllers",
@@ -286,12 +285,12 @@ __all__ = [
     "register_controller",
     "render_template",
     "roles",
-    "route_registry",
     "singleton",
     "streaming_response",
     "throttle",
     "trace",
     "transient",
+    "use_interceptors",
     "version",
     "websocket",
     "websocket_handler",

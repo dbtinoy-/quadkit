@@ -329,11 +329,13 @@ def _unknown_config_keys(
     """
     import typing
 
-    fields = getattr(model_cls, "__dataclass_fields__", {})
+    fields = dict(getattr(model_cls, "__dataclass_fields__", {}) or {})
     try:
         hints = typing.get_type_hints(model_cls)
     except Exception:  # noqa: BLE001 — unresolvable refs degrade to flat check
         hints = {}
+    for hinted_name in hints:
+        fields.setdefault(hinted_name, None)
 
     unknown: list[str] = []
     for key, value in data.items():

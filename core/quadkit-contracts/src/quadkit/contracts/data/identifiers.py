@@ -2,7 +2,7 @@
 
 Provides validated, dialect-aware SQL identifiers that can be safely
 interpolated into SQL strings.  Any package building SQL queries
-(``quadkit-sql``, ``quadkit-events``, ``quadkit-tasks``, ``quadkit-ai``,
+(``the optional provider``, ``the optional provider``, ``the optional provider``, ``the optional provider``,
 …) can import directly from here without depending on each other.
 
 Typical usage::

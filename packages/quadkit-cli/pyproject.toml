@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-cli"
-version = "0.0.2"
+version = "0.0.3"
 description = "Command-line interface for Quadkit Framework - Project scaffolding, code generation, and development tools"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -82,9 +82,9 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://quadkit.dev"
+Homepage = "https://dbtinoy-.github.io/quadkit/"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://quadkit.dev"
+Documentation = "https://dbtinoy-.github.io/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 

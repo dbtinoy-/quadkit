@@ -37,13 +37,14 @@ class GenericController(Controller, Generic[T]):
     - ``Ok(value)``  → 200 JSON response (201 for ``create_item``).
     - ``Err(error)`` → HTTP error via ``ResultResponseMapper``.
 
-    Use ``@error_status`` on your domain error classes to control the
-    HTTP status code they map to::
+    Use ``@error_status`` to control the HTTP status code a domain error
+    maps to; the decorator registers the mapping, using the decorated
+    controller as the decoration target::
 
         from quadkit.web import error_status
 
-        @error_status(404)
-        class ItemNotFound(DomainError): ...
+        @error_status(ItemNotFound, 404)
+        class ItemsController(Controller): ...
     """
 
     def __init__(

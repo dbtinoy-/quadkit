@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import wraps
+import inspect
 from typing import Any, Literal
 
 from starlette.requests import Request
@@ -31,6 +32,39 @@ from quadkit.web.middleware.rate_limit_strategies import (
 )
 
 logger = get_logger(__name__)
+
+
+async def _resolve_container_limiter(request: Request) -> WebRateLimiterProtocol | None:
+    """Resolve the ``WebRateLimiterProtocol`` bound by ``RateLimitModule``.
+
+    Reads through the request-scoped container ``DIScopeMiddleware`` attaches
+    to ``request.state`` (falling back to the root container), so that
+    ``throttle()`` works ambiently when the module is registered — while
+    apps without a limiter keep the warn-and-allow behaviour.
+    """
+
+    for container in (
+        getattr(request.state, "container", None),
+        getattr(request.state, "root_container", None),
+    ):
+        if container is None:
+            continue
+        try:
+            resolver = getattr(container, "resolve", None)
+            if resolver is None:
+                continue
+            limiter = resolver(WebRateLimiterProtocol)
+            if inspect.isawaitable(limiter):
+                limiter = await limiter
+            if limiter is not None:
+                return limiter
+        except Exception as exc:  # noqa: BLE001 — not bound in this app
+            logger.debug(
+                "rate_limit_container_resolution_miss",
+                error=str(exc),
+            )
+    return None
+
 
 __all__ = [
     "CacheBackendLimiter",
@@ -69,11 +103,15 @@ def rate_limit(
 ) -> Callable:
     """Decorator for rate limiting endpoints.
 
-    Enforces rate limits using the provided ``limiter`` instance (constructor injection).
-    The ``limiter`` must be explicitly passed; no runtime container resolution is performed.
+    Enforces rate limits using the provided ``limiter`` instance (constructor
+    injection). Explicit injection always wins.
 
-    If no limiter is provided, the endpoint executes without rate limiting and a warning
-    is logged.
+    When no limiter is injected, the decorator resolves the
+    :class:`~quadkit.contracts.web.WebRateLimiterProtocol` that
+    :class:`~quadkit.web.RateLimitModule` binds in the container, through
+    the request-scoped container on ``request.state``. If neither is
+    available the endpoint executes without rate limiting and a warning is
+    logged.
 
     Args:
         max_requests: Maximum requests per window.
@@ -117,14 +155,24 @@ def rate_limit(
                 )
                 return await func(*args, **kwargs)
 
-            # ── 2. Resolve the limiter (only via explicit injection) ─
+            # ── 2. Resolve the limiter ─────────────────────────────────────
+            # Explicit injection wins (constructor time, e.g. tests wiring
+            # their own backend). Without it, fall back to the limiter the
+            # RateLimitModule bound in the container for exactly this case —
+            # it is read back through the request-scoped container that
+            # DIScopeMiddleware attaches to request.state. When neither is
+            # available, the historical behaviour stands: warn and allow.
             resolved_limiter: WebRateLimiterProtocol | None = _injected_limiter
+
+            if resolved_limiter is None:
+                resolved_limiter = await _resolve_container_limiter(request)
 
             if resolved_limiter is None:
                 logger.warning(
                     "rate_limit_skipped_no_limiter",
                     endpoint=func.__name__,
-                    reason="no limiter explicitly injected; use rate_limit(limiter=...) to provide one",
+                    reason="no limiter injected and no WebRateLimiterProtocol bound; "
+                    "use rate_limit(limiter=...) or add RateLimitModule",
                 )
                 return await func(*args, **kwargs)
 

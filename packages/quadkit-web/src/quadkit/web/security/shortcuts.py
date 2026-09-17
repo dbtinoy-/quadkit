@@ -57,6 +57,12 @@ def roles(*role_names: str, authorizer: Any | None = None) -> Any:
     Returns:
         Decorator that attaches a :class:`RoleGuard` to the target.
 
+    Note:
+        Guarded handlers must declare ``request: Request`` as a parameter —
+        the guard locates the principal on ``request.state.user`` at runtime
+        (stamp it from your authentication middleware; see
+        :class:`~quadkit.contracts.auth.guard.AuthenticatorProtocol`).
+
     Example::
 
         authorizer = await container.resolve(AuthorizerProtocol)

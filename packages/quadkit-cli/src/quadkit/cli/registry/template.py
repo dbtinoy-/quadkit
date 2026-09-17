@@ -9,6 +9,8 @@ import abc
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from quadkit.cli.package_names import packages_for, provider_available
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -64,11 +66,7 @@ class WebAPITemplate(ProjectTemplate):
 
     name = "web-api"
     description = "REST API with web framework"
-    packages = [
-        "quadkit",
-        "quadkit-web",
-        "quadkit-sql",
-    ]
+    packages = packages_for('web', 'sql')
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -83,12 +81,7 @@ class GraphQLTemplate(ProjectTemplate):
 
     name = "graphql"
     description = "GraphQL API with web framework"
-    packages = [
-        "quadkit",
-        "quadkit-web",
-        "quadkit-sql",
-        "quadkit-graphql",
-    ]
+    packages = packages_for('web', 'sql', 'graphql')
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -103,12 +96,7 @@ class WorkerTemplate(ProjectTemplate):
 
     name = "worker"
     description = "Background job processor"
-    packages = [
-        "quadkit",
-        "quadkit-sql",
-        "quadkit-tasks",
-        "quadkit-queue",
-    ]
+    packages = packages_for('sql', 'tasks', 'queue')
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -123,16 +111,7 @@ class FullStackTemplate(ProjectTemplate):
 
     name = "fullstack"
     description = "Full application with auth, admin, and more"
-    packages = [
-        "quadkit",
-        "quadkit-web",
-        "quadkit-sql",
-        "quadkit-auth",
-        "quadkit-admin",
-        "quadkit-cache",
-        "quadkit-tasks",
-        "quadkit-monitor",
-    ]
+    packages = packages_for('web', 'sql', 'auth', 'admin', 'cache', 'tasks', 'monitor')
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -171,14 +150,17 @@ class TemplateRegistry:
 
     @classmethod
     def _default_entries(cls) -> tuple[type[ProjectTemplate], ...]:
-        """The complete in-package built-in set, declared exactly once."""
-        return (
-            MinimalTemplate,
-            WebAPITemplate,
-            GraphQLTemplate,
-            WorkerTemplate,
-            FullStackTemplate,
+        """Return templates supported by installed optional providers."""
+        entries: list[type[ProjectTemplate]] = [MinimalTemplate, WebAPITemplate]
+        optional = (
+            (GraphQLTemplate, ("sql", "graphql")),
+            (WorkerTemplate, ("sql", "tasks", "queue")),
+            (FullStackTemplate, ("web", "sql", "auth", "admin", "cache", "tasks")),
         )
+        for entry, features in optional:
+            if all(provider_available(feature) for feature in features):
+                entries.append(entry)
+        return tuple(entries)
 
     @classmethod
     def with_defaults(cls) -> TemplateRegistry:

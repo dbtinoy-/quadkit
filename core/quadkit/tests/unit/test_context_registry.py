@@ -160,3 +160,29 @@ class TestContextIsolation:
         assert result_a == "in-a"
         # Outside the context the value is back to default.
         assert registry.get_typed(REQUEST_ID) is None
+
+
+class TestWithDefaultsOnboarding:
+    """ContextVarRegistry.with_defaults() must actually work (G-12).
+
+    The natural onboarding call raised NotImplementedError until the
+    _default_entries override declared the standard set mirrored by
+    create_default_context().
+    """
+
+    def test_with_defaults_registers_default_keys(self) -> None:
+        from quadkit.primitives.context_keys import DEFAULT_KEYS
+        from quadkit.primitives.context_registry import ContextVarRegistry
+
+        registry = ContextVarRegistry.with_defaults()
+
+        assert set(registry.keys()) == {key.name for key in DEFAULT_KEYS}
+
+    def test_with_defaults_registry_handles_typed_round_trip(self) -> None:
+        from quadkit.primitives.context_keys import REQUEST_ID
+        from quadkit.primitives.context_registry import ContextVarRegistry
+
+        registry = ContextVarRegistry.with_defaults()
+
+        registry.set_typed(REQUEST_ID, "req-42")
+        assert registry.get_typed(REQUEST_ID) == "req-42"

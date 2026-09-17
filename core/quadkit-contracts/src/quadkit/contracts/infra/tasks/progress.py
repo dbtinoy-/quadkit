@@ -1,8 +1,8 @@
 """Progress tracking protocol and data types for long-running tasks.
 
 Provides the cross-package contract for task progress reporting, enabling any
-package (``quadkit-admin``, ``quadkit-web``, …) to depend on the protocol
-without importing from ``quadkit-tasks`` directly.
+package (``the optional provider``, ``quadkit-web``, …) to depend on the protocol
+without importing from ``the optional provider`` directly.
 
 Example:
     ```python

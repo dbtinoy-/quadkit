@@ -28,7 +28,7 @@ class AdminContributorProtocol(Protocol):
     """Contract for packages that contribute admin dashboard surfaces.
 
     Any quadkit extension package can implement this protocol and register
-    it via the ``quadkit.admin.contributors`` entry point.  The admin
+    it via the ``the optional provider module`` entry point.  The admin
     dashboard discovers contributors at boot and assembles their widgets,
     pages, navigation, and actions into the unified admin UI.
     """
@@ -70,7 +70,7 @@ class AdminContributorProtocol(Protocol):
 
     @property
     def package_source(self) -> str:
-        """Python package name that provides this contributor (e.g. 'quadkit-cache')."""
+        """Python package name that provides this contributor (e.g. 'the optional provider')."""
         ...
 
     @property

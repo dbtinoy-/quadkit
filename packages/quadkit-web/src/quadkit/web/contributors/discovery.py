@@ -32,7 +32,7 @@ def load_web_contributors() -> list[WebContributorProtocol]:
         A package registers a contributor via pyproject.toml::
 
             [project.entry-points."quadkit.web.contributors"]
-            graphql = "quadkit.graphql.web.contributor:GraphQLWebContributor"
+            graphql = "the optional provider module:GraphQLWebContributor"
 
         The web provider loads all contributors at startup::
 

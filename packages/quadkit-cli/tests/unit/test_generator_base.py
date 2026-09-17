@@ -14,7 +14,7 @@ class TestBaseGenerator:
             def get_context(self, name: str, **kwargs):
                 return {"name": name}
 
-        gen = TestGenerator(output_dir=".")
+        gen = TestGenerator(output_dir=Path.cwd())
         assert gen.output_dir is not None
 
     def test_generation_result_tracks_files(self):

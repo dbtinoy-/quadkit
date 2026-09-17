@@ -2,7 +2,7 @@
 
 Defines the channel configuration, gateway request/result value types,
 gateway error, and the gateway service protocol implemented by the
-``quadkit-ai-relay-gateway`` extension package.
+``the optional provider`` extension package.
 """
 
 from __future__ import annotations

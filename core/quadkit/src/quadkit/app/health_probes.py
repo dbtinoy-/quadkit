@@ -97,6 +97,32 @@ class HealthProbeMixin:
             AggregateHealthResult(components=list(raw.values()))
         )
 
+    def _baseline_component(
+        self,
+        result: AggregateHealthResult,
+        category: HealthCheckCategory,
+    ) -> AggregateHealthResult:
+        """Ensure a running application always reports a baseline component.
+
+        Probe categories aggregate whatever checks register against them,
+        and an empty pool would otherwise surface as ``UNKNOWN``.  The
+        running application itself is the truthful baseline signal: live,
+        started, and able to serve.  Registered checks still gate the
+        aggregate — seeding only applies when nothing else reported.
+        """
+        if result.components:
+            return result
+        return AggregateHealthResult(
+            components=[
+                HealthCheckResult(
+                    component=self.name,
+                    status=HealthStatus.HEALTHY,
+                    message="application running",
+                    category=category,
+                )
+            ]
+        )
+
     def _probe_unavailable_result(
         self,
         category: HealthCheckCategory,
@@ -122,9 +148,9 @@ class HealthProbeMixin:
             return self._apply_details_policy(
                 self._probe_unavailable_result(HealthCheckCategory.LIVENESS)
             )
-        return self._apply_details_policy(
-            await self._orchestrator.run_liveness(timeout)
-        )
+        live = await self._orchestrator.run_liveness(timeout)
+        live = self._baseline_component(live, HealthCheckCategory.LIVENESS)
+        return self._apply_details_policy(live)
 
     async def readiness(self, timeout: float | None = None) -> AggregateHealthResult:
         """Run readiness checks for the application."""
@@ -135,9 +161,9 @@ class HealthProbeMixin:
             return self._apply_details_policy(
                 self._probe_unavailable_result(HealthCheckCategory.READINESS)
             )
-        return self._apply_details_policy(
-            await self._orchestrator.run_readiness(timeout)
-        )
+        ready = await self._orchestrator.run_readiness(timeout)
+        ready = self._baseline_component(ready, HealthCheckCategory.READINESS)
+        return self._apply_details_policy(ready)
 
 
 __all__ = ["HealthProbeMixin"]

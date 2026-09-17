@@ -1,119 +1,194 @@
 # quadkit-testing
 
-Centralized testing infrastructure for Quadkit Framework — Fixtures, factories, and utilities.
+![Quadkit](https://raw.githubusercontent.com/dbtinoy-/quadkit/main/banner.jpg)
 
----
+[![PyPI](https://img.shields.io/pypi/v/quadkit-testing?color=%2322c55e&label=pypi)](https://pypi.org/project/quadkit-testing/)
+[![Python](https://img.shields.io/pypi/pyversions/quadkit-testing?color=%2322c55e)](https://pypi.org/project/quadkit-testing/)
+[![License](https://img.shields.io/pypi/l/quadkit-testing?color=%2322c55e)](https://github.com/dbtinoy-/quadkit/blob/main/LICENSE)
 
-## Overview
+Test harnesses, fakes, and fixtures for Quadkit applications: boot the
+real application in-process, substitute bindings instead of mocking
+import sites, and assert on responses with helpers that say what
+failed.
 
-`quadkit-testing` provides in-process fakes for common framework protocols (`FakeCache`, `FakeEventBus`, `FakeCommandBus`, `FakeClock`, …), a pytest plugin with auto-registered fixtures, deterministic data-factory helpers, and a `ContainerTestFixture` for DI integration tests.
+For anyone writing tests against Quadkit applications — and for tooling
+that needs drop-in implementations of the framework's protocols.
 
----
+## The quadkit family
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
-## Install
+| Package | Role |
+| --- | --- |
+| [`quadkit-contracts`](https://pypi.org/project/quadkit-contracts/) | zero-dependency protocols, types, exception hierarchy |
+| [`quadkit`](https://pypi.org/project/quadkit/) | the framework core — DI container, modules, config, logging, `Result` |
+| [`quadkit-web`](https://pypi.org/project/quadkit-web/) | ASGI layer — controllers, routing, middleware, OpenAPI docs |
+| [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
+| [`quadkit-testing`](https://pypi.org/project/quadkit-testing/) | in-process test beds, fakes, fixtures |
+
+## Installation
 
 ```bash
 uv add --dev quadkit-testing
-
-# With extras for specific backends
-uv add --dev "quadkit-testing[db]"      # aiosqlite, asyncpg
-uv add --dev "quadkit-testing[web]"     # httpx, starlette
 ```
 
-## Quick Start
+Requires **Python >= 3.11**.
+
+## Minimal working example
+
+Test an HTTP route with the real application, in-process:
 
 ```python
 import pytest
-from quadkit.testing.fixtures import fake_cache
-from quadkit.testing.fakes import FakeCache
 
+from quadkit.testing import WebTestBed
 
-class TestUserService:
-    @pytest.fixture
-    def cache(self) -> FakeCache:
-        return FakeCache()
-
-    @pytest.fixture
-    def service(self, cache: FakeCache) -> UserService:
-        return UserService(cache=cache)
-
-    @pytest.mark.asyncio
-    async def test_returns_cached_user(
-        self, service: UserService, cache: FakeCache
-    ) -> None:
-        await cache.set("user:123", {"id": "123", "name": "Alice"})
-        result = await service.find_cached("123")
-        assert result.is_ok()
-        assert result.unwrap().name == "Alice"
-```
-
-## Testing
-
-```python
-from quadkit.testing.fakes import FakeEventBus
+from my_app import create_app
 
 
 @pytest.mark.asyncio
-async def test_places_order_emits_event(self, fake_event_bus: FakeEventBus) -> None:
-    service = OrderService(bus=fake_event_bus)
-    await service.place(order)
-
-    fake_event_bus.assert_published(OrderPlaced, order_id=order.id)
-    assert len(fake_event_bus.published_of_type(OrderPlaced)) == 1
+async def test_hello() -> None:
+    async with WebTestBed(create_app()) as bed:
+        response = bed.get("/hello", params={"name": "quadkit"})
+        response.assert_status(200)
+        assert response.json == {"message": "hello, quadkit"}
 ```
 
-## Available Fakes
+Or test services directly, with binding overrides:
 
-All fakes live in `quadkit.testing.fakes` and implement the async contracts of the real services.
+```python
+async def test_service() -> None:
+    from quadkit.testing import AppTestBed
 
-| Class | Implements | Location |
-|-------|-----------|----------|
-| `FakeCache` | cache API (`async get/set/delete/clear`) | `quadkit.testing.fakes.cache` |
-| `FakeEventBus` | in-process event bus; `published()`, `published_of_type()`, `assert_published()` | `quadkit.testing.fakes.events` |
-| `FakeCommandBus` | command dispatch | `quadkit.testing.fakes.buses` |
-| `FakeQueryBus` | query dispatch | `quadkit.testing.fakes.buses` |
-| `FakeUnitOfWork` | unit-of-work context | `quadkit.testing.fakes.lifecycle` |
-| `FakeClock` | deterministic clock | `quadkit.testing.fakes.clock` |
-| `FakeConfig` | config overrides | `quadkit.testing.fakes.config` |
-| `FakeLogger` | structlog-compatible logger | `quadkit.testing.fakes.logging` |
-| `FakeMetricsCollector` | metrics recording | `quadkit.testing.fakes.monitoring` |
-| `FakeStateStore` | state storage | `quadkit.testing.fakes.cache` |
-| `FakeAuditLogger` | audit logging | `quadkit.testing.fakes.audit` |
-| `FakeRotatableSecretStore` | secret storage with rotation | `quadkit.testing.fakes.secrets` |
-| `FakeTracer` / `FakeSpan` | tracing | `quadkit.testing.fakes.tracing` |
-
-## Key Features
-
-- **Zero infrastructure** — all fakes run in-process; no Docker or external services needed
-- **Assertion helpers** — `assert_published()`, `assert_not_published()`, `assert_published_once()`, `assert_events_in_order()`
-- **Async-first** — all fakes implement the same `async` APIs as real backends
-- **pytest plugin** — auto-registered fixtures and auto-skip for external-service markers (Redis, PostgreSQL, Elasticsearch, RabbitMQ, Meilisearch)
-- **DB fixtures** — `database_provider`, `clean_database`, `db_transaction`, `mock_connection`, `sample_user_data` (with `[db]` extra)
-- **Data factory** — `test_data.create_user()`, `create_task()`, `create_message()` via `quadkit.testing.lib`
-- **Container fixture** — `ContainerTestFixture` with `mock()`/`get()` for DI integration tests
-- **Reproducible** — deterministic IDs and timestamps for snapshot testing
-
-## pytest Plugin
-
-The plugin is loaded automatically via entry points — no manual wiring needed:
-
-```bash
-uv run pytest -m "not integration"   # unit tests only (fast)
-uv run pytest -m integration         # integration tests
+    async with AppTestBed.from_factory(
+        create_app, overrides={Cache: FakeCache()}
+    ) as bed:
+        service = await bed.app.container.resolve(UserService)
 ```
 
-Tests marked with external-service markers (`redis`, `postgres`, `elasticsearch`, `rabbitmq`, `meilisearch`) are skipped automatically when the service is unreachable.
+A pytest plugin registers automatically via entry points — no
+`conftest.py` wiring — and provides auto-registered fixtures including
+`fake_cache`, `fake_event_bus`, `fake_logger`, `fake_clock`,
+`fake_command_bus`, `fake_query_bus`, `fake_unit_of_work`,
+`fake_metrics`, `fake_config`, `fake_state_store`, `test_bed`,
+`test_container`, and `test_data`:
 
-## Key Source Files
+```python
+import pytest
 
-| File | What it contains |
-|------|----------------|
-| `src/quadkit/testing/plugins/pytest/` | pytest plugin entry point, markers, auto-skip hooks |
-| `src/quadkit/testing/fixtures/core.py` | Auto-registered core fixtures (`fake_cache`, `fake_event_bus`, …) |
-| `src/quadkit/testing/fixtures/container.py` | `ContainerTestFixture` |
-| `src/quadkit/testing/fixtures/bed.py` | `TestEnvironment` builder (`use_provider`, `override`, `fake`) |
-| `src/quadkit/testing/fixtures/db.py` | DB fixtures (`database_provider`, `clean_database`, …) |
-| `src/quadkit/testing/fakes/events.py` | `FakeEventBus` |
-| `src/quadkit/testing/fakes/buses.py` | `FakeCommandBus`, `FakeQueryBus` |
-| `src/quadkit/testing/lib/factory.py` | `TestDataFactory` (`create_user`, `create_task`, …) |
+from quadkit.contracts.domain.events import DomainEvent
+
+
+class UserCreated(DomainEvent):
+    user_id: str
+    email: str
+
+
+@pytest.mark.asyncio
+async def test_signup_publishes(fake_event_bus) -> None:
+    await fake_event_bus.publish(UserCreated(user_id="1", email="a@b.c"))
+    fake_event_bus.assert_published(UserCreated, user_id="1")
+
+
+def test_trial_expiry_is_deterministic(fake_clock) -> None:
+    t0 = fake_clock.now()
+    fake_clock.advance(30 * 24 * 3600)
+    assert (fake_clock.now() - t0).days == 30
+```
+
+## Optional extras
+
+| Extra | Contents |
+| --- | --- |
+| `[web]` | `httpx` + Starlette — the `WebTestBed` client transport |
+| `[db]` | `aiosqlite`, `asyncpg` — drivers for your async DB test suites |
+| `[integration]` | service clients for integration suites (Redis, MongoDB, Kafka, Elasticsearch, Neo4j, Qdrant, PostgreSQL, SQLite) |
+| `[dev]` | `ruff`, `mypy`, `black` |
+
+## Public API entry points
+
+### Test beds
+
+```python
+from quadkit.testing import AppTestBed, WebTestBed
+```
+
+- `AppTestBed.from_factory(factory, overrides=None)` /
+  `AppTestBed.from_app(app)` — application-level beds.
+- `WebTestBed(app_or_provider, raise_server_exceptions=True)` with
+  `get/post/put/patch/delete`, `override(Contract, impl)` (before
+  boot), and `TestResponse` — `status_code`, `headers`, `text`,
+  `json` (property), `assert_status`, `assert_json`,
+  `assert_json_path`, `assert_header`.
+- `quadkit.testing.fixtures.container.ContainerTestFixture` — DI-level
+  fixture with `mock()`, `override()`, `get()`, `get_optional()`.
+- `quadkit.testing.fixtures.bed.TestEnvironment` — programmatic
+  environment builder (`use_provider`, `override`, `fake`, `resolve`).
+- `quadkit.testing.lib.factory.TestDataFactory` — deterministic
+  `create_user()`, `create_task()`, `create_message()`,
+  `create_request()`.
+
+### Fakes (`quadkit.testing.fakes`)
+
+All in-process, async-native, implementing the same contracts as the
+real services:
+
+| Class | Covers |
+| --- | --- |
+| `FakeCache` / `FakeStateStore` | cache and state storage |
+| `FakeEventBus` | in-process events with `assert_published()`, `published_of_type()`, `assert_events_in_order()` and friends |
+| `FakeCommandBus` / `FakeQueryBus` | command / query dispatch |
+| `FakeUnitOfWork` | unit-of-work context |
+| `FakeClock` (+ `Clock`, `SystemClock`) | deterministic time |
+| `FakeConfig` | config overrides |
+| `FakeLogger` (+ `LogEntry`) | structlog-compatible sink |
+| `FakeMetricsCollector` / `FakeResourceUnitTracker` | metrics / resource tracking |
+| `FakeRedisClient` | Redis-protocol client |
+| `FakeAuditLogger` | audit records |
+| `FakeTracer` / `FakeSpan` | tracing |
+
+Fakes that depend on packages outside the published set are not
+included in this distribution.
+
+## Configuration
+
+None required — the pytest plugin self-registers. Mark suites for
+external services and gate them yourself (e.g.
+`uv run pytest -m "not integration"`).
+
+## Error handling
+
+Test beds surface failures, they don't hide them: with
+`raise_server_exceptions=True` (the default) unexpected exceptions
+re-raise into your test with their original traceback; HTTP-expected
+failures assert on the response instead.
+
+## Testing
+
+Ironically self-hosted: this package's public tests are among the
+suite the release executes from the exported tree against the built
+wheels.
+
+## Security
+
+Fakes are in-process and safe to wire into unit suites. Report
+vulnerabilities privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md).
+
+## Stability
+
+Version `0.0.3` in the `0.x` series, released in lockstep with the
+other four distributions; APIs may change between minor versions until
+1.0 — pin an exact version (`quadkit-testing==0.0.3`) or a tight range
+(`>=0.0.3,<0.1.0`). Full policy:
+[stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
+
+## Links
+
+- **Documentation** — <https://dbtinoy-.github.io/quadkit/>
+- **Getting started** — <https://dbtinoy-.github.io/quadkit/getting-started/installation/>
+- **Changelog** — <https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md>
+- **Issues** — <https://github.com/dbtinoy-/quadkit/issues>
+- **Security** — report privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md)
+- **Contributing** — [CONTRIBUTING.md](https://github.com/dbtinoy-/quadkit/blob/main/CONTRIBUTING.md)
+
+Apache-2.0 — see [LICENSE](https://github.com/dbtinoy-/quadkit/blob/main/LICENSE). "Quadkit" and the
+Quadkit logo are trademarks of the project — see
+[TRADEMARK.md](https://github.com/dbtinoy-/quadkit/blob/main/TRADEMARK.md).

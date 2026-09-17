@@ -16,7 +16,7 @@ from quadkit.testing.fakes.redis import FakeRedisClient
 from quadkit.testing.fakes.tracing import FakeSpan, FakeTracer
 
 # Optional: re-exports the production memory backend owned by
-# ``quadkit-secrets``, which is not part of the published set.
+# ``the optional provider``, which is not part of the published set.
 try:
     from quadkit.testing.fakes.secrets import FakeRotatableSecretStore
 except ImportError:  # pragma: no cover - depends on optional extra

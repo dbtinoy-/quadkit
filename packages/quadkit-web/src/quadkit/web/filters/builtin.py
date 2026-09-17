@@ -100,6 +100,15 @@ class DefaultExceptionFilter:
     When ``debug=True`` and the HTTP client sends ``Accept: text/html``,
     the response is a rich HTML error page showing the traceback and request
     details.  In all other cases a structured JSON response is returned.
+
+    Policy boundary: this filter is the sole owner of error→status mapping
+    for the throw path. It covers the built-in contract error families
+    (NotFound, Validation, Forbidden/Authorization, Authentication,
+    Conflict, RateLimit, and the DomainError catch-all) and mirrors the
+    ResultResponseMapper table so both styles agree. Custom
+    ``ResultResponseMapper.register``/``@error_status`` mappings apply to
+    the Result-return path only, by design: a raised custom error resolves
+    through its nearest contract base class here.
     """
 
     def __init__(self, debug: bool = False) -> None:
@@ -166,11 +175,13 @@ class DefaultExceptionFilter:
             DomainError,
             NotFoundError,
             PermissionDeniedError,
+            RateLimitError,
         )
 
         status_code = 500
         type_uri = "urn:quadkit:internal-error"
         title = "Internal Server Error"
+        headers: dict[str, str] | None = None
 
         if isinstance(exc, NotFoundError):
             status_code, type_uri, title = 404, "urn:quadkit:not-found", "Not Found"
@@ -184,6 +195,18 @@ class DefaultExceptionFilter:
             )
         elif isinstance(exc, ConflictError):
             status_code, type_uri, title = 409, "urn:quadkit:conflict", "Conflict"
+        elif isinstance(exc, RateLimitError):
+            # 429 throttling must not degrade to the generic DomainError
+            # catch-all below; surface Retry-After when the limiter set it
+            # (mirrors the ResultResponseMapper registry at routing/result_bridge).
+            status_code, type_uri, title = (
+                429,
+                "urn:quadkit:too-many-requests",
+                "Too Many Requests",
+            )
+            retry_after = (getattr(exc, "details", None) or {}).get("retry_after")
+            if retry_after is not None:
+                headers = {"Retry-After": str(retry_after)}
         elif isinstance(exc, DomainError):
             status_code, type_uri, title = (
                 400,
@@ -203,6 +226,7 @@ class DefaultExceptionFilter:
         return JSONResponse(
             content=pd.to_dict(),
             status_code=status_code,
+            headers=headers,
             media_type="application/problem+json",
         )
 

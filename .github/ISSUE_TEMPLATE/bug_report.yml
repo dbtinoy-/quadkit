@@ -1,0 +1,43 @@
+name: Bug report
+description: Something in a published Quadkit distribution misbehaves
+labels: [bug]
+body:
+  - type: input
+    id: version
+    attributes:
+      label: Quadkit version
+      description: Output of `pip show quadkit quadkit-web | grep -E 'Name|Version'`
+      placeholder: quadkit 0.0.2, quadkit-web 0.0.2
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Environment
+      description: Python version, OS, async server (uvicorn/granian)
+      placeholder: Python 3.12, Ubuntu 24.04, uvicorn
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Minimal reproduction
+      description: The smallest code + config that shows the problem. A failing pytest using quadkit-testing is ideal.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected vs actual
+      description: What should happen, what happens instead. Include the relevant structured log excerpt.
+    validations:
+      required: true
+  - type: checkboxes
+    id: checklist
+    attributes:
+      label: Checklist
+      options:
+        - label: I searched existing issues (open and closed) first.
+          required: true
+        - label: This is not a security issue — those go to the vulnerability reporting process (SECURITY.md).
+          required: true

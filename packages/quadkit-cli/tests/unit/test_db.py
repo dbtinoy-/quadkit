@@ -128,6 +128,9 @@ async def test_bootstrap_db_provider_resolves_usable_provider(
     tmp_path: Path, monkeypatch
 ):
     """_bootstrap_db_provider() resolves a usable DatabaseProviderProtocol."""
+    from quadkit.cli.package_names import module_for
+
+    pytest.importorskip(module_for("sql"))
     db_path = tmp_path / "test.db"
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{db_path}")
 

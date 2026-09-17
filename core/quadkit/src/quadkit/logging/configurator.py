@@ -55,7 +55,7 @@ def configure_logging(
         service_name: Application name injected into log context.
         levels: Per-logger level overrides. Keys are logger name prefixes,
             values are level strings.  Example:
-            ``{"quadkit.di": "DEBUG", "quadkit.resilience": "WARNING"}``.
+            ``{"quadkit.di": "DEBUG", "the optional provider module": "WARNING"}``.
         sampling_enabled: Enable deterministic log sampling.
         sampling_default_rate: Default sample rate (1.0 = log everything,
             0.1 = log ~10%).

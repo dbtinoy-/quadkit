@@ -14,6 +14,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 from quadkit.contracts.core.identity import IdGeneratorProtocol
 from quadkit.logging import get_logger
 from quadkit.primitives.context import REQUEST_ID, Context
+from quadkit.web.middleware._headers import get_header, sanitize_request_id
 
 logger = get_logger(__name__)
 
@@ -72,13 +73,14 @@ class RequestIDMiddleware:
             return
 
         # Get or generate request ID from headers
-        headers = dict(scope.get("headers", []))
         header_bytes = self.header_name.lower().encode()
-        request_id_bytes = headers.get(header_bytes)
-
-        if request_id_bytes:
-            request_id = request_id_bytes.decode()
-        else:
+        inbound = get_header(scope, header_bytes)
+        # H-01: inbound ids are client-controlled — accept only short
+        # URL-safe tokens; anything else is dropped and a fresh id generated.
+        request_id = sanitize_request_id(
+            inbound.decode("ascii", "replace") if inbound is not None else None
+        )
+        if not request_id:
             # Generate new UUID-based request ID
             request_id = (
                 f"req_{self._ids.generate() if self._ids else uuid.uuid4().hex[:12]}"

@@ -64,6 +64,19 @@ class RequestPipeline:
             # 2. Execute Interceptors & Handler
             # We wrap the final handler call in a CallHandlerProtocol to be used by interceptors
             async def final_handler() -> Any:
+                # plans/09172026 R-05 fast path: when every handler parameter
+                # is a request or execution-context injection (precomputed at
+                # route-wrap time), parameter binding and request validation
+                # are no-ops — call the handler directly without constructing
+                # a ParameterBinder or running validate_and_merge_request.
+                simple_binding = context.route_metadata.get("simple_binding")
+                if simple_binding is not None:
+                    kwargs = {
+                        name: (context.request if source == "request" else context)
+                        for name, source in simple_binding.items()
+                    }
+                    return await context.handler(**kwargs)
+
                 from quadkit.web.routing.parameter_binder import ParameterBinder
 
                 # Resolve parameters using binder
@@ -92,7 +105,22 @@ class RequestPipeline:
             # 3. Post-execution: Serialize result to Response if needed
             from starlette.responses import Response as StarletteResponse
 
+            # 3.0 Peel ``(payload, BackgroundTasks)``: queued work attaches to
+            # the outgoing response and runs after it is sent.
+            from quadkit.web.background.tasks import BackgroundTasks
+
+            background_task: Any = None
+            if (
+                isinstance(result, tuple)
+                and len(result) == 2
+                and isinstance(result[1], BackgroundTasks)
+            ):
+                result, tasks = result
+                background_task = tasks._to_starlette_task()  # noqa: SLF001
+
             if isinstance(result, StarletteResponse):
+                if background_task is not None:
+                    result.background = background_task
                 return result
 
             from quadkit.web.serialization.serializers import ResponseSerializer
@@ -100,11 +128,14 @@ class RequestPipeline:
             route = context.route_metadata.get("route")
             serializer = self.response_serializer or ResponseSerializer()
 
-            return await serializer.serialize(
+            response = await serializer.serialize(
                 result,
                 context.request,
                 route=route,
             )
+            if background_task is not None:
+                response.background = background_task
+            return response
 
         except Exception as e:  # noqa: BLE001 — pipeline safety net; dispatches any error to registered exception filters
             # Match and execute appropriate filter

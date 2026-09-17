@@ -2,8 +2,8 @@
 
 Value types live here (not in ``protocols.py``) because they appear in
 protocol method signatures and cross package boundaries —
-``IdempotencyResult`` is consumed by ``quadkit-multimedia`` and produced
-by ``quadkit-tasks``. The task idempotency protocols live in
+``IdempotencyResult`` is consumed by ``the optional provider`` and produced
+by ``the optional provider``. The task idempotency protocols live in
 ``quadkit.contracts.infra.tasks.protocols`` and the underlying store
 contract is ``quadkit.contracts.core.idempotency``.
 """

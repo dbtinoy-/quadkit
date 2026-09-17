@@ -1,0 +1,80 @@
+name: Public validation
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Public packages (${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      # The five packages classify 3.11-3.13 on PyPI — this matrix is what
+      # proves that claim, and the README CI badge reports it.
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: "${{ matrix.python-version }}"
+
+      - name: Install build and test tools
+        run: python -m pip install --upgrade build pytest
+
+      - name: Check published dependency surface
+        run: python scripts/check_public_dependencies.py
+
+      - name: Build public wheels
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          for package in \
+            core/quadkit-contracts \
+            core/quadkit \
+            packages/quadkit-web \
+            packages/quadkit-testing \
+            packages/quadkit-cli; do
+            python -m build "$package" --wheel --outdir dist
+          done
+
+      - name: Install wheels into an isolated environment
+        run: |
+          set -euo pipefail
+          python -m venv /tmp/quadkit-public-venv
+          /tmp/quadkit-public-venv/bin/python -m pip install --upgrade pip
+          /tmp/quadkit-public-venv/bin/python -m pip install \
+            dist/*.whl pytest pytest-asyncio pytest-mock cryptography \
+            python-multipart ruff
+
+      - name: Import installed public packages
+        run: |
+          /tmp/quadkit-public-venv/bin/python - <<'PY'
+          import quadkit
+          import quadkit.cli
+          import quadkit.contracts
+          import quadkit.testing
+          import quadkit.web
+          print("installed public imports: ok")
+          PY
+
+      - name: Run public tests without workspace source paths
+        run: |
+          /tmp/quadkit-public-venv/bin/python -m pytest \
+            --override-ini=pythonpath= \
+            --override-ini=addopts= \
+            --import-mode=prepend \
+            core/quadkit-contracts/tests \
+            core/quadkit/tests \
+            packages/quadkit-testing/tests \
+            packages/quadkit-web/tests \
+            packages/quadkit-cli/tests

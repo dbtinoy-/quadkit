@@ -33,7 +33,7 @@ class AIError(DomainError):
 class LLMError(AIError):
     """Base for LLM client errors.
 
-    Extended in quadkit-ai-llm with specific failures like
+    Extended in the optional provider with specific failures like
     rate limiting, content filtering, invalid tokens, etc.
     """
 
@@ -46,7 +46,7 @@ class LLMError(AIError):
 class RAGError(AIError):
     """Base for RAG pipeline errors.
 
-    Extended in quadkit-ai-rag with specific failures like
+    Extended in the optional provider with specific failures like
     retrieval, preprocessing, synthesis, etc.
     """
 
@@ -72,7 +72,7 @@ class RetrieverError(AIError):
 class AIMemoryError(AIError):
     """Base for AI memory system errors.
 
-    Extended in quadkit-ai-memory with specific failures like
+    Extended in the optional provider with specific failures like
     consolidation, retrieval, storage issues, etc.
     """
 
@@ -85,7 +85,7 @@ class AIMemoryError(AIError):
 class SkillError(AIError):
     """Base for skill execution errors.
 
-    Extended in quadkit-ai-skills with specific failures like
+    Extended in the optional provider with specific failures like
     skill not found, execution failure, parameter validation, etc.
     """
 
@@ -112,7 +112,7 @@ class ExtractionError(AIError):
     """Base for structured extraction errors.
 
     Used in ``StructuredExtractorProtocol.extract()`` return type.
-    Extended in quadkit-ai-llm with specific failures like parse errors,
+    Extended in the optional provider with specific failures like parse errors,
     validation failures, and max retry exhaustion.
     """
 
@@ -155,7 +155,7 @@ class RelayErrorCode(StrEnum):
 class RelayError(AIError):
     """Base for relay conversion and gateway errors.
 
-    Extended in quadkit-ai-llm with specific conversion failures (e.g.
+    Extended in the optional provider with specific conversion failures (e.g.
     unsupported protocol, malformed wire payload).  Live alongside
     ``LLMError`` and ``RAGError`` as an AI sub-domain base.
 

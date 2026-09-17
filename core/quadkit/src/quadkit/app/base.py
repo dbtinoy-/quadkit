@@ -439,7 +439,9 @@ class Application(SecretsMixin, HealthProbeMixin):
             return self._apply_details_policy(
                 self._probe_unavailable_result(HealthCheckCategory.STARTUP)
             )
-        return self._apply_details_policy(await self._orchestrator.run_startup(timeout))
+        started = await self._orchestrator.run_startup(timeout)
+        started = self._baseline_component(started, HealthCheckCategory.STARTUP)
+        return self._apply_details_policy(started)
 
     # -- Convenience -------------------------------------------------------
 

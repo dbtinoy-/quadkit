@@ -9,6 +9,8 @@ import abc
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
+from quadkit.cli.package_names import packages_for, provider_available
+
 
 @dataclass
 class Preset:
@@ -38,7 +40,7 @@ class WebAPIPreset(PresetDefinition):
 
     name = "web-api"
     description = "Basic web API with HTTP routing and middleware"
-    packages = ["quadkit", "quadkit-web", "quadkit-sql"]
+    packages = packages_for('web', 'sql')
     config = {
         "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
         "database": {"url": "sqlite:///./dev.db"},
@@ -58,7 +60,7 @@ class GraphQLPreset(PresetDefinition):
 
     name = "graphql"
     description = "GraphQL API with web framework"
-    packages = ["quadkit", "quadkit-web", "quadkit-sql", "quadkit-graphql"]
+    packages = packages_for('web', 'sql', 'graphql')
     config = {
         "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
         "database": {"url": "sqlite:///./dev.db"},
@@ -79,7 +81,7 @@ class WorkerPreset(PresetDefinition):
 
     name = "worker"
     description = "Background job processor"
-    packages = ["quadkit", "quadkit-sql", "quadkit-tasks", "quadkit-queue"]
+    packages = packages_for('sql', 'tasks', 'queue')
     config = {
         "database": {"url": "sqlite:///./worker.db"},
     }
@@ -98,16 +100,7 @@ class FullStackPreset(PresetDefinition):
 
     name = "fullstack"
     description = "Complete web application with database, auth, cache, and messaging"
-    packages = [
-        "quadkit",
-        "quadkit-web",
-        "quadkit-sql",
-        "quadkit-auth",
-        "quadkit-admin",
-        "quadkit-cache",
-        "quadkit-tasks",
-        "quadkit-monitoring",
-    ]
+    packages = packages_for('web', 'sql', 'auth', 'admin', 'cache', 'tasks', 'monitoring')
     config = {
         "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
         "database": {"url": "sqlite:///./app.db"},
@@ -145,7 +138,7 @@ class MicroservicePreset(PresetDefinition):
 
     name = "microservice"
     description = "Microservice with CQRS, database, and monitoring"
-    packages = ["quadkit", "quadkit-sql", "quadkit-events", "quadkit-monitoring"]
+    packages = packages_for('sql', 'events', 'monitoring')
     config = {
         "database": {"url": "sqlite:///./service.db"},
     }
@@ -189,15 +182,18 @@ class PresetRegistry:
 
     @classmethod
     def _default_entries(cls) -> tuple[type[PresetDefinition], ...]:
-        """The complete in-package built-in set, declared exactly once."""
-        return (
-            WebAPIPreset,
-            GraphQLPreset,
-            WorkerPreset,
-            FullStackPreset,
-            MinimalPreset,
-            MicroservicePreset,
+        """Return presets supported by installed optional providers."""
+        entries: list[type[PresetDefinition]] = [MinimalPreset, WebAPIPreset]
+        optional = (
+            (GraphQLPreset, ("sql", "graphql")),
+            (WorkerPreset, ("sql", "tasks", "queue")),
+            (FullStackPreset, ("web", "sql", "auth", "admin", "cache", "tasks")),
+            (MicroservicePreset, ("sql", "events", "monitoring")),
         )
+        for entry, features in optional:
+            if all(provider_available(feature) for feature in features):
+                entries.append(entry)
+        return tuple(entries)
 
     @classmethod
     def with_defaults(cls) -> PresetRegistry:

@@ -18,7 +18,7 @@ class PolicyStoreProtocol(Protocol):
     """Storage protocol for ABAC authorization policies.
 
     Implementations are responsible for persisting and retrieving
-    :class:`~quadkit.auth.policies.types.Policy` objects.  The
+    :class:`~the optional provider module` objects.  The
     concrete ``Policy`` type is referenced as ``Any`` here so that the
     contracts package remains dependency-free.
 

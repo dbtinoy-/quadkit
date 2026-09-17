@@ -1,0 +1,10 @@
+# Review ownership for the public tree. Keep small; every rule names a
+# maintainer who has agreed to be pinged.
+
+# Export-generated verification tooling that ships with this tree.
+/scripts/ @dbtinoy-
+
+# Contract boundary — the import-pure surface everything depends on.
+/core/quadkit-contracts/ @dbtinoy-
+
+# Anything else falls through to repository maintainers by default.

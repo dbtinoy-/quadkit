@@ -63,22 +63,22 @@ def test_web_pyproject_declares_cli_contributor_entry_point() -> None:
     assert group["web"] == "quadkit.web.cli.contributor:WebCliContributor"
 
 
-def test_exception_filter_generator_defaults() -> None:
-    generator = ExceptionFilterGenerator()
+def test_exception_filter_generator_defaults(tmp_path: pathlib.Path) -> None:
+    generator = ExceptionFilterGenerator(output_dir=tmp_path)
 
     assert generator.name == "exception_filter"
     assert generator.default_output_dir == "src/filters"
 
 
-def test_interceptor_generator_defaults() -> None:
-    generator = InterceptorGenerator()
+def test_interceptor_generator_defaults(tmp_path: pathlib.Path) -> None:
+    generator = InterceptorGenerator(output_dir=tmp_path)
 
     assert generator.name == "interceptor"
     assert generator.default_output_dir == "src/interceptors"
 
 
-def test_error_generator_defaults() -> None:
-    generator = ErrorGenerator()
+def test_error_generator_defaults(tmp_path: pathlib.Path) -> None:
+    generator = ErrorGenerator(output_dir=tmp_path)
 
     assert generator.name == "error"
     assert generator.default_output_dir == "src/errors"

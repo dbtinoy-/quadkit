@@ -2,7 +2,7 @@
 
 These protocols define the structural contracts for MCP server
 components. Packages can type-hint against these without importing
-the concrete implementations from ``quadkit-mcp``.
+the concrete implementations from ``the optional provider``.
 """
 
 from __future__ import annotations

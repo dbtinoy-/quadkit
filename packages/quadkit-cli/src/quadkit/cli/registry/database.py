@@ -16,6 +16,7 @@ import subprocess
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, Self
 
+from quadkit.cli.package_names import module_for
 from quadkit.cli.registry.backend_base import (
     DatabaseBackend as DatabaseBackend,
 )
@@ -420,14 +421,14 @@ class DatabaseConnection:
         try:
             import importlib
 
-            db_providers = importlib.import_module("quadkit.sql.providers")
+            db_providers = importlib.import_module(module_for('sql', 'providers'))
             DatabaseService = db_providers.DatabaseService
             provider: Any = DatabaseService(config=self.url)
             self._provider = provider
             await provider.boot()
             return provider
         except ImportError as e:
-            raise RuntimeError(f"quadkit-sql not installed: {e}") from e
+            raise RuntimeError(f"The optional database provider is not installed: {e}") from e
 
     async def disconnect(self) -> None:
         """Disconnect from the database."""

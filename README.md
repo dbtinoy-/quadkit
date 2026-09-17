@@ -7,6 +7,9 @@
 [![PyPI version](https://img.shields.io/pypi/v/quadkit?color=%2322c55e&label=pypi%20package)](https://pypi.org/project/quadkit/)
 [![Python versions](https://img.shields.io/pypi/pyversions/quadkit?color=%2322c55e)](https://pypi.org/project/quadkit/)
 [![License](https://img.shields.io/pypi/l/quadkit?color=%2322c55e)](https://github.com/dbtinoy-/quadkit/blob/main/LICENSE)
+[![CI](https://github.com/dbtinoy-/quadkit/actions/workflows/public-validation.yml/badge.svg)](https://github.com/dbtinoy-/quadkit/actions/workflows/public-validation.yml)
+[![Docs](https://img.shields.io/badge/docs-dbtinoy--.github.io%2Fquadkit-22c55e)](https://dbtinoy-.github.io/quadkit/)
+[![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/dbtinoy-/quadkit)
 
 Stop assembling. Start building.
 
@@ -19,6 +22,9 @@ modules, and controllers, and one container boots them in the right order.
   booted in dependency order, automatically.
 - **Contracts, not dependencies.** Every package talks through protocols,
   so implementations change without breaking callers.
+- **Results, not surprises.** Expected failures are `Ok`/`Err` values the
+  type checker sees; controllers return them and the web layer renders
+  honest RFC 7807 problem responses.
 - **Swappable by config.** Bind a different implementation to the same
   contract with one line; nothing downstream changes.
 - **Async end to end.** Container, modules, and controllers are
@@ -55,7 +61,9 @@ run_server(app, port=8000)
 
 Also available by default:
 
-- → http://localhost:8000/health
+- → http://localhost:8000/health — liveness probe
+- → http://localhost:8000/docs — generated OpenAPI docs (Swagger UI;
+  `/redoc` and `/openapi.json` too)
 
 ## why quadkit?
 
@@ -88,32 +96,59 @@ queues, LLM, RAG, and more — all built against the same protocol layer.
 ## testing
 
 [`quadkit-testing`](https://pypi.org/project/quadkit-testing/) provides
-test harness, fakes, and compliance suites for use at test-time only.
+test harnesses, fakes, and fixtures for use at test-time only.
 
 ```bash
 uv add --dev quadkit-testing
 ```
 
+Boot the real application in-process and assert on responses — no
+listening socket, no mocking:
+
 ```python
 import pytest
-from quadkit.testing import QuadkitContainerHarness
+
+from quadkit.testing import WebTestBed
+
+from my_api.app import create_app
 
 
-@pytest.fixture
-def harness():
-    return QuadkitContainerHarness()
-
-
-async def test_my_service(harness):
-    result = await harness.resolve(MyService)
-    assert result is not None
+@pytest.mark.asyncio
+async def test_hello() -> None:
+    async with WebTestBed(create_app()) as bed:
+        response = bed.get("/hello", params={"name": "quadkit"})
+        response.assert_status(200)
+        assert response.json == {"message": "hello, quadkit"}
 ```
+
+Swap implementations at the binding, not the import site
+(`overrides={UserRepository: FakeRepo()}`), or work at the DI level
+with `QuadkitContainerHarness()` — a container with the common fakes
+pre-registered. A pytest plugin auto-registers fixtures (`fake_clock`,
+`fake_event_bus`, `fake_logger`, and friends) — no `conftest.py` wiring.
 
 Run the full test suite:
 
 ```bash
 uv run pytest
 ```
+
+## 5-minute feature tour
+
+Forty-two runnable showcases — one feature per file, each an executable test
+green against the published wheels. Everything needed is in this repository:
+
+```bash
+pip install quadkit quadkit-web quadkit-testing
+pytest docs/guides/examples/features/
+```
+
+Highlights: [the Result pattern](docs/guides/examples/features/test_feature_result.py)
+with [domain errors mapped to HTTP](docs/guides/examples/features/test_feature_result_web.py),
+[SSE feeds](docs/guides/examples/features/test_feature_sse.py),
+[declarative rate limiting](docs/guides/examples/features/test_feature_throttle.py),
+and [versioned APIs with sunset headers](docs/guides/examples/features/test_feature_api_version.py).
+See the [tour README](docs/guides/examples/features/README.md) for the full list.
 
 ## architecture
 
@@ -136,6 +171,12 @@ QK_WEB__SECURITY__CSRF__SECRET_KEY=...
 
 ## from source
 
+No setup at all: open the repository in
+[Codespaces](https://codespaces.new/dbtinoy-/quadkit) — the included
+devcontainer installs the locked workspace automatically.
+
+Or locally:
+
 ```bash
 git clone https://github.com/dbtinoy-/quadkit.git
 cd quadkit
@@ -149,7 +190,9 @@ uv run pytest
 
 ## contributing
 
-Pull requests are welcome. Two things worth knowing before you open one:
+Pull requests are welcome. Two things worth knowing before you open one
+(see [SUPPORT.md](./SUPPORT.md) for where to ask questions and
+[CHANGELOG.md](./CHANGELOG.md) for what changed recently):
 
 - **Sign your commits** (`git commit -s`). There is no CLA — Apache-2.0
   §5 already covers inbound contributions.

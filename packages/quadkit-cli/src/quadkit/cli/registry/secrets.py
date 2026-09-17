@@ -13,7 +13,6 @@ import stat
 import string
 
 from quadkit.logging import get_logger
-from quadkit.security.secrets.store import SecretAccessError
 
 logger = get_logger(__name__)
 
@@ -95,6 +94,10 @@ class DotenvSecretBackend(SecretBackend):
         self._load()
 
     def _load(self) -> None:
+        # Deferred (plans/09172026 C-02): the security store pulls the
+        # framework security chain (~125 ms); only secret-file loads pay it.
+        from quadkit.security.secrets.store import SecretAccessError
+
         try:
             path = Path(self.env_file)
             if path.exists():
@@ -123,6 +126,8 @@ class DotenvSecretBackend(SecretBackend):
 
     @staticmethod
     def _assert_restrictive_permissions(path: Path) -> None:
+        from quadkit.security.secrets.store import SecretAccessError
+
         mode = stat.S_IMODE(path.stat().st_mode)
         if mode & 0o077:
             raise SecretAccessError(

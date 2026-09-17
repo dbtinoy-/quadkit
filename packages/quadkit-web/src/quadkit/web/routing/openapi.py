@@ -21,30 +21,31 @@ def register_openapi_routes(provider: WebProvider) -> None:
         spec = provider.router_manager.generate_openapi_spec()
         return JSONResponse(spec)
 
-    async def swagger_ui(_request: Any) -> HTMLResponse:
+    async def swagger_ui(request: Any) -> HTMLResponse:
         from quadkit.web.routing.openapi_templates import (
             get_swagger_ui_html,
+            swagger_asset_urls,
         )
 
         return HTMLResponse(
             get_swagger_ui_html(
                 title=cfg.openapi_title,
                 openapi_url=cast("str", cfg.openapi_url),
-                swagger_js_url=cfg.swagger_js_url,
-                swagger_css_url=cfg.swagger_css_url,
+                **swagger_asset_urls(cfg, request.scope.get("root_path", "")),
             ),
         )
 
-    async def redoc_ui(_request: Any) -> HTMLResponse:
+    async def redoc_ui(request: Any) -> HTMLResponse:
         from quadkit.web.routing.openapi_templates import (
             get_redoc_html,
+            redoc_asset_urls,
         )
 
         return HTMLResponse(
             get_redoc_html(
                 title=cfg.openapi_title,
                 openapi_url=cast("str", cfg.openapi_url),
-                redoc_js_url=cfg.redoc_js_url,
+                **redoc_asset_urls(cfg, request.scope.get("root_path", "")),
             ),
         )
 

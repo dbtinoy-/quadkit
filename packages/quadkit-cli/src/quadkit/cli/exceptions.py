@@ -58,7 +58,9 @@ class ProviderNotInstalledError(CliError):
         """
         super().__init__(
             message=f"Provider '{provider}' is not installed",
-            suggestions=[f"Install with: pip install quadkit-{provider}"],
+            suggestions=[
+                f"Install the provider distribution that supplies '{provider}'"
+            ],
         )
 
 

@@ -1,0 +1,9 @@
+# Auto detect text files and perform LF normalization
+* text=auto
+
+# Vendored docs assets — keep GitHub's language bar Python
+packages/quadkit-web/src/quadkit/web/static/docs/* linguist-vendored
+packages/quadkit-web/src/quadkit/web/static/docs/*.js linguist-generated
+
+# Lockfile collapsed in diffs
+uv.lock linguist-generated

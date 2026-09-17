@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import importlib.util
+
 from quadkit.testing.fixtures._lazy import get_ai_fixture, is_ai_fixture
 from quadkit.testing.fixtures.core import (
     ContainerTestFixture,
@@ -68,7 +70,7 @@ except ImportError:
 
 
 def __getattr__(name: str) -> object:
-    if is_ai_fixture(name):
+    if is_ai_fixture(name) and _OPTIONAL_AI_AVAILABLE:
         try:
             return get_ai_fixture(name)
         except (ImportError, AttributeError) as e:
@@ -76,6 +78,9 @@ def __getattr__(name: str) -> object:
                 f"module {__name__!r} has no attribute {name!r}"
             ) from e
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+_OPTIONAL_AI_AVAILABLE = importlib.util.find_spec(f"{__name__}.ai") is not None
 
 
 __all__ = [
@@ -135,4 +140,13 @@ __all__ = [
     "vector_store",
     "web_test_bed",
     "web_test_client",
+]
+
+# Keep the public export contract truthful when optional fixture modules are
+# omitted by the exporter. Names provided by an available module remain lazy;
+# names from absent modules are not advertised or resolved by __getattr__.
+__all__ = [
+    name
+    for name in __all__
+    if name in globals() or (is_ai_fixture(name) and _OPTIONAL_AI_AVAILABLE)
 ]

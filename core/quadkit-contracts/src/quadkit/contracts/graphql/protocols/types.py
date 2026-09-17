@@ -13,7 +13,7 @@ class ValidationRuleProtocol(Protocol):
     """Protocol for GraphQL query validators (depth, complexity, alias, etc.).
 
     Implementations perform a single focused check on a parsed document
-    and raise a :class:`~quadkit.graphql.exceptions.GraphQLError`
+    and raise a :class:`~the optional provider module`
     subclass on failure.  A no-op return indicates the document passed.
 
     All three built-in validators — :class:`DepthLimitValidator`,

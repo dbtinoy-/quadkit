@@ -42,8 +42,8 @@ class SearchIndexResult:
 class SearchableSpec:
     """Specification for search-index-based resource searching.
 
-    Shared across ``quadkit-admin`` (the admin resource opt-in) and
-    ``quadkit-search`` (the index-backed execution machinery), so it lives
+    Shared across ``the optional provider`` (the admin resource opt-in) and
+    ``the optional provider`` (the index-backed execution machinery), so it lives
     in contracts per the shared-type rule.
 
     Attributes:

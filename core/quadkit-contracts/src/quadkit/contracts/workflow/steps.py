@@ -47,7 +47,7 @@ class SagaStepError(Exception):
 class SagaStep:
     """Descriptor for a single saga orchestration step.
 
-    Shared across ``quadkit-workflow`` and ``quadkit-events`` via contracts.
+    Shared across ``the optional provider`` and ``the optional provider`` via contracts.
 
     The ``action`` callable **must** return ``Result[Any, SagaStepError]``.
     The ``compensation`` callable is called only when the saga is unwinding
