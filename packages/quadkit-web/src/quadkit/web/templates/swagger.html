@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>{{ title }} - Swagger UI</title>
+    <link rel="stylesheet" type="text/css" href="{{ swagger_css_url or '/docs-static/swagger-ui.css' }}" />
+    <link rel="stylesheet" type="text/css" href="{{ docs_css_url or '/docs-static/docs.css' }}" />
+</head>
+<body>
+    <div id="swagger-ui" data-openapi-url="{{ openapi_url }}"></div>
+    <script src="{{ swagger_js_url or '/docs-static/swagger-ui-bundle.js' }}"></script>
+    <script src="{{ swagger_preset_url or '/docs-static/swagger-ui-standalone-preset.js' }}"></script>
+    <script src="{{ swagger_init_url or '/docs-static/swagger-init.js' }}"></script>
+</body>
+</html>

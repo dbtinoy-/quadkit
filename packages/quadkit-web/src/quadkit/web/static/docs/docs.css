@@ -1,0 +1,23 @@
+/*
+ * quadkit — shared docs page chrome.
+ *
+ * Replaces the inline <style> blocks the swagger/redoc templates used to
+ * carry, so the default CSP needs no 'unsafe-inline' for style-src
+ * (plans/09172026 H-03).
+ */
+html {
+    box-sizing: border-box;
+    overflow-y: scroll;
+}
+
+*,
+*:before,
+*:after {
+    box-sizing: inherit;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    background: #fafafa;
+}

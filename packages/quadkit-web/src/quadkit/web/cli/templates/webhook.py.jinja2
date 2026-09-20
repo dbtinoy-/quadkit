@@ -1,0 +1,198 @@
+"""{{ webhook_name }} webhook handler.
+
+This module provides a webhook handler for processing incoming webhook events.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import hmac
+import logging
+import os
+from typing import Any
+
+from quadkit.serialization import JSONDecodeError, loads
+
+from pydantic import BaseModel, ConfigDict, Field
+from starlette.requests import Request
+from starlette.responses import JSONResponse
+
+logger = logging.getLogger(__name__)
+
+
+class {{ webhook_name }}Payload(BaseModel):
+    """Payload schema for {{ webhook_name }} webhook.
+
+    Defines the expected payload format for incoming webhooks.
+    """
+
+    model_config = ConfigDict(from_attributes=True)
+{% if fields %}{% for field in fields %}
+    {{ field.name }}: {{ field.type }}{% if not field.required %} | None{% endif %} = Field({% if not field.required %}default=None, {% endif %}description="{{ field.description | default(field.name) }}")
+{% endfor %}{% else %}
+    event_type: str = Field(description="Type of event")
+    data: dict = Field(default_factory=dict, description="Event data")
+    timestamp: str = Field(description="Event timestamp")
+{% endif %}
+
+class {{ webhook_name }}Webhook:
+    """Webhook handler for {{ webhook_name }}.
+
+    This handler processes incoming webhook requests, verifies signatures,
+    and dispatches events to appropriate handlers.
+    """
+
+    def __init__(
+        self,
+        secret: str | None = None,
+        verify_signature: bool = True,
+    ):
+        """Initialize the webhook handler.
+
+        Args:
+            secret: Secret key for signature verification.
+            verify_signature: Whether to verify webhook signatures.
+        """
+        self.secret = secret
+        self.verify_signature = verify_signature
+        self._handlers: dict[str, Any] = {}
+
+    def register_handler(self, event_type: str, handler: Any) -> None:
+        """Register a handler for a specific event type.
+
+        Args:
+            event_type: The type of event to handle.
+            handler: Async function to handle the event.
+        """
+        self._handlers[event_type] = handler
+        logger.debug("Registered handler for %s", event_type)
+
+    async def handle_request(
+        self,
+        payload: bytes,
+        headers: dict[str, str],
+    ) -> dict[str, Any]:
+        """Handle an incoming webhook request.
+
+        Args:
+            payload: Raw request body.
+            headers: Request headers.
+
+        Returns:
+            Response dictionary.
+        """
+        try:
+            if self.verify_signature:
+                if not self.secret:
+                    return {
+                        "status": "error",
+                        "message": "Webhook secret is not configured",
+                    }
+
+                signature = headers.get("x-webhook-signature")
+                if signature is None:
+                    signature = next(
+                        (
+                            value
+                            for key, value in headers.items()
+                            if key.lower() == "x-webhook-signature"
+                        ),
+                        None,
+                    )
+                if not signature:
+                    return {
+                        "status": "error",
+                        "message": "Missing signature",
+                    }
+
+                if not self._verify_signature(payload, signature):
+                    return {
+                        "status": "error",
+                        "message": "Invalid signature",
+                    }
+
+            data = loads(payload)
+            webhook_payload = {{ webhook_name }}Payload(**data)
+            event_type = webhook_payload.event_type
+            handler = self._handlers.get(event_type)
+
+            if handler:
+                result = await handler(webhook_payload)
+                return {
+                    "status": "success",
+                    "event_type": event_type,
+                    "result": result,
+                }
+
+            logger.warning("No handler for event type: %s", event_type)
+            return {
+                "status": "ignored",
+                "event_type": event_type,
+                "message": "No handler registered",
+            }
+        except JSONDecodeError as exc:
+            logger.error("Invalid JSON: %s", exc)
+            return {
+                "status": "error",
+                "message": f"Invalid JSON: {exc}",
+            }
+        except Exception as exc:
+            logger.exception("Error handling webhook")
+            return {
+                "status": "error",
+                "message": str(exc),
+            }
+
+    def _verify_signature(self, payload: bytes, signature: str) -> bool:
+        """Verify the webhook signature.
+
+        Args:
+            payload: Raw request body.
+            signature: Provided signature.
+
+        Returns:
+            True if signature is valid.
+        """
+        if not self.secret:
+            return True
+
+        expected = hmac.new(
+            self.secret.encode("utf-8"),
+            payload,
+            hashlib.sha256,
+        ).hexdigest()
+
+        return hmac.compare_digest(expected, signature)
+
+    # Add webhook handler methods here.
+    # Example:
+    # async def handle_payment_created(self, payload: {{ webhook_name }}Payload) -> dict:
+    #     """Handle payment created events."""
+    #     logger.info("Payment created: %s", payload.data)
+    #     return {"processed": True}
+
+
+async def {{ webhook_name_snake }}_webhook_handler(request: Request) -> JSONResponse:
+    """ASGI handler for {{ webhook_name }} webhooks.
+
+    This can be used as a route handler in your application.
+
+    Args:
+        request: The ASGI request.
+
+    Returns:
+        JSON response.
+    """
+    body = await request.body()
+    headers = dict(request.headers)
+
+    webhook = {{ webhook_name }}Webhook(
+        secret=os.getenv("WEBHOOK_{{ webhook_name_snake | upper }}_SECRET"),
+        verify_signature=True,
+    )
+
+    # Register handlers.
+    # webhook.register_handler("payment.created", handle_payment)
+
+    result = await webhook.handle_request(body, headers)
+    return JSONResponse(result)

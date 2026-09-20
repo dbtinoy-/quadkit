@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>{{ title }} - ReDoc</title>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="stylesheet" type="text/css" href="{{ docs_css_url or '/docs-static/docs.css' }}" />
+</head>
+
+<body>
+    <redoc spec-url="{{ openapi_url }}"></redoc>
+    <script src="{{ redoc_js_url or '/docs-static/redoc.standalone.js' }}"></script>
+</body>
+
+</html>
