@@ -1,0 +1,171 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-cli"
+version = "0.0.41"
+description = "Command-line interface for Quadkit Framework - Project scaffolding, code generation, and development tools"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "cli",
+    "command-line",
+    "scaffolding",
+    "codegen",
+    "devtools",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Code Generators",
+    "Topic :: Utilities",
+    "Environment :: Console",
+    "Typing :: Typed",
+]
+dependencies = [
+    "typer[all]>=0.9.0,<1",
+    "click>=8.1.0,<9",
+    "rich>=13.0.0,<14",
+    "jinja2>=3.1.0,<4",
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "pyyaml>=6.0,<7",
+    "httpx>=0.25.0,<1",
+    "watchfiles>=0.21.0,<2",
+    "shellingham>=1.5.0,<2",
+    "aiofiles>=23.0.0,<26",
+    "tomli>=2.0.0,<3",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.scripts]
+quadkit = "quadkit.cli.runtime.main:app"
+
+[project.entry-points."quadkit.cli.contributors"]
+core = "quadkit.cli.contributors.core:CoreCliContributor"
+
+[project.optional-dependencies]
+dev = [
+    "black>=23.0.0,<27",
+    "ruff>=0.1.0,<1",
+    "mypy>=1.0.0,<3",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0,<10",
+    "pytest-asyncio>=0.21.0,<2",
+    "pytest-cov>=4.0.0,<8",
+]
+all = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0,<10",
+    "pytest-asyncio>=0.21.0,<2",
+    "pytest-cov>=4.0.0,<8",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit/"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit/"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+    "mypy>=1.0.0",
+    "tomli>=2.4.1",
+    "tomli-w>=1.2.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "B025",  # except clause with duplicate exception — CLI catch patterns
+    "PT028",  # pytest.deprecated_call — CLI test patterns
+    "S301",  # pickle: not used in admin; broad ignore to reduce noise
+    "S607",  # start process with partial executable path — subprocess patterns
+    "S701",  # jinja2 with autoescape disabled — template rendering
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+"**/templates/**/*" = ["N999", "INP001", "ANN", "E", "W"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+# Jinja scaffold directories ({{ package_name }}) are templates, not packages.
+exclude = ["(?x)(^|/)templates/"]
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+    { module = "msgpack", ignore_missing_imports = true },
+]
+
+[tool.uv.sources.quadkit-testing]
+workspace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+]
+addopts = ["--cov=quadkit.cli", "--cov-report=term", "--cov-fail-under=84"]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

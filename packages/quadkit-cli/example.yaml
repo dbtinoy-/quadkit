@@ -1,0 +1,8 @@
+# Copy to application.yaml and adjust to your environment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: cli:
+# Environment variable prefix: QK_CLI__
+
+cli:
+  # Output
+  color: true  # Enable coloured terminal output (QK_CLI__COLOR)
