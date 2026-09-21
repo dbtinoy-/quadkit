@@ -2902,11 +2902,12 @@ wheels = [
 
 [[package]]
 name = "quadkit"
-version = "0.0.41"
+version = "0.0.42"
 source = { editable = "core/quadkit" }
 dependencies = [
     { name = "orjson" },
     { name = "pydantic" },
+    { name = "pyyaml" },
     { name = "quadkit-contracts" },
     { name = "structlog" },
 ]
@@ -2951,6 +2952,7 @@ requires-dist = [
     { name = "pytest-asyncio", marker = "extra == 'test'", specifier = ">=0.21.0,<2" },
     { name = "pytest-cov", marker = "extra == 'test'", specifier = ">=4.0.0,<8" },
     { name = "pytest-mock", marker = "extra == 'test'", specifier = ">=3.10.0,<4" },
+    { name = "pyyaml", specifier = ">=6.0.0,<7" },
     { name = "quadkit-contracts", editable = "core/quadkit-contracts" },
     { name = "quadkit-web", extras = ["granian"], marker = "extra == 'web'", editable = "packages/quadkit-web" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16.4,<1" },
@@ -2960,7 +2962,7 @@ provides-extras = ["dev", "codegen", "test", "docs", "security", "web"]
 
 [[package]]
 name = "quadkit-cli"
-version = "0.0.41"
+version = "0.0.42"
 source = { editable = "packages/quadkit-cli" }
 dependencies = [
     { name = "aiofiles" },

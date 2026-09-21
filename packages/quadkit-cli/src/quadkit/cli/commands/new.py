@@ -32,7 +32,7 @@ def _valid_name(value: str, kind: str) -> str:
 def main(
     name: str = typer.Argument(..., help="Name of the project"),
     template: str = typer.Option(
-        "web-api",
+        "api",
         "--template",
         "-t",
         help=(
@@ -58,7 +58,7 @@ def main(
 
         selected_template = typer.prompt(
             "Select a template",
-            default="web-api",
+            default="api",
             type=click.Choice(template_names()),
         )
 
