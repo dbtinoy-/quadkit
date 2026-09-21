@@ -4,7 +4,7 @@ The development command line: project scaffolding, generators, and dev
 commands. It installs the `quadkit` console script.
 
 - **Install**: `pip install quadkit-cli` · Python `>= 3.11`
-- **Version** (lockstep with all five distributions): `0.0.3`
+- **Version** (lockstep with all five distributions): `0.0.42`
   → [stability policy](./stability.md)
 - **Issues**: <https://github.com/dbtinoy-/quadkit/issues>
 

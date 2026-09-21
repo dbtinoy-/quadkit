@@ -27,7 +27,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit"
-version = "0.0.41"
+version = "0.0.42"
 description = "Async-first DI/IoC framework for Python — core package"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -71,6 +71,7 @@ dependencies = [
     "orjson>=3.0.0,<4",
     "structlog>=25.1.0,<27",         # Structured logging foundation
     "pydantic>=2.10.0,<3",              # Required: used unconditionally by config, validation
+    "pyyaml>=6.0.0,<7",                 # Required: YAML config file parsing
 ]
 
 # =============================================================================
