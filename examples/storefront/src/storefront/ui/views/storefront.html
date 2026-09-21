@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <title>Storefront · Quadkit</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Storefront</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+
+  <header>
+    <h1>Storefront</h1>
+    <p class="muted">Two bounded contexts, one app: catalog + orders composed through a protocol boundary</p>
+  </header>
+  <main>
+    <section id="modules">
+      <h2>Bounded Contexts</h2>
+      <p class="muted">
+        <code>catalog</code> exports <code>ProductCatalogProtocol</code>.
+        <code>orders</code> imports the <code>catalog</code> module and depends
+        only on that protocol &mdash; never the concrete service. See
+        <code>storefront/modules/orders/__init__.py</code>.
+      </p>
+      <button type="button" id="btn-demo" class="accent">Run Demo Order</button>
+    </section>
+
+    <section id="catalog">
+      <h2>Catalog</h2>
+      <div id="product-cards"></div>
+    </section>
+
+    <section id="place-order">
+      <h2>Place an Order</h2>
+      <form id="order-form">
+        <label for="customer">Customer name</label>
+        <input type="text" id="customer" placeholder="Customer name" value="Jordan Lee" />
+        <div id="order-lines"></div>
+        <button type="submit" class="accent">Place Order</button>
+      </form>
+    </section>
+
+    <section id="orders-panel">
+      <h2>Orders</h2>
+      <div id="orders-list"></div>
+    </section>
+
+    <section id="log-panel">
+      <h2>Activity Log</h2>
+      <div id="log"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

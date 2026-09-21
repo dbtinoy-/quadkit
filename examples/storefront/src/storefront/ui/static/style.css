@@ -1,0 +1,86 @@
+/* Storefront demo — Quadkit light theme (shared demo styling) */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html { min-height: 100%; }
+body { margin: 0; min-height: 100vh; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+  display: flex; flex-direction: column; }
+header { padding: 1rem 1rem .4rem; display: flex; align-items: center; gap: .5rem; }
+header h1 { color:var(--accent-text); font-size: 1.2rem; }
+.muted { color: var(--ink-dim); font-size: .85rem; margin: .2rem 0 0; }
+main { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; padding: 0 1rem 1rem; flex: 1 0 auto; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+h2 { margin: 0 0 .6rem; font-size: .85rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Full-width sections: bounded-context blurb spans both columns */
+#modules { grid-column: 1 / -1; }
+
+/* Form controls */
+label { display: block; margin-bottom: .3rem; font-size: .8rem; font-weight: 600; color: var(--ink-dim); }
+input, select, textarea, button {
+  font: inherit; border: 1px solid var(--border); border-radius: 7px;
+  padding: .5rem .7rem; background: var(--surface); color: var(--ink);
+}
+input, select, textarea { width: 100%; }
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-bg); }
+button { cursor: pointer; width: auto; }
+button:hover { border-color: var(--accent); }
+button.accent { background:var(--accent); color:var(--accent-ink); border-color: var(--accent); font-size: .85rem; }
+button.accent:hover { background: var(--accent-strong); }
+
+#order-form { display: flex; flex-direction: column; gap: .65rem; }
+#order-lines { display: flex; flex-direction: column; gap: .3rem; }
+#order-lines label { display: flex; align-items: center; gap: .5rem; margin: 0; font-weight: 400; color: var(--ink); }
+#order-lines .line-qty { width: 4.5rem; margin-left: .5rem; }
+#order-lines input[type="checkbox"] { width: auto; accent-color: var(--accent); }
+
+/* Product / order cards */
+#product-cards, #orders-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: .75rem; }
+.pair-card { background: var(--surface2); border-radius: 8px; padding: .75rem; border: 1px solid var(--border); }
+.pair-card .pair-name { font-size: .8rem; color: var(--ink-dim); margin-bottom: .3rem; }
+.pair-card .pair-rate { font-size: 1.6rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pair-card .pair-source { font-size: .75rem; color: var(--ink-dim); margin-top: .2rem; }
+
+/* Log */
+#log { max-height: 260px; overflow-y: auto; font-size: .8rem; font-family: monospace; }
+.log-entry { padding: .2rem 0; border-bottom: 1px solid var(--border); }
+.log-entry .log-time { color: var(--ink-dim); margin-right: .5rem; }
+.log-hit { color: var(--ok); }
+.log-error { color: var(--error); }
+
+.demo-footer { padding: 1rem 1.3rem; border-top: 1px solid var(--border); color: var(--ink-dim); font-size: .78rem; flex-shrink: 0; }
+.demo-footer a { color:var(--accent-text); text-decoration: none; }
+.demo-footer a:hover { text-decoration: underline; }
+
+/* Demo navigation bar */
+.demo-nav { display: flex; align-items: center; gap: .75rem; padding: .5rem 1.25rem;
+  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.nav-brand { display: flex; align-items: center; gap: .4rem; color: var(--ink); text-decoration: none; font-weight: 600; }
+.nav-brand:hover { color:var(--accent-text); }
+.nav-logo { width: 22px; height: 22px; flex-shrink: 0; }
+.nav-demo { margin-left: .5rem; color: var(--ink-dim); font-size: .85rem; font-weight: 500; }
+.nav-links { margin-left: auto; display: flex; gap: 1rem; font-size: .85rem; }
+.nav-links a { color: var(--ink-dim); text-decoration: none; }
+.nav-links a:hover { color:var(--accent-text); }
+.demo-nav { flex-wrap: wrap; }
+.nav-links { flex-wrap: wrap; }
+
+/* Accessibility polish */
+button:disabled { cursor: wait; }
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent-glow);
+  outline-offset: 2px;
+}
+
+@media (max-width: 720px) {
+  .demo-nav { gap: .5rem; padding: .55rem .8rem; }
+  .nav-demo { flex: 1; min-width: 10rem; margin-left: 0; }
+  .nav-links { width: 100%; margin-left: 0; gap: .75rem; }
+  header { padding: .85rem .8rem .35rem; }
+  main { grid-template-columns: 1fr; padding: .75rem .8rem 1.5rem; }
+  #modules { grid-column: auto; }
+  .demo-footer { padding: .55rem .8rem; }
+}

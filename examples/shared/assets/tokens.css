@@ -1,0 +1,181 @@
+/* Quadkit example fleet — canonical design tokens.
+ *
+ * Mirrors quadkit-docs' brand system (src/styles/custom.css): the brand
+ * accent is the same lime green (#c8ff00) in both themes — not swapped for
+ * a different hue in light mode — so "the accent" is one recognizable
+ * color everywhere. Because pure #c8ff00 has almost no contrast against
+ * white (~1.2:1), it is used as-is for backgrounds/borders/focus-rings via
+ * --accent, and a darkened same-hue variant (--accent-text) is used
+ * wherever the accent paints *text* in light mode, so links/headings/badge
+ * text stay readable. In dark mode --accent-text is the lime itself, since
+ * lime-on-near-black already has excellent contrast.
+ *
+ * Served by every demo at /static/tokens.css and linked before the demo's
+ * own style.css, exactly like the shared logo.png/icon.png. Demos must NOT
+ * redefine :root color values locally — extend with new *names* instead, so
+ * the whole fleet can never drift to an off-brand accent again (see
+ * examples/CONSISTENCY.md U11).
+ *
+ * Theme switching is attribute-driven: <html data-theme="dark"> flips every
+ * demo to the dark palette. shared/theme-toggle.js sets that attribute from
+ * localStorage (falling back to prefers-color-scheme) before first paint,
+ * and wires up any element with [data-theme-toggle] to flip + persist it.
+ */
+
+:root {
+  color-scheme: light;
+
+  /* Surfaces */
+  --bg: #f5f5f5;
+  --surface: #ffffff;
+  --surface2: #eeeeee;
+  --border: #dddddd;
+  --border-weak: #eeeeee;
+
+  /* Text */
+  --ink: #1a1a1a;
+  --ink-dim: #444444;
+  --ink-weak: #666666;
+  --ink-strong: #050505;
+
+  /* Brand accent — same lime (#c8ff00) swatch in both themes for
+     backgrounds/borders/focus-rings/buttons. --accent-text is a darkened
+     same-hue variant used specifically where the accent colors *text*
+     (links, headings, badge labels) so it stays readable on light
+     surfaces; --accent-ink is the ink color placed *on top of* an
+     --accent-colored background (buttons, active pills). */
+  --accent: #c8ff00;
+  --accent-text: #4d6100;
+  --accent-strong: #b8e600;
+  --accent-bg: rgba(200, 255, 0, 0.14);
+  --accent-glow: rgba(200, 255, 0, 0.45);
+  --accent-ink: #111111;
+
+  /* Status */
+  --error: #dc2626;
+  --error-bg: rgba(220, 38, 38, 0.08);
+  --error-ink: #ffffff;
+  --error-border: #fca5a5;
+  --ok: #16a34a;
+  --ok-bg: rgba(22, 163, 74, 0.08);
+  --ok-ink: #ffffff;
+  --yellow: #d97706;
+  --yellow-bg: rgba(217, 119, 6, 0.08);
+  --yellow-ink: #ffffff;
+
+  /* Status pills/badges (bg + ink pair reads well on --surface) */
+  --pill-ok-bg: #dcfce7;
+  --pill-ok-ink: #166534;
+  --pill-warn-bg: #fef3c7;
+  --pill-warn-ink: #92400e;
+  --pill-bad-bg: #fee2e2;
+  --pill-bad-ink: #991b1b;
+  --pill-info-bg: #e0f2fe;
+  --pill-info-ink: #075985;
+  --pill-critical-bg: #4c0519;
+  --pill-critical-ink: #fecdd3;
+  --pill-neutral-bg: #f1f3f5;
+  --pill-neutral-ink: #4b5563;
+
+  --radius: 8px;
+
+  /* Back-compat aliases for demo-local shorthand names — kept so existing
+     rules keep working; new rules should use the canonical names above. */
+  --red: var(--error);
+  --green: var(--ok);
+  --dim: var(--ink-dim);
+  --warn: var(--yellow);
+  --warn-bg: var(--yellow-bg);
+  --bad: var(--error);
+  --bad-bg: var(--error-bg);
+  --accent-light: #ecfccb;
+  --accent-border: #d9f99d;
+  --user-bg: #ecfccb;
+  --bot-bg: #eeeeee;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #1a1a1a;
+  --surface: #222222;
+  --surface2: #2a2a2a;
+  --border: #333333;
+  --border-weak: #2a2a2a;
+
+  --ink: #e0e0e0;
+  --ink-dim: #aaaaaa;
+  --ink-weak: #888888;
+  --ink-strong: #ffffff;
+
+  /* Brand accent — identical lime swatch as light mode; as text it already
+     reads well against the near-black surface, so --accent-text is the
+     lime itself here (no darkening needed). */
+  --accent: #c8ff00;
+  --accent-text: #c8ff00;
+  --accent-strong: #b8e600;
+  --accent-bg: rgba(200, 255, 0, 0.1);
+  --accent-glow: rgba(200, 255, 0, 0.35);
+  --accent-ink: #111111;
+
+  --error: #ef4444;
+  --error-bg: rgba(239, 68, 68, 0.12);
+  --error-ink: #111111;
+  --error-border: #7f1d1d;
+  --ok: #22c55e;
+  --ok-bg: rgba(34, 197, 94, 0.12);
+  --ok-ink: #111111;
+  --yellow: #f59e0b;
+  --yellow-bg: rgba(245, 158, 11, 0.12);
+  --yellow-ink: #111111;
+
+  --pill-ok-bg: rgba(34, 197, 94, 0.16);
+  --pill-ok-ink: #4ade80;
+  --pill-warn-bg: rgba(245, 158, 11, 0.16);
+  --pill-warn-ink: #fbbf24;
+  --pill-bad-bg: rgba(239, 68, 68, 0.16);
+  --pill-bad-ink: #fca5a5;
+  --pill-info-bg: rgba(56, 189, 248, 0.16);
+  --pill-info-ink: #7dd3fc;
+  --pill-critical-bg: rgba(190, 18, 60, 0.35);
+  --pill-critical-ink: #fecdd3;
+  --pill-neutral-bg: #2a2a2a;
+  --pill-neutral-ink: #aaaaaa;
+
+  --red: var(--error);
+  --green: var(--ok);
+  --dim: var(--ink-dim);
+  --warn: var(--yellow);
+  --warn-bg: var(--yellow-bg);
+  --bad: var(--error);
+  --bad-bg: var(--error-bg);
+  --accent-light: #2b330a;
+  --accent-border: #4d5c0a;
+  --user-bg: #2b330a;
+  --bot-bg: #2a2a2a;
+}
+
+/* Theme toggle button — shared markup is `<button data-theme-toggle>`,
+   dropped into a demo's `.nav-links` (or the hub's `.hero`) by every view.
+   Styled here, once, so it always matches the fleet without per-demo CSS. */
+[data-theme-toggle] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.9rem;
+  height: 1.9rem;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink-dim);
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease;
+}
+[data-theme-toggle]:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
