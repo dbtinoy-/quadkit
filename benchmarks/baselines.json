@@ -1,0 +1,13 @@
+{
+  "measured_version": "0.0.3",
+  "app_boot_ms": 9.7,
+  "first_request_ms": 11.8,
+  "request_p50_ms": 1.74,
+  "request_p95_ms": 2.18,
+  "requests_total_ms": 358.1,
+  "peak_memory_mib": 0.2,
+  "import_quadkit_ms": 47.4,
+  "import_testing_ms": 48.5,
+  "cli_version_ms": 154.1,
+  "cli_project_generation_ms": 454.6
+}
