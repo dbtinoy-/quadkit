@@ -1,0 +1,124 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Every key below exists in quadkit.web.config.WebConfig; the full field reference
+# (types, defaults, env vars) is in docs/CONFIGURATION.md.
+# Environment variable prefix: QK_WEB__ (nested keys join with __).
+
+web:
+  name: "web"
+  enabled: true
+  env: null  # development | staging | production | test (falls back to QK_ENV)
+
+  # HTTP server binding
+  server:
+    backend: "uvicorn"  # granian | uvicorn | hypercorn | gunicorn
+    host: "0.0.0.0"
+    port: 8000
+    workers: 4
+    reload: false  # development only
+    debug: false
+
+  # CORS for the application's own browser clients.
+  # An empty allowed_origins list denies every cross-origin request.
+  cors:
+    enabled: true
+    allowed_origins:
+      - "http://localhost:3000"
+      - "https://example.com"
+    allow_methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"]
+    allow_headers: ["Content-Type", "Authorization", "X-Requested-With"]
+    expose_headers: ["X-Total-Count"]
+    allow_credentials: true
+    max_age: 3600
+    debug_permissive: false  # never widen origins implicitly; opt in explicitly
+
+  # Security policy: headers, CSRF, CSP and cross-origin isolation
+  security:
+    enabled: true
+    enable_cors: true  # false forces security.cors.enabled off
+    enable_csrf: true  # false forces security.csrf.enabled off
+    allowed_hosts: []  # required in production; empty denies every host
+
+    referrer_policy: "strict-origin-when-cross-origin"
+    custom_headers:
+      x-content-type-options: "nosniff"
+      x-frame-options: "DENY"
+    permissions_policy:
+      geolocation: "()"
+      camera: "()"
+
+    hsts:
+      enabled: false  # enable once HTTPS terminates in front of the app
+      max_age: 31536000  # 1 year; production validation warns below this
+      include_subdomains: true
+      preload: false
+
+    csp:
+      enabled: false  # the default policy allows the bundled docs assets
+      directives: {}  # e.g. {"default-src": ["'self'"], "img-src": ["'self'", "data:"]}
+
+    cross_origin:
+      enabled: false
+      embedder_policy: "require-corp"
+      opener_policy: "same-origin"
+      resource_policy: "same-origin"
+
+    csrf:
+      enabled: true
+      cookie_name: "csrf_token"
+      header_name: "X-CSRF-Token"
+      cookie_secure: true
+      cookie_httponly: true
+      cookie_samesite: "Lax"
+      cookie_path: "/"
+      token_length: 32  # bytes of entropy per generated token
+      token_ttl: 3600
+      excluded_paths: ["/health", "/metrics"]
+      secret_key: null  # set via QK_WEB__SECURITY__CSRF__SECRET_KEY
+
+  # Rate limiting (per-path rules, longest prefix wins)
+  rate_limit:
+    enabled: true
+    storage_backend: "memory"  # memory | redis
+    default_limit: 100
+    default_window: 60
+    whitelist_ips: []
+    rules: {}
+
+  # Static files
+  static:
+    enabled: true
+    directory: "static"
+    prefix: "/static"
+    html: false  # SPA mode: serve index.html for unknown paths
+
+  # OpenAPI schema and the docs pages that render it
+  openapi_title: "Quadkit API"
+  openapi_version: "1.0.0"
+  openapi_url: "/openapi.json"
+  swagger_ui_url: "/docs"
+  redoc_url: "/redoc"
+  swagger_js_url: null  # override the vendored Swagger UI asset
+  swagger_css_url: null
+  redoc_js_url: null
+  api_docs:
+    enabled: null  # null serves the docs outside production, false withholds them
+    provider: "both"  # swagger | redoc | both
+    cdn_base: null  # null serves the vendored assets from /docs-static
+
+  # gzip responses
+  compression_enabled: true
+
+  # Debug endpoints (token sent as X-Debug-Token)
+  debug_routes: false
+  enable_debug_routes_env_gate: false
+  debug_routes_token: null
+
+  # Authentication middleware and per-controller authorization
+  enable_auth: false
+  enable_identity_resolution: false  # map external OAuth ids to internal UUIDs
+  auth_exclude_paths: null
+  role_guard:
+    rules: []
+
+  # Request size limit
+  max_body_size: 10485760  # 10 MiB
