@@ -1,0 +1,86 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# Environment variable prefix: QK_CACHE__
+
+cache:
+  # Whether the cache module is enabled.
+  enabled: true
+
+  # Environment: development, staging, production
+  env: development
+
+  # -------------------------------------------------------------------------
+  # Backends — define one or more backends; exactly one must have default: true
+  # -------------------------------------------------------------------------
+  backends:
+    # --- In-Memory Backend (suitable for dev / single-process deployments) ---
+    - name: "memory"
+      type: "memory"
+      default: true
+      enabled: true
+
+      # Optional TTL for all entries on this backend (null = no expiry).
+      default_ttl: null
+
+      # Prefix applied to all cache keys.
+      key_prefix: ""
+
+      # Maximum number of entries to hold in memory (null = unlimited).
+      max_size: null
+
+      # How often to run expired-entry cleanup (seconds).
+      cleanup_interval: 60
+
+      # Enable per-backend metric collection.
+      enable_metrics: true
+
+      # Health check interval (seconds).
+      health_check_interval: 30
+
+    # --- Redis Backend (recommended for production) ---
+    # - name: "redis"
+    #   type: "redis"
+    #   default: true
+    #   enabled: true
+    #   default_ttl: null
+    #   key_prefix: ""
+    #   redis_host: "localhost"
+    #   redis_port: 6379
+    #   redis_db: 0
+    #   # Set password via: QK_CACHE__BACKENDS__0__REDIS_PASSWORD
+    #   redis_ssl: false
+    #   redis_pool_size: 10
+    #   enable_metrics: true
+    #   health_check_interval: 30
+
+  # -------------------------------------------------------------------------
+  # Service settings
+  # -------------------------------------------------------------------------
+  service:
+    # Enable cache stampede protection (distributed locking).
+    enable_protection: true
+
+    # Enable service-level cache metrics.
+    enable_metrics: true
+
+    # Enable periodic health checks of all backends.
+    enable_health_checks: true
+
+    # Lock TTL for stampede protection (seconds).
+    protection_lock_ttl: 30
+
+    # Maximum time to wait for a distributed lock (seconds).
+    protection_max_wait: 10.0
+
+    # Retry interval when waiting for a lock (seconds).
+    protection_retry_interval: 0.1
+
+    # Enable circuit breaker for backend failures.
+    circuit_breaker_enabled: false
+
+    # Number of consecutive failures to trip the circuit breaker.
+    circuit_breaker_threshold: 5
+
+    # Default serialization format.
+    # Options: "json", "pickle", "msgpack"
+    default_serializer: "json"

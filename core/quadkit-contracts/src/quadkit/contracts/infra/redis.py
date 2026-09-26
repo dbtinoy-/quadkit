@@ -4,7 +4,7 @@ Most Quadkit packages talk to Redis through
 :class:`~quadkit.contracts.infra.cache.CacheBackendProtocol`; a few need the
 raw client because the command has to be atomic or is not a key/value read —
 the Lua token bucket in ``quadkit-web``, the released-by-script locks in
-``the optional provider`` and the sorted-set windows in ``the optional provider``.
+``quadkit-cache`` and the sorted-set windows in ``the optional provider``.
 
 :class:`RedisClientProtocol` names the commands those call sites issue, so a
 client can be injected, registered and resolved as a typed dependency instead

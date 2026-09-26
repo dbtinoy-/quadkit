@@ -25,9 +25,9 @@ plus `quadkit-web` with the [Granian](https://github.com/emmett-framework/grania
 server backend. That single dependency line is all the
 [first app](./first-app.md) needs.
 
-## The five packages
+## The thirteen packages
 
-Everything published from this repository is one of these five
+Everything published from this repository is one of these thirteen
 distributions. They version in lockstep — see
 [stability and compatibility](../reference/stability.md).
 
@@ -38,6 +38,14 @@ distributions. They version in lockstep — see
 | `quadkit-web` | `pip install quadkit-web` | Async web layer: controllers, routing, middleware, OpenAPI |
 | `quadkit-testing` | `pip install quadkit-testing` | Test harnesses, fakes, and web test clients |
 | `quadkit-cli` | `pip install quadkit-cli` | Project scaffolding, generators, and dev commands |
+| `quadkit-sql` | `pip install quadkit-sql` | Async SQL databases: engines, repositories, migrations |
+| `quadkit-auth` | `pip install quadkit-auth` | Authentication and authorization: sessions, tokens, RBAC |
+| `quadkit-cache` | `pip install quadkit-cache` | Multi-backend caching: in-memory, Redis, memcached |
+| `quadkit-storage` | `pip install quadkit-storage` | Blob and object storage backends (local, S3, GCS, Azure, R2) |
+| `quadkit-events` | `pip install quadkit-events` | Event bus and event store: publish, subscribe, replay |
+| `quadkit-tasks` | `pip install quadkit-tasks` | Background tasks and scheduling |
+| `quadkit-http` | `pip install quadkit-http` | Outbound HTTP client: pooling, retries, streaming |
+| `quadkit-monitor` | `pip install quadkit-monitor` | Metrics and runtime monitoring |
 
 Internal dependencies point inward only: `quadkit`,
 `quadkit-web`, `quadkit-testing`, and `quadkit-cli` all resolve

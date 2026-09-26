@@ -1,0 +1,72 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: tasks:
+# Environment variable prefix: QK_TASKS__
+
+tasks:
+  name: "tasks"
+  enabled: true
+  env: development  # development, staging, production
+
+  # Queue backend behind the unnamed TaskQueueProtocol binding
+  backend:
+    type: "redis"           # memory, redis, rabbitmq, postgres
+    queue_name: "quadkit_tasks"
+    redis_url: null         # used when type=redis, e.g. "redis://localhost:6379/0"
+    amqp_url: null          # used when type=rabbitmq, e.g. "amqp://guest:guest@localhost:5672//"
+    postgres_dsn: null      # used when type=postgres
+
+  # Worker pool
+  worker:
+    worker_count: 4
+    max_concurrent_tasks: 10
+    poll_interval: 0.1    # Seconds between queue polls
+    shutdown_timeout: 30  # Graceful shutdown budget in seconds
+    default_timeout: 300  # Per-task timeout in seconds (5 minutes)
+    max_timeout: 3600     # Upper bound a task may request (1 hour)
+    enforce_timeout: true
+
+  # Retry policy applied to failed tasks
+  retry:
+    max_attempts: 3       # 1 initial attempt + 2 retries
+    base_delay: 1.0       # Seconds before the first retry
+    max_delay: 60.0       # Backoff ceiling in seconds
+    backoff_factor: 2.0   # Exponential multiplier
+
+  # Task scheduler (cron-like). The schedule list lives in code:
+  #   @scheduled(cron="0 * * * *", name="cleanup_expired_sessions")
+  scheduler:
+    enabled: true
+    check_interval: 1.0   # Seconds between due-task checks
+    timezone: "UTC"       # Timezone for cron expressions
+
+  # Rate limiting for task submission
+  rate_limit:
+    enabled: false
+    rate: 100             # Max tasks per period
+    per: 1.0              # Period length in seconds
+    burst: null           # Optional burst allowance
+
+  # Default task timeout applied by the queue
+  timeout:
+    default_timeout: 300.0
+    max_timeout: 3600.0
+    enforce_timeout: true
+
+  # Arbitrary extra settings exposed to task code
+  extra: {}
+
+  # Named queues for multi-backend setups. Each entry registers under
+  # Annotated[TaskQueueProtocol, Named(entry.name)]; the first entry (or the one
+  # with primary: true) also receives the unnamed binding.
+  backends: []
+  # backends:
+  #   - name: primary
+  #     primary: true
+  #     type: redis
+  #     redis_url: "redis://localhost:6379/0"
+  #     queue_name: "quadkit_tasks"
+  #   - name: notifications
+  #     type: rabbitmq
+  #     amqp_url: "amqp://guest:guest@localhost:5672//"
+  #     queue_name: "quadkit_notifications"

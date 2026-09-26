@@ -6,7 +6,7 @@ this protocol targets database-backed secret tables where async I/O is required.
 It is intentionally minimal — no rotation, no versioning — leaving those concerns
 to the implementation layer.
 
-Implementations ship in ``the optional provider`` (``the optional provider module``) so they can share
+Implementations ship in ``quadkit-sql`` (``quadkit.sql.stores``) so they can share
 the application's database connection pool.
 
 Example::

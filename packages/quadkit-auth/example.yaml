@@ -1,0 +1,110 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Every key below exists in quadkit.auth.config.AuthConfig; the full field
+# reference (types, defaults, env vars) is in docs/CONFIGURATION.md.
+# YAML key: auth: — environment variable prefix: QK_AUTH__
+
+auth:
+  name: "auth"
+  enabled: true
+  env: null  # development | staging | production | test (falls back to QK_ENV)
+
+  secret_key: "${QK_AUTH__SECRET_KEY}"  # generate: openssl rand -hex 32
+  admin_email: null
+  admin_password: null  # seeded admin account; set only for bootstrapped deployments
+  login_rate_limit: "5/minute"
+  max_sessions_per_user: null  # null = unlimited
+  relay_verification: false
+
+  # Static users — small deployments and tests; a user store replaces this
+  users: []
+  # users:
+  #   - username: "admin"
+  #     name: "Admin"
+  #     email: "admin@example.com"
+  #     password_hash: "${QK_AUTH__USERS__0__PASSWORD_HASH}"
+  #     roles: ["admin"]
+  #     is_active: true
+
+  # Password policy and hashing
+  password:
+    min_length: 12
+    max_length: 128
+    require_uppercase: true
+    require_lowercase: false
+    require_digits: true
+    require_special: false  # true requires a symbol from the banned-pattern set
+    banned_patterns: []  # extra substrings a new password may not contain
+    bcrypt_rounds: 12
+    argon2_memory_cost: 65536  # KiB of memory per hash
+    argon2_time_cost: 3
+    argon2_parallelism: 4
+
+  # JWT issuance and verification
+  token:
+    secret_key: "${QK_AUTH__TOKEN__SECRET_KEY}"
+    algorithm: "HS256"  # HS256 | HS512 | RS256 | ES256
+    access_token_expire: "30m"
+    refresh_token_expire: "7d"
+    id_token_expire: "1h"
+    key_rotation_grace_period: "1h"  # old key still verifies for this long
+    required_audience: null
+
+  # Authentication middleware
+  middleware:
+    backend: "session"  # session | jwt — how the middleware resolves the caller
+    header_name: "Authorization"
+    scheme: "Bearer"
+    exclude_paths: ["/health", "/metrics"]
+    exclude_prefixes: ["/static/", "/docs-static/"]
+    roles_required: []
+    permissions_required: []
+    optional_auth: false
+    login_url: null  # redirect target when authentication is required
+    login_rate_limit: "5/minute"
+
+  # Role-based access control
+  rbac:
+    enabled: true
+    superuser_bypass: true  # roles holding "*" skip every check
+    default_role: "viewer"
+    cache_permissions: true
+    permission_cache_ttl: 300
+
+  # Named roles — permissions are "resource:action" patterns, "*" grants all
+  roles: {}
+  # roles:
+  #   admin:
+  #     name: "admin"
+  #     description: "Full system access"
+  #     permissions: ["*"]
+  #     inherits: []
+  #   editor:
+  #     name: "editor"
+  #     description: "Can create and edit content"
+  #     permissions: ["content:create", "content:edit"]
+  #     inherits: ["viewer"]
+  #   viewer:
+  #     name: "viewer"
+  #     description: "Read-only access"
+  #     permissions: ["content:read"]
+
+  # OAuth2 / social login — provider name to the string settings its adapter reads
+  oauth2_providers: {}
+  # oauth2_providers:
+  #   google:
+  #     client_id: "${GOOGLE_CLIENT_ID}"
+  #     client_secret: "${GOOGLE_CLIENT_SECRET}"
+  #     redirect_uri: "http://localhost:8000/auth/google/callback"
+
+  # Multi-factor authentication
+  mfa:
+    enabled: true
+    max_challenge_attempts: 3
+    totp:
+      digits: 6
+      interval: 30
+      valid_window: 1  # accepted steps before/after the current one
+    backup:
+      issuer: "quadkit"
+      count: 10
+      length: 8

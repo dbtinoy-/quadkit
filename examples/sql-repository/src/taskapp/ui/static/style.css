@@ -1,0 +1,102 @@
+/* Quadkit demo — light theme */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { height: 100vh; overflow: hidden; background: var(--bg); color: var(--ink);
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif; }
+header { padding: 1rem 1rem .4rem; display: flex; align-items: center; gap: .5rem; }
+header h1 { color:var(--accent-text); font-size: 1.2rem; }
+.muted { color: var(--ink-dim); font-size: .85rem; margin: .2rem 0 0; }
+main { display: grid; grid-template-columns: 1fr; gap: 1rem; padding: 0 1rem 1rem; height: calc(100vh - 80px); overflow-y: auto; }
+section { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
+h2 { margin: 0 0 .6rem; font-size: .85rem; color: var(--ink-dim); text-transform: uppercase; letter-spacing: .04em; }
+
+/* Buttons */
+button {
+  background: var(--surface2); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 6px; padding: .4rem .75rem; cursor: pointer; font-size: .85rem;
+}
+button:hover { border-color: var(--accent); }
+button:disabled { opacity: .4; cursor: default; }
+button.accent { background:var(--accent); color:var(--accent-ink); border-color: var(--accent); }
+button.accent:hover { background: var(--accent-strong); }
+button.danger { border-color: var(--error); color: var(--error); }
+button.danger:hover { background:var(--error); color:var(--error-ink); }
+
+/* Form controls */
+input, select, textarea {
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border);
+  border-radius: 6px; padding: .4rem .75rem; font-size: .85rem;
+  font-family: inherit;
+}
+input:focus, select:focus, textarea:focus { outline: none; border-color: var(--accent); }
+textarea { resize: vertical; width: 100%; }
+
+/* Code blocks */
+pre, code { background: var(--surface2); border-radius: 4px; padding: .2rem .4rem; font-size: .85rem; }
+pre { padding: .75rem; overflow-x: auto; }
+
+/* Log */
+.log-entry { padding: .2rem 0; border-bottom: 1px solid var(--border); }
+.log-entry .log-time { color: var(--ink-dim); margin-right: .5rem; }
+.log-hit { color: var(--ok); }
+.log-error { color: var(--error); }
+
+/* Footer */
+.demo-footer { position: fixed; bottom: 0; left: 0; right: 0; padding: .5rem 1.25rem;
+  background: var(--surface); border-top: 1px solid var(--border); display: flex;
+  align-items: center; gap: .4rem; font-size: .75rem; color: var(--ink-dim); z-index: 50; }
+.demo-footer a { color:var(--accent-text); text-decoration: none; }
+.demo-footer a:hover { text-decoration: underline; }
+
+/* Navigation bar */
+.hidden { display: none; }
+
+.demo-nav { display: flex; align-items: center; gap: .75rem; padding: .5rem 1.25rem;
+  background: var(--surface); border-bottom: 1px solid var(--border); flex-shrink: 0; }
+.nav-brand { display: flex; align-items: center; gap: .4rem; color: var(--ink); text-decoration: none; font-weight: 600; }
+.nav-brand:hover { color:var(--accent-text); }
+.nav-logo { width: 22px; height: 22px; flex-shrink: 0; }
+.nav-demo { margin-left: .5rem; color: var(--ink-dim); font-size: .85rem; font-weight: 500; }
+.nav-links { margin-left: auto; display: flex; gap: 1rem; font-size: .85rem; }
+.nav-links a { color: var(--ink-dim); text-decoration: none; }
+.nav-links a:hover { color:var(--accent-text); }
+/* ── Fleet-wide layout and accessibility polish ─────────────────────────── */
+html { min-height: 100%; }
+body {
+  height: auto;
+  min-height: 100vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+.demo-nav { flex-wrap: wrap; }
+.nav-links { flex-wrap: wrap; }
+button:disabled { cursor: wait; }
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--accent-glow);
+  outline-offset: 2px;
+}
+.demo-footer { position: static; margin-top: auto; }
+
+@media (max-width: 720px) {
+  .demo-nav { gap: .5rem; padding: .55rem .8rem; }
+  .nav-demo { flex: 1; min-width: 10rem; margin-left: 0; }
+  .nav-links { width: 100%; margin-left: 0; gap: .75rem; }
+  header { padding: .85rem .8rem .35rem; }
+  main {
+    height: auto !important;
+    padding: .75rem .8rem 1.5rem;
+  }
+  main > section,
+  main > aside,
+  #console,
+  aside { width: 100%; }
+  #ask-form,
+  #publish-form { flex-wrap: wrap; }
+  #ask-form input,
+  #question { min-width: 0; flex: 1 1 12rem; }
+  table { display: block; overflow-x: auto; }
+  .demo-footer { padding: .55rem .8rem; }
+}

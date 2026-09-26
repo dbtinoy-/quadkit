@@ -1,0 +1,30 @@
+"""Health Check for {{ name }}."""
+
+from quadkit.contracts.core import HealthCheckResult, HealthStatus
+from quadkit.monitor.health import HealthCheck
+
+
+class {{ class_name }}(HealthCheck):
+    """Health check for {{ snake_name }}."""
+
+    def __init__(self) -> None:
+        super().__init__(name="{{ snake_name }}", critical={{ critical }})
+
+    async def check(self) -> HealthCheckResult:
+        try:
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.HEALTHY,
+                message="{{ snake_name }} is healthy",
+                details={},
+            )
+        # The scaffold swallows the failure and reports it through the result
+        # object, which is what this handler exists to do; BLE001 is in ruff's
+        # default rule set, so the directive is used, not decorative.
+        except Exception as error:  # noqa: BLE001
+            return HealthCheckResult(
+                component=self.name,
+                status=HealthStatus.UNHEALTHY,
+                error=f"{{ snake_name }} check failed: {error}",
+                details={},
+            )

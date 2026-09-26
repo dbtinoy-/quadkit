@@ -179,6 +179,7 @@ if TYPE_CHECKING:
         FlagValue,
     )
     from quadkit.contracts.infra.cache import (
+        CacheAdminProtocol,
         CacheBackendProtocol,
         CacheProviderProtocol,
     )
@@ -345,6 +346,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "TokenManagerProtocol": ("quadkit.contracts.auth", "TokenManagerProtocol"),
     "UserProtocol": ("quadkit.contracts.auth", "UserProtocol"),
     # cache
+    "CacheAdminProtocol": ("quadkit.contracts.infra.cache", "CacheAdminProtocol"),
     "CacheBackendProtocol": ("quadkit.contracts.infra.cache", "CacheBackendProtocol"),
     "CacheProviderProtocol": (
         "quadkit.contracts.infra.cache",

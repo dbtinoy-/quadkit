@@ -11,7 +11,7 @@ __all__ = ["FakeRedisClient"]
 class FakeRedisClient:
     """In-memory async client compatible with the ``redis.asyncio`` surface used by tests.
 
-    Supports the subset of Redis commands exercised by the optional provider tests:
+    Supports the subset of Redis commands exercised by quadkit-cache tests:
     ``ping``, ``set`` (with ``ex``/``px``/``nx``/``xx``), ``get``, ``delete``,
     ``exists``, ``expire``, ``ttl``, ``flushdb``, and ``close``.  All data is
     kept in process, so tests never touch the network or a pre-started

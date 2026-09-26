@@ -1,6 +1,7 @@
 """Tests for contracts health types."""
 
 from datetime import UTC, datetime
+import json
 
 from quadkit.contracts.core.health import (
     HealthCheckCategory,
@@ -128,6 +129,26 @@ class TestHealthCheckResult:
         d = result.to_dict()
 
         assert d["details"] == {"pending": 5, "processed": 100}
+
+    def test_to_dict_serializes_nested_health_results(self) -> None:
+        """Test nested health result details are safe for a JSON response."""
+        nested = HealthCheckResult(
+            component="cache-store",
+            details={"checked": datetime(2024, 1, 15, 10, 30, tzinfo=UTC)},
+        )
+        result = HealthCheckResult(
+            component="cache",
+            details={"store_health": nested, "statuses": [HealthStatus.HEALTHY]},
+        )
+
+        details = result.to_dict()["details"]
+
+        assert details["store_health"]["component"] == "cache-store"
+        assert (
+            details["store_health"]["details"]["checked"] == "2024-01-15T10:30:00+00:00"
+        )
+        assert details["statuses"] == ["healthy"]
+        json.dumps(result.to_dict())
 
     def test_to_dict_with_checked_at(self) -> None:
         """Test to_dict formats checked_at as ISO string."""

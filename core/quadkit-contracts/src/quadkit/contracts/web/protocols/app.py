@@ -221,6 +221,43 @@ class WebContributorProtocol(Protocol):
 
 
 @runtime_checkable
+class ConditionalWebContributorProtocol(Protocol):
+    """Opt-in protocol for contributors that apply only to some applications.
+
+    A contributor is discovered because its *distribution* is installed, which
+    is not the same as its *feature* being wired: an application that installs
+    ``quadkit-auth`` but never configures ``AuthModule`` has no authentication
+    service to resolve, so contributing ``AuthController`` unconditionally
+    registers a controller whose dependencies cannot be satisfied and the
+    container refuses to boot (``QK_ERR_DI_008``).
+
+    Implementing this protocol moves that decision to the one place that can
+    make it — the contributor itself, which knows which registration gates its
+    routes. The web provider asks :meth:`applies_to` while merging, with the
+    container as it stands at web-registration time, and skips the contributor
+    entirely when the answer is no: no registry entry, no controllers, no
+    middleware, no mounted routes.
+
+    Contributors that do not implement it always apply, which is why the
+    existing protocol needs no change and no contributor has to opt out.
+    """
+
+    def applies_to(self, container: Any) -> bool:
+        """Whether this contributor's feature is wired in *container*.
+
+        Args:
+            container: The DI container, queried while the web provider
+                registers. Everything a provider registered before the web
+                layer is already visible here.
+
+        Returns:
+            True to merge this contributor's controllers and middleware,
+            False to skip it.
+        """
+        ...
+
+
+@runtime_checkable
 class BackgroundTaskRunnerProtocol(Protocol):
     """Protocol for in-process background task execution.
 

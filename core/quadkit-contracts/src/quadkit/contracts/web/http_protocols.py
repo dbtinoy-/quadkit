@@ -5,7 +5,7 @@ Protocols for service discovery, load balancing, and communication.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, AsyncContextManager, Protocol, runtime_checkable
 
 from quadkit.contracts.web.http_types import ServiceInfo as ServiceInfo
 
@@ -221,13 +221,28 @@ class HTTPClientProtocol(Protocol):
         """
         ...
 
+    def stream_response(
+        self,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> AsyncContextManager[Any]:
+        """Open a raw byte stream with response status and headers.
+
+        The returned async context manager owns the connection. Its value
+        exposes ``status``, ``headers`` and ``aiter_bytes()``. This contract
+        lets gateways classify an upstream response before forwarding a
+        long-lived stream without buffering it.
+        """
+        ...
+
 
 @runtime_checkable
 class InterceptorProtocol(Protocol):
     """Protocol for request/response interceptors.
 
     Interceptors are applied to every request/response cycle in
-    :class:`~the optional provider module`.  Implementations receive typed
+    :class:`~quadkit.http.HTTPClient`.  Implementations receive typed
     ``RequestContext`` objects and may modify them before the request is
     dispatched, or inspect / annotate the raw response after it arrives.
 
@@ -246,7 +261,7 @@ class InterceptorProtocol(Protocol):
         """Called before a request is dispatched.
 
         Args:
-            context: :class:`~the optional provider module` for the outbound
+            context: :class:`~quadkit.http.RequestContext` for the outbound
                 request.  Implementations may mutate and return it.
 
         Returns:

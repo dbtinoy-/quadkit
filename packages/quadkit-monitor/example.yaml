@@ -1,0 +1,107 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+
+monitor:
+  # Environment: development, staging, production
+  env: development
+
+  # Metrics Collection
+  metrics:
+    enabled: true
+    prefix: "quadkit"
+    collection_interval: 60  # Seconds
+    
+    default_labels:
+      environment: "production"
+      service: "quadkit"
+      
+    histogram_buckets:
+      - 0.005
+      - 0.01
+      - 0.025
+      - 0.05
+      - 0.1
+      - 0.25
+      - 0.5
+      - 1.0
+      - 2.5
+      - 5.0
+      - 10.0
+      
+  # Prometheus Exporter (started when backend_type is "prometheus")
+  prometheus:
+    port: 9090
+    path: "/metrics"
+    enable_default_metrics: true
+    
+    # Optional Pushgateway
+    pushgateway_url: null
+    push_interval: 10
+    
+    # Database storage
+    store_in_db: false
+    metrics_table: "metrics_samples"
+    
+  # Distributed Tracing
+  tracing:
+    enabled: true
+    service_name: "quadkit"
+    
+    # Sampling strategy
+    sampler_type: "probability"  # always_on, always_off, probability, rate_limiting
+    sample_rate: 1.0  # For production, use 0.1 or lower
+    
+    # Max traces per second (rate limiting sampler)
+    max_traces_per_second: 100
+    
+    # Context propagation
+    propagation_formats:
+      - "tracecontext"
+      - "baggage"
+      - "b3"
+      
+    # Span limits
+    max_attributes: 128
+    max_events: 128
+    max_links: 128
+    max_spans: 10000  # Keep in memory
+    
+  # OpenTelemetry Backend (OTLP)
+  opentelemetry:
+    endpoint: "http://localhost:4317"
+    timeout: 30
+    compression: "gzip"  # none, gzip
+    batch_size: 512
+    export_interval: 5
+    insecure: false
+
+    headers:
+      "Authorization": "Bearer ${OTEL_AUTH_TOKEN}"
+
+    # Tracing exporters
+    tracing_exporters:
+      - type: "otlp"
+        endpoint: "http://localhost:4317"
+        
+    # Metrics exporters
+    metrics_exporters:
+      - type: "otlp"
+        endpoint: "http://localhost:4317"
+        
+  # Health Checks
+  health:
+    enabled: true
+    path: "/health"
+    include_details: true
+    
+    # Component health checks
+    checks:
+      - "database"
+      - "redis"
+      - "external_api"
+      
+    interval: 30  # Seconds
+    timeout: 5
+    
+  # Structured logging is configured in Python, not in application.yaml:
+  #   quadkit.logging.configure_logging(level="INFO", json=True)

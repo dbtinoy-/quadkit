@@ -173,6 +173,9 @@ class TestEventBusProtocol:
             def unsubscribe(self, event_type: type, handler: Any) -> None:
                 pass
 
+            async def flush(self) -> None:
+                pass
+
         assert isinstance(Bus(), EventBusProtocol)
 
 

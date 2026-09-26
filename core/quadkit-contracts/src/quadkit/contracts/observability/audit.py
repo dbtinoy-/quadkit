@@ -13,7 +13,7 @@ __all__ = ["AuditEntry", "AuditVerifierSchedulerProtocol"]
 class AuditVerifierSchedulerProtocol(Protocol):
     """Protocol for registering and scheduling the audit verifier task.
 
-    Implementations are provided by the ``the optional provider`` package and registered
+    Implementations are provided by the ``quadkit-sql`` package and registered
     in the DI container. Extension packages (e.g. ``the optional provider``) resolve
     this protocol from the container rather than importing concrete DB types.
     """

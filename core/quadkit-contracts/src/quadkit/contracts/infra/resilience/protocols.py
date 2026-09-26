@@ -82,7 +82,7 @@ class ResiliencePipelineFactoryProtocol(Protocol):
     """Factory protocol for creating configured resilience pipelines.
 
     ``the optional provider`` registers a concrete implementation.  Other
-    extension packages (e.g. ``the optional provider``) request an optional
+    extension packages (e.g. ``quadkit-sql``) request an optional
     ``ResiliencePipelineFactory | None`` via DI injection so they can build
     pre-configured pipelines without importing from ``the optional provider``
     directly.

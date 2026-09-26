@@ -12,7 +12,7 @@ Error hierarchy
 
     TaskQueueError         Base for all expected task queue failures
     ├── QueueFullError     Queue has reached its capacity limit
-    └── TaskNotFoundError  (defined in the optional provider; extends TaskQueueError)
+    └── TaskNotFoundError  (defined in quadkit-tasks; extends TaskQueueError)
 """
 
 from __future__ import annotations

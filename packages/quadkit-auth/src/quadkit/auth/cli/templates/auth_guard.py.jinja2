@@ -1,0 +1,55 @@
+"""{{ guard_name }} authentication guard.
+
+Generated scaffold — implement the credential check below.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+
+class {{ guard_name }}AuthGuard:
+    """Authenticate requests using the {{ guard_name }} scheme.
+
+    Wire this guard into the request pipeline and implement
+    :meth:`authenticate` with your credential verification logic.
+    """
+
+    scheme = "{{ guard_name_snake }}"
+
+    def __init__(self, credentials_header: str = "Authorization") -> None:
+        """Initialize the guard.
+
+        Args:
+            credentials_header: Header carrying the credentials.
+        """
+        self.credentials_header = credentials_header
+
+    async def authenticate(self, request: Any) -> Any | None:
+        """Authenticate the request and return the principal.
+
+        Args:
+            request: The incoming request carrying credentials.
+
+        Returns:
+            The authenticated principal, or ``None`` when unauthenticated.
+        """
+        credentials = self._extract_credentials(request)
+        if not credentials:
+            return None
+
+        # TODO: verify credentials against your identity provider.
+        # Example:
+        #   principal = await identity_provider.verify(credentials)
+        #   return principal
+        return None
+
+    def _extract_credentials(self, request: Any) -> str | None:
+        """Extract raw credentials from the request headers."""
+        headers = getattr(request, "headers", {}) or {}
+        value = headers.get(self.credentials_header)
+        if isinstance(value, str) and value.lower().startswith(
+            f"{self.scheme} "
+        ):
+            return value[len(self.scheme) + 1 :]
+        return None

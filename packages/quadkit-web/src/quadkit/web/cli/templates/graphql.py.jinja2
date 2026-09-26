@@ -34,7 +34,7 @@ class {{ class_name }}Type:
     updated_at: datetime
     {% endif %}
 
-    @strawberry.field(description="Get the {{ resource_name }} by ID")
+    @strawberry.field(description="Get the {{ singular_name }} by ID")
     async def resolve_{{ resource_name }}(self, info: strawberry.Info) -> {{ class_name }}Type | None:
         """Resolve the {{ resource_name }} from the database.
 
@@ -112,7 +112,7 @@ class Query:
 
     Provides:
     - List all {{ resource_name }}
-    - Get {{ resource_name }} by ID
+    - Get a single {{ singular_name }} by ID
     - Paginated {{ resource_name }} with relay
     """
 
@@ -133,7 +133,7 @@ class Query:
             filter: Filter options.
 
         Returns:
-            List of.
+            List of {{ resource_name }}.
         """
         # TODO: Implement with service
         # Example:
@@ -142,17 +142,17 @@ class Query:
         # return [{{ class_name }}Type(id=str(i.id), ...) for i in items]
         return []
 
-    @strawberry.field(description="Get {{ resource_name }} by ID")
+    @strawberry.field(description="Get a single {{ singular_name }} by ID")
     async def {{ singular_name }}(
         self,
         info: strawberry.Info,
         id: strawberry.ID,
     ) -> {{ class_name }}Type | None:
-        """Get a single {{ resource_name }} by ID.
+        """Get a single {{ singular_name }} by ID.
 
         Args:
             info: GraphQL resolve info.
-            id: The {{ resource_name }} ID.
+            id: The {{ singular_name }} ID.
 
         Returns:
             The {{ resource_name }} or None if not found.
@@ -204,7 +204,7 @@ class Mutation:
     - Delete {{ resource_name }}
     """
 
-    @strawberry.mutation(description="Create a new {{ resource_name }}")
+    @strawberry.mutation(description="Create a new {{ singular_name }}")
     async def create_{{ resource_name }}(
         self,
         info: strawberry.Info,
@@ -232,7 +232,7 @@ class Mutation:
             {% endfor %}
         )
 
-    @strawberry.mutation(description="Update an existing {{ resource_name }}")
+    @strawberry.mutation(description="Update an existing {{ singular_name }}")
     async def update_{{ resource_name }}(
         self,
         info: strawberry.Info,
@@ -243,7 +243,7 @@ class Mutation:
 
         Args:
             info: GraphQL resolve info.
-            id: The {{ resource_name }} ID.
+            id: The {{ singular_name }} ID.
             input: The updated data.
 
         Returns:
@@ -252,7 +252,7 @@ class Mutation:
         # TODO: Implement with service
         return None
 
-    @strawberry.mutation(description="Delete a {{ resource_name }}")
+    @strawberry.mutation(description="Delete {{ singular_name }} by ID")
     async def delete_{{ resource_name }}(
         self,
         info: strawberry.Info,
@@ -262,7 +262,7 @@ class Mutation:
 
         Args:
             info: GraphQL resolve info.
-            id: The {{ resource_name }} ID.
+            id: The {{ singular_name }} ID.
 
         Returns:
             True if deleted successfully.

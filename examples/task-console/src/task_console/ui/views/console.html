@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Task Console · Quadkit</title>
+  <link rel="icon" href="/static/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Task Console</span>
+  <div class="nav-links"><a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <div class="eyebrow">TASKS · STANDARD MODULE</div>
+  <h1>Task Console</h1>
+  <p class="muted">Enqueue real jobs through <span class="mono">TaskProviderProtocol.enqueue_job()</span>, watch the real worker pool and scheduler process them, and retry permanently-failed jobs out of the real dead letter queue — no external broker required.</p>
+</header>
+<main>
+  <section class="panel intro-panel">
+    <div class="section-heading"><h2>Enqueue a job</h2><span class="pill">enqueue_job</span></div>
+    <p class="muted">Picked up by the single in-process worker within a second. <span class="mono">flaky_report</span> fails twice then succeeds; <span class="mono">always_fails</span> always lands in the DLQ.</p>
+    <form id="enqueue-form" class="create-form">
+      <label>Task
+        <select id="task-select">
+          <option value="send_welcome_email">send_welcome_email</option>
+          <option value="resize_image">resize_image</option>
+          <option value="flaky_report">flaky_report</option>
+          <option value="always_fails">always_fails</option>
+          <option value="compute_digest">compute_digest</option>
+          <option value="flaky_ping">flaky_ping</option>
+        </select>
+      </label>
+      <label>kwargs (JSON) <input id="task-kwargs" placeholder='{"user_id": "u-9", "email": "u9@example.com"}' autocomplete="off"></label>
+      <label>Priority <input id="task-priority" type="number" value="5" style="width:5rem"></label>
+      <button class="accent" type="submit">Enqueue</button>
+    </form>
+    <p id="enqueue-result" class="result" role="status" aria-live="polite"></p>
+  </section>
+
+  <div class="dashboard-grid">
+    <section class="panel">
+      <div class="section-heading"><h2>Health</h2><button type="button" id="refresh-health">Refresh</button></div>
+      <div id="health" aria-live="polite"></div>
+    </section>
+    <section class="panel">
+      <div class="section-heading"><h2>Worker pool</h2><button type="button" id="refresh-workers">Refresh</button></div>
+      <div id="workers" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="section-heading"><h2>Submitted jobs</h2><button type="button" id="refresh-submitted">Refresh</button></div>
+    <p class="muted">Every job this demo has enqueued this run, newest first. Click a row to poll its result from the real <span class="mono">ResultStore</span>.</p>
+    <div id="submitted-list" aria-live="polite"></div>
+  </section>
+
+  <div class="dashboard-grid">
+    <section class="panel">
+      <div class="section-heading"><h2>Recent results</h2><button type="button" id="refresh-results">Refresh</button></div>
+      <div id="results-list" aria-live="polite"></div>
+    </section>
+    <section class="panel">
+      <div class="section-heading"><h2>Scheduled jobs</h2><button type="button" id="refresh-scheduled">Refresh</button></div>
+      <p class="muted">Registered through the real <span class="mono">@scheduled</span> decorator and <span class="mono">TaskScheduler</span>.</p>
+      <div id="scheduled-list" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="section-heading"><h2>Dead letter queue</h2><button type="button" id="purge-dlq">Purge all</button></div>
+    <p class="muted">Jobs that exhausted their retries. Retry re-enqueues the exact same job through <span class="mono">DeadLetterQueue.retry()</span>.</p>
+    <div id="dlq-list" aria-live="polite"></div>
+  </section>
+</main>
+<footer class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a> · in-memory queue/results reset on restart</footer>
+<script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

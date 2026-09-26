@@ -1,7 +1,7 @@
 # Observability
 
 What a stock Quadkit service emits, where it goes, and what to do when a
-deploy misbehaves. Everything below works with only the five public
+deploy misbehaves. Everything below works with only the thirteen public
 distributions installed — no vendor lock-in, every surface is structured
 data you can route anywhere.
 
@@ -23,13 +23,18 @@ banner — set it so your log stream is attributable per service.
 ## Health and readiness
 
 `/health` is non-blocking on request time-outs and reports the connectivity
-probes you configured (database, cache, …). A service with no data probes
-configured reports **503 with `status: "unhealthy"` by design**: a 200
-without backing checks would be a lie. Wire probes via your providers
-(register pool resources at `boot`) and `/health` starts reporting real
-component status. Use `/health` for load-balancer targets; for Kubernetes,
-point `livenessProbe` at it and use startup probes with generous
-`failureThreshold` while providers boot.
+probes you configured (database, cache, …). Each component is reported
+separately and in one of three states: `healthy`, `unhealthy` (with the
+error), or `unknown` (with the reason nothing checked it, e.g.
+`"No database provider is registered"`). Only `unhealthy`/`degraded`
+components affect the status code, so a service with no data probes
+configured answers **200 with `unknown` components** — it is not claiming
+health it has not verified, it is saying what it has. Wire probes via your
+providers (register pool resources at `boot`) and those components become
+real checks, answering `503` when a backing service is genuinely
+unreachable. Use `/health` for load-balancer targets; for Kubernetes, point
+`livenessProbe` at it and use startup probes with generous `failureThreshold`
+while providers boot.
 
 Time-outs: controller work and provider boot phases are async all the way
 down — a wedged downstream call stalls the event loop. Keep `httpx`

@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from quadkit.web.transport.reactive import sse_from_stream
-    from quadkit.web.transport.responses import (  # type: ignore[attr-defined]
+    from quadkit.web.transport.responses import (
         FastJSONResponse,
         FileResponse,
         HTMLResponse,

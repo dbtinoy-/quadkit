@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <title>Event-Driven Orders · Quadkit</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Event-Driven Orders</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+
+  <header>
+    <h1>Event-Driven Orders</h1>
+    <p class="muted">CQRS &amp; event sourcing &mdash; commands, projections, outbox</p>
+  </header>
+  <main>
+    <section id="place-panel">
+      <h2>Place Order</h2>
+      <form id="place-form">
+        <label>Customer <input id="customer" type="text" required placeholder="Alice Wonder"></label>
+        <fieldset id="items-fieldset">
+          <legend>Items</legend>
+          <div class="item-row">
+            <input class="item-sku" type="text" placeholder="SKU-1" required>
+            <input class="item-qty" type="number" value="1" min="1" required>
+            <input class="item-price" type="text" placeholder="9.99" required>
+            <button type="button" class="remove-item" disabled>&times;</button>
+          </div>
+        </fieldset>
+        <div class="form-actions">
+          <button type="button" id="add-item">+ Add item</button>
+          <button type="submit">Place Order</button>
+        </div>
+      </form>
+      <p id="place-error" class="error hidden"></p>
+    </section>
+
+    <section id="orders-panel">
+      <h2>Orders</h2>
+      <table id="orders-table">
+        <thead>
+          <tr><th>Order ID</th><th>Customer</th><th>Total</th><th>Status</th><th>Actions</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="orders-empty" class="muted">No orders yet.</p>
+      <p id="orders-error" class="error hidden" role="alert"></p>
+    </section>
+
+    <section id="outbox-panel">
+      <h2>Outbox</h2>
+      <div id="outbox-actions">
+        <button type="button" id="flush-btn">Flush Outbox</button>
+        <button type="button" id="refresh-btn">Refresh</button>
+      </div>
+      <table id="outbox-table" class="hidden">
+        <thead>
+          <tr><th>Event Type</th><th>Status</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+      <p id="outbox-empty" class="muted">Outbox is empty.</p>
+      <p id="outbox-error" class="error hidden" role="alert"></p>
+    </section>
+
+    <section id="demo-panel">
+      <h2>Demo</h2>
+      <p class="muted">Run the full lifecycle: place &rarr; pay &rarr; ship &rarr; flush</p>
+      <button type="button" id="demo-btn">Run Demo</button>
+      <p id="demo-result" class="hidden"></p>
+    </section>
+
+    <section id="log-panel">
+      <h2>Event Log</h2>
+      <div id="log"></div>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

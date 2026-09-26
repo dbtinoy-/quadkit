@@ -2,7 +2,7 @@
 
 Provides minimal in-memory CQRS dispatch for unit tests and local development.
 For production use with middleware pipelines, metrics, and transaction support,
-use the ``the optional provider`` extension.
+use the ``quadkit-events`` extension.
 
 Example::
 

@@ -1,0 +1,101 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: storage:
+# Environment variable prefix: QK_STORAGE__
+
+storage:
+  enabled: true
+  env: development  # development, staging, production
+
+  # Driver behind the unnamed StorageProtocol binding
+  default_driver: "local"  # local, s3, gcs, azure, r2, memory
+
+  # Seconds allowed for a driver health probe at boot
+  health_check_timeout: 5.0
+
+  # Driver settings keyed by driver name. Every entry also resolves as
+  # Annotated[StorageProtocol, Named("<driver>")].
+  drivers:
+    # Local Filesystem Storage
+    local:
+      root_dir: "./data/uploads"
+      base_url: "http://localhost:8000/files"
+
+    # AWS S3 (or any S3-compatible endpoint)
+    s3:
+      bucket: "quadkit-files"
+      region: "us-east-1"
+      access_key: "${AWS_ACCESS_KEY_ID}"
+      secret_key: "${AWS_SECRET_ACCESS_KEY}"
+      endpoint_url: null  # MinIO, Ceph, ...
+      public_url: null    # CDN or public bucket base URL
+      encryption:
+        enabled: true
+        type: "AES256"   # AES256 or aws:kms
+        kms_key_id: null  # required for aws:kms
+
+    # Google Cloud Storage
+    gcs:
+      bucket: "quadkit-files"
+      project_id: "${GCP_PROJECT_ID}"
+      credentials_path: "./config/gcs-credentials.json"
+      encryption:
+        enabled: false
+        type: "AES256"
+        kms_key_id: null
+
+    # Azure Blob Storage
+    azure:
+      account_name: "${AZURE_STORAGE_ACCOUNT}"
+      account_key: "${AZURE_STORAGE_KEY}"
+      container: "quadkit-files"
+
+    # Cloudflare R2
+    r2:
+      bucket: "quadkit-files"
+      access_key: "${CF_ACCESS_KEY_ID}"
+      secret_key: "${CF_SECRET_ACCESS_KEY}"
+      endpoint_url: "https://<account-id>.r2.cloudflarestorage.com"
+      public_url: null
+      region: null
+
+    # In-Memory Storage (testing)
+    memory: {}
+
+  # Upload rules enforced by the storage service
+  service:
+    max_file_size_mb: 100
+    allowed_mime_types:
+      - "image/jpeg"
+      - "image/png"
+      - "image/webp"
+      - "image/gif"
+      - "application/pdf"
+      - "text/plain"
+      - "application/json"
+      - "application/xml"
+
+  # Named driver declarations for multi-backend setups. Each entry registers
+  # under Annotated[StorageProtocol, Named(entry.name)]; the first entry (or the
+  # one with primary: true) also receives the unnamed binding.
+  backends: []
+  # backends:
+  #   - name: media
+  #     primary: true
+  #     driver: s3
+  #     s3:
+  #       bucket: "quadkit-media"
+  #       region: "us-east-1"
+  #       access_key: "${AWS_ACCESS_KEY_ID}"
+  #       secret_key: "${AWS_SECRET_ACCESS_KEY}"
+  #       endpoint_url: null
+  #       public_url: null
+  #       encryption:
+  #         enabled: false
+  #         type: "AES256"
+  #         kms_key_id: null
+  #   - name: scratch
+  #     driver: local
+  #     local:
+  #       root_dir: "./data/scratch"
+  #       base_url: "http://localhost:8000/scratch"

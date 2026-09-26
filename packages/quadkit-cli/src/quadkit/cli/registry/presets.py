@@ -99,9 +99,9 @@ class FullStackPreset(PresetDefinition):
     """Full-stack application preset."""
 
     name = "fullstack"
-    description = "Complete web application with database, auth, cache, and messaging"
+    description = "Complete web application: auth, cache, storage, events, tasks, HTTP, monitoring"
     packages = packages_for(
-        "web", "sql", "auth", "admin", "cache", "tasks", "monitoring"
+        "web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor"
     )
     config = {
         "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default

@@ -17,7 +17,17 @@ from quadkit.cli.scaffold.specs import ProjectTemplateSpec
 
 
 def _package_line(package: str, generators: tuple[str, ...]) -> str:
+    """Docstring for a pre-created package.
+
+    A shared row can exist with no generator behind it (``contracts``,
+    ``auth``): the map answers *where* the package lives, and the code that
+    fills it is written by hand or by a tool outside the CLI. Saying
+    "Writers:  (quadkit gen)" in that case would advertise a command that
+    does not exist.
+    """
     names = ", ".join(generators)
+    if not names:
+        return f'"""{package} package."""\n'
     return f'"""{package} package.\n\nWriters: {names} (quadkit gen)."""\n'
 
 
@@ -32,7 +42,14 @@ def _component_files(package_name: str) -> dict[str, str]:
     """
     files: dict[str, str] = {}
     for component in COMPONENTS:
-        if component.shared:
+        # A shared row with no generator behind it is a *resolution* row, not
+        # a package the scaffold creates: `providers` exists so a project
+        # generated into it before the `di` row landed keeps resolving, and
+        # `auth`/`contracts` exist because the map is where a project's
+        # cross-cutting packages are declared -- nothing in the CLI writes
+        # there, so pre-creating them would put an unexplained empty package
+        # in every fresh project and change the scaffold for existing users.
+        if component.shared and component.generators:
             path = f"src/{package_name}/shared/{component.modular}"
             files[f"{path}/__init__.py"] = _package_line(
                 f"{component.modular} (shared)", component.generators

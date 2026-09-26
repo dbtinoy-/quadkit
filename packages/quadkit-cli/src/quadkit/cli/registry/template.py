@@ -109,8 +109,10 @@ class FullStackTemplate(ProjectTemplate):
     """Full-stack application template."""
 
     name = "fullstack"
-    description = "Full application with auth, admin, and more"
-    packages = packages_for("web", "sql", "auth", "admin", "cache", "tasks", "monitor")
+    description = "Full application: auth, cache, storage, events, tasks, HTTP, monitoring"
+    packages = packages_for(
+        "web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor"
+    )
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -154,7 +156,7 @@ class TemplateRegistry:
         optional = (
             (GraphQLTemplate, ("sql", "graphql")),
             (WorkerTemplate, ("sql", "tasks", "queue")),
-            (FullStackTemplate, ("web", "sql", "auth", "admin", "cache", "tasks")),
+            (FullStackTemplate, ("web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor")),
         )
         for entry, features in optional:
             if all(provider_available(feature) for feature in features):

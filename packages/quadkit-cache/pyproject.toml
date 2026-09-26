@@ -1,0 +1,199 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-cache"
+version = "0.0.42"
+description = "Multi-backend caching system for Quadkit Framework - Redis, Memcached, and in-memory caching"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "cache",
+    "caching",
+    "redis",
+    "memcached",
+    "distributed-cache",
+    "ttl",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "typing-extensions>=4.0.0",
+    "orjson>=3.9.0",
+    "typer>=0.9.0",
+    "jinja2>=3.1.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+redis = [
+    "redis>=5.0.0",
+]
+memcached = [
+    "pymemcache>=4.0.0",
+]
+semantic = [
+    "faiss-cpu>=1.7.0",
+    "numpy>=1.24.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "types-redis>=4.6.0",
+]
+all = [
+    "redis>=5.0.0",
+    "pymemcache>=4.0.0",
+    "faiss-cpu>=1.7.0",
+    "numpy>=1.24.0",
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points."quadkit.cli.contributors"]
+cache = "quadkit.cache.cli.contributor:CacheCliContributor"
+
+[project.entry-points."quadkit.modules"]
+CacheModule = "quadkit.cache.module:CacheModule"
+
+[project.entry-points."quadkit.config"]
+cache = "quadkit.cache.config:CacheConfig"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "types-redis>=4.6.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "S301",  # pickle: not used in cache; broad ignore to reduce noise
+    "E501",  # line too long: allow long lines for SQL queries and complex strings
+    "E402",  # module level import not at top: intentional for factory pattern
+    "F822",  # undefined name in __all__: false positives with lazy imports
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "F822", "TID252"]
+"src/quadkit/cache/backends/database_bridge.py" = ["E501"]
+"src/quadkit/cache/integration/provider.py" = ["E402", "E501"]
+"src/quadkit/cache/integration/services.py" = ["E501"]
+"src/quadkit/cache/providers.py" = ["F822"]
+"src/quadkit/cache/service/core.py" = ["E501", "F821"]
+"src/quadkit/cache/service/decorators.py" = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.13"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+    { module = "msgpack", ignore_missing_imports = true },
+    { module = "pymemcache", ignore_missing_imports = true },
+    { module = "pymemcache.*", ignore_missing_imports = true },
+]
+
+[tool.uv.sources.quadkit]
+workspace = true
+
+[tool.uv.sources.quadkit-testing]
+workspace = true
+
+[tool.uv.sources.quadkit-contracts]
+workspace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = ["--cov=quadkit.cache", "--cov-report=html", "--cov-report=term", "--cov-fail-under=82"]
+testpaths = ["tests"]
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_redis: marks tests that require a live Redis connection",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

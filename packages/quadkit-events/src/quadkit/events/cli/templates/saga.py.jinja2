@@ -1,0 +1,80 @@
+"""{{ saga_name }} saga orchestrator.
+
+Generated scaffold — define the forward steps and their compensating
+actions, then run the saga from your application layer.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Awaitable, Callable
+
+from quadkit.logging import get_logger
+
+logger = get_logger(__name__)
+
+StepAction = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+@dataclass(slots=True)
+class SagaStep:
+    """A single saga step with its compensating action."""
+
+    name: str
+    action: StepAction
+    compensation: StepAction | None = None
+
+
+@dataclass(slots=True)
+class {{ saga_name }}Saga:
+    """Orchestrate the {{ saga_name }} flow with compensations."""
+
+    steps: list[SagaStep] = field(default_factory=list)
+    completed: list[SagaStep] = field(default_factory=list)
+
+    def add_step(
+        self,
+        name: str,
+        action: StepAction,
+        compensation: StepAction | None = None,
+    ) -> None:
+        """Append a step to the saga.
+
+        Args:
+            name: Step identifier used in logs.
+            action: Forward action to execute.
+            compensation: Undo action executed on rollback.
+        """
+        self.steps.append(SagaStep(name=name, action=action, compensation=compensation))
+
+    async def execute(self, context: dict[str, Any]) -> None:
+        """Run all steps, compensating completed ones on failure.
+
+        Args:
+            context: Shared mutable state passed to every step.
+
+        Raises:
+            Exception: Re-raises the failing step's error after rollback.
+        """
+        for step in self.steps:
+            try:
+                logger.info("saga_step_started", saga="{{ saga_name_snake }}", step=step.name)
+                await step.action(context)
+                self.completed.append(step)
+            except Exception as exc:
+                logger.error(
+                    "saga_step_failed", saga="{{ saga_name_snake }}", step=step.name
+                )
+                await self._compensate(context)
+                raise
+        logger.info("saga_completed", saga="{{ saga_name_snake }}")
+
+    async def _compensate(self, context: dict[str, Any]) -> None:
+        """Undo completed steps in reverse order."""
+        for step in reversed(self.completed):
+            if step.compensation is not None:
+                logger.warning(
+                    "saga_compensating", saga="{{ saga_name_snake }}", step=step.name
+                )
+                await step.compensation(context)
+        self.completed.clear()

@@ -12,8 +12,19 @@ from quadkit.logging import get_logger
 logger = get_logger(__name__)
 
 
+#: Content types that must never be buffered: the whole point of these
+#: responses is that the client receives each piece as it is produced.
+STREAMING_CONTENT_TYPES = ("text/event-stream", "multipart/x-mixed-replace")
+
+
 class CompressionMiddleware:
-    """Response compression middleware"""
+    """Response compression middleware
+
+    Responses are compressed whole, which means the body is buffered until the
+    last chunk arrives. Streaming responses (SSE, multipart) must bypass that
+    buffering — otherwise the client waits for the end of the stream before it
+    sees the first byte, which defeats streaming entirely.
+    """
 
     def __init__(
         self,
@@ -54,6 +65,7 @@ class CompressionMiddleware:
         response_headers = []
         response_body = b""
         content_type = ""
+        streaming = False
 
         async def send_compressed(message: Any) -> None:
             nonlocal \
@@ -61,7 +73,8 @@ class CompressionMiddleware:
                 response_status, \
                 response_headers, \
                 response_body, \
-                content_type
+                content_type, \
+                streaming
 
             if message["type"] == "http.response.start":
                 response_started = True
@@ -74,7 +87,18 @@ class CompressionMiddleware:
                         content_type = value.decode("latin-1")
                         break
 
+                # Streamed responses (SSE) skip compression entirely: gzip
+                # would have to buffer the whole stream to produce a frame.
+                if any(pattern in content_type for pattern in STREAMING_CONTENT_TYPES):
+                    streaming = True
+                    await send(message)
+
             elif message["type"] == "http.response.body":
+                if streaming:
+                    # Forward every piece as it is produced.
+                    await send(message)
+                    return
+
                 if not response_started:
                     logger.warning(
                         "compression_body_before_start",

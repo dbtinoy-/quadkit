@@ -1,0 +1,125 @@
+"""{{ class_name }} task module.{% if doc %}
+
+{{ doc }}{% endif %}"""
+
+from __future__ import annotations
+
+from typing import Any
+from uuid import uuid4
+
+from quadkit.di import injectable
+from quadkit.logging import get_logger
+from quadkit.tasks import JobProtocol, TaskProvider{% if schedule %}, scheduled{% else %}, task{% endif %}
+
+logger = get_logger(__name__)
+
+
+{% if schedule %}@scheduled(
+    cron="{{ schedule }}",
+    name="{{ resource_name }}",
+)
+{% else %}@task(
+    name="{{ resource_name }}",
+)
+{% endif %}async def {{ task_name }}(
+    *args: Any,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """{{ doc or 'Process ' + resource_name }}.
+
+    This is an async background task that can be enqueued through
+    :class:`TaskProvider` or scheduled with a cron expression.
+
+    Args:
+        *args: Positional arguments.
+        **kwargs: Keyword arguments.
+
+    Returns:
+        Result data produced by the task.
+    """
+    logger.info("{{ resource_name }}_started", args=args, kwargs=kwargs)
+
+    try:
+        result_data = await _process_{{ resource_name }}(*args, **kwargs)
+        logger.info("{{ resource_name }}_completed", result=result_data)
+        return result_data
+    except Exception as exc:
+        logger.exception("{{ resource_name }}_failed", error=str(exc))
+        raise
+
+
+async def _process_{{ resource_name }}(
+    *args: Any,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    """Internal processing logic for the {{ task_name }} task.
+
+    Args:
+        *args: Positional arguments.
+        **kwargs: Keyword arguments.
+
+    Returns:
+        Processing result data.
+    """
+    # TODO: Implement your task logic here.
+    #
+    # Example:
+    # from {{ package_name }}.services import {{ class_name }}Service
+    # service = {{ class_name }}Service()
+    # result = await service.process(...)
+
+    return {
+        "processed": True,
+        "count": len(args),
+    }
+
+
+@injectable
+class {{ class_name }}TaskRunner:
+    """Task runner for {{ class_name }} operations.
+
+    Provides a convenient way to enqueue {{ task_name }} tasks through the
+    injected :class:`~quadkit.tasks.TaskProvider`.
+    """
+
+    def __init__(self, provider: TaskProvider) -> None:
+        """Initialize the task runner.
+
+        Args:
+            provider: Task provider used to enqueue jobs.
+        """
+        self._provider = provider
+
+    @property
+    def logger(self) -> Any:
+        """Return the module logger."""
+        return logger
+
+    async def run(
+        self,
+{% for param in params %}        {{ param.name }}: {{ param.type }} = {{ param.default }},
+{% endfor %}    ) -> str:
+        """Run the {{ task_name }} task.
+
+        Args:
+{% for param in params %}            {{ param.name }}: {{ param.description or 'The ' + param.name }}
+{% endfor %}
+        Returns:
+            Job ID for tracking.
+        """
+        task_kwargs: dict[str, Any] = {
+{% for param in params %}            "{{ param.name }}": {{ param.name }},
+{% endfor %}        }
+
+        logger.info("{{ resource_name }}_dispatch", task_kwargs=task_kwargs)
+
+        job = JobProtocol(
+            id=uuid4().hex,
+            name="{{ resource_name }}",
+            args=(),
+            kwargs=task_kwargs,
+        )
+        job_id = await self._provider.enqueue_job(job)
+
+        logger.info("{{ resource_name }}_dispatched", job_id=job_id)
+        return job_id

@@ -43,7 +43,15 @@ jobs:
             core/quadkit \
             packages/quadkit-web \
             packages/quadkit-testing \
-            packages/quadkit-cli; do
+            packages/quadkit-cli \
+            packages/quadkit-sql \
+            packages/quadkit-auth \
+            packages/quadkit-cache \
+            packages/quadkit-storage \
+            packages/quadkit-events \
+            packages/quadkit-tasks \
+            packages/quadkit-http \
+            packages/quadkit-monitor; do
             python -m build "$package" --wheel --outdir dist
           done
 
@@ -66,6 +74,14 @@ jobs:
           import quadkit.contracts
           import quadkit.testing
           import quadkit.web
+          import quadkit.sql
+          import quadkit.auth
+          import quadkit.cache
+          import quadkit.storage
+          import quadkit.events
+          import quadkit.tasks
+          import quadkit.http
+          import quadkit.monitor
           print("installed public imports: ok")
           PY
 
@@ -86,4 +102,12 @@ jobs:
             core/quadkit/tests \
             packages/quadkit-testing/tests \
             packages/quadkit-web/tests \
-            packages/quadkit-cli/tests
+            packages/quadkit-cli/tests \
+            packages/quadkit-sql/tests \
+            packages/quadkit-auth/tests \
+            packages/quadkit-cache/tests \
+            packages/quadkit-storage/tests \
+            packages/quadkit-events/tests \
+            packages/quadkit-tasks/tests \
+            packages/quadkit-http/tests \
+            packages/quadkit-monitor/tests

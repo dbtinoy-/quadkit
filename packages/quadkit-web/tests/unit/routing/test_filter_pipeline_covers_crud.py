@@ -46,12 +46,28 @@ class TestFilterPipelineCoversCrudErrors:
     async def test_handles_domain_validation_error(
         self, pipeline: FilterPipeline, mock_request: MagicMock
     ) -> None:
-        """FilterPipeline maps ValidationError to 400."""
+        """FilterPipeline maps ValidationError to 422 — and agrees with the Result path.
+
+        The decorator this file was written against (``@handle_crud_errors``)
+        answered 400 here, and that expectation outlived it: the policy is
+        RFC 7807-shaped now, and ``web/errors/mapping.py`` — the table the
+        Result-returning path reads — maps a domain ``ValidationError`` to 422
+        with ``urn:quadkit:validation-error``. 400 stays for a ``DomainError``
+        that is not a validation failure.
+
+        The second assertion is the one that keeps the two paths from drifting:
+        "the two paths agree on the seven built-in families" is a claim in
+        ``result_bridge``'s docstring, and this is where one of the seven is
+        actually compared.
+        """
+        from quadkit.web.errors.mapping import get_status_for_error
+
         exc = ValidationError("invalid input")
         response = await pipeline.handle(exc, mock_request)
 
-        assert response.status_code == 400
-        assert b"QK_ERR_VAL_002" in response.body or b"bad_request" in response.body
+        assert response.status_code == 422
+        assert b"QK_ERR_VAL_002" in response.body or b"validation" in response.body
+        assert get_status_for_error(exc) == response.status_code
 
     @pytest.mark.asyncio
     async def test_handles_http_not_found_error(

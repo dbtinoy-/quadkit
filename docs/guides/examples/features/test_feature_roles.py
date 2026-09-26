@@ -49,7 +49,7 @@ class StampUserMiddleware:
     """`AuthenticatorProtocol` stand-in: resolve the caller from a header.
 
     Production apps stamp the user from a JWT/session store here (the private
-    the optional provider package ships that); the guard reads `request.state.user`
+    quadkit-auth package ships that); the guard reads `request.state.user`
     the same way regardless.
     """
 

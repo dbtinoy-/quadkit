@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-contracts"
-version = "0.0.41"
+version = "0.0.42"
 description = "Core types and protocols for the Quadkit Framework"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -87,6 +87,7 @@ def register_health_route(provider: WebProvider, _app: Application) -> None:
 
         db_provider = None
         redis_client = None
+        app_version = "unknown"
 
         if container is not None:
             try:
@@ -101,10 +102,20 @@ def register_health_route(provider: WebProvider, _app: Application) -> None:
                 redis_client = await container.resolve(CacheBackendProtocol)
             except Exception:  # noqa: BLE001, S110
                 pass
+            try:
+                from quadkit.config import QuadkitConfig
+
+                config = await container.resolve(QuadkitConfig)
+                app_version = str(
+                    getattr(getattr(config, "app", None), "version", "") or "unknown"
+                )
+            except Exception:  # noqa: BLE001, S110
+                pass
 
         checker = WebHealthChecker(
             db_provider=db_provider,
             cache_backend=redis_client,
+            app_version=app_version,
         )
         result = await checker.check_health()
         status_code = _status_code_for(result.status)

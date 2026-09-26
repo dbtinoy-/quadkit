@@ -142,7 +142,7 @@ def register_routing_services(
     # Register BackgroundTaskRunnerProtocol — per-resolution (transient) so each
     # caller gets an independent task accumulator bound to its own Starlette context.
     # Background tasks are in-process only. Durable job submission uses explicit
-    # the optional provider job APIs, not this web background-runner interface.
+    # quadkit-tasks job APIs, not this web background-runner interface.
     from quadkit.contracts.web.protocols import BackgroundTaskRunnerProtocol
     from quadkit.web.background.tasks import StarletteBackgroundTaskRunner
 
@@ -182,6 +182,7 @@ def merge_contributed_extensions(
     container: ContainerRegistrarProtocol,
 ) -> None:
     """Register the contributor registry singleton and merge entry-point contributors."""
+    from quadkit.contracts.web import ConditionalWebContributorProtocol
     from quadkit.web.contributors import WebContributorRegistry
     from quadkit.web.contributors import discovery as contributor_discovery
 
@@ -190,12 +191,23 @@ def merge_contributed_extensions(
 
     # Discover and merge web contributors from entry-points, skipping
     # contributor IDs the host excluded via WebConfig (no registry entry,
-    # no contributed controllers/middleware, no mounted routes).
+    # no contributed controllers/middleware, no mounted routes) and
+    # contributors whose feature the application never wired — an installed
+    # distribution is not a configured one, and a controller whose services
+    # are absent fails container validation for the whole app.
     excluded = set(getattr(provider.web_config, "excluded_contributors", None) or [])
     for contributor in contributor_discovery.load_web_contributors():
         if contributor.contributor_id in excluded:
             logger.debug(
                 "web.contributor_excluded",
+                contributor_id=contributor.contributor_id,
+            )
+            continue
+        if isinstance(
+            contributor, ConditionalWebContributorProtocol
+        ) and not contributor.applies_to(container):
+            logger.debug(
+                "web.contributor_not_applicable",
                 contributor_id=contributor.contributor_id,
             )
             continue

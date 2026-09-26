@@ -84,6 +84,7 @@ class TestConfigCommand:
     @patch("quadkit.cli.commands.config.asyncio.run")
     def test_show_no_config(self, mock_run: MagicMock) -> None:
         from quadkit.cli.commands.config import app as config_app
+
         mock_run.side_effect = FileNotFoundError("no config")
 
         result = self.runner.invoke(config_app, ["show"])
@@ -91,6 +92,7 @@ class TestConfigCommand:
 
     def test_init_already_exists(self) -> None:
         from quadkit.cli.commands.config import app as config_app
+
         with patch("pathlib.Path.exists", return_value=True):
             result = self.runner.invoke(config_app, ["init", "--output", "app.yaml"])
             assert result.exit_code != 0
@@ -101,23 +103,48 @@ class TestConfigCommand:
         self, mock_save: MagicMock, mock_exists: MagicMock
     ) -> None:
         from quadkit.cli.commands.config import app as config_app
+
         mock_save.return_value = None
         with patch("quadkit.cli.commands.config.asyncio.run") as mock_run:
             mock_run.side_effect = lambda coro: None
-            result = self.runner.invoke(config_app, ["init", "--output", "app.yaml", "--force"])
+            result = self.runner.invoke(
+                config_app, ["init", "--output", "app.yaml", "--force"]
+            )
         assert result.exit_code == 0
 
-    @patch("quadkit.cli.commands.config.Path.exists", return_value=False)
-    def test_validate_file_not_found(self, mock_exists: MagicMock) -> None:
-        from quadkit.cli.commands.config import app as config_app
-        result = self.runner.invoke(config_app, ["validate", "--file", "nonexistent.yaml"])
-        assert result.exit_code != 0
+    def test_validate_file_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """A missing --file is reported by the command, not by accident.
 
-    @patch("quadkit.cli.commands.config.Path.exists", return_value=False)
-    def test_doctor_file_not_found(self, mock_exists: MagicMock) -> None:
+        No ``Path.exists`` patch: patching it class-wide makes the whole
+        process see an empty filesystem, so the assertion could pass for a
+        reason other than the one under test. An empty temporary CWD is what
+        "the file is missing" actually means, and the message proves which
+        branch ran.
+        """
         from quadkit.cli.commands.config import app as config_app
-        result = self.runner.invoke(config_app, ["doctor"])
+
+        monkeypatch.chdir(tmp_path)
+        result = self.runner.invoke(
+            config_app, ["validate", "--file", "nonexistent.yaml"]
+        )
+
         assert result.exit_code != 0
+        assert "Configuration file not found: nonexistent.yaml" in result.output
+
+    def test_doctor_file_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """``doctor`` reads ./application.yaml, so an empty CWD is the case."""
+        from quadkit.cli.commands.config import app as config_app
+
+        monkeypatch.chdir(tmp_path)
+        result = self.runner.invoke(config_app, ["doctor"])
+
+        assert result.exit_code != 0
+        assert "Configuration file not found" in result.output
+        assert "quadkit init" in result.output
 
     @patch(
         "quadkit.cli.commands.config.find_config",
@@ -129,14 +156,30 @@ class TestConfigCommand:
         # this test independent of the process CWD, which other suites mutate
         # at collection time.
         from quadkit.cli.commands.config import app as config_app
+
         result = self.runner.invoke(config_app, ["env"])
         assert result.exit_code != 0
         # Assert the command's own handler produced the message, not the
         # generic top-level CliError fallback.
         assert "No application.yaml found" in result.output
 
-    @patch("quadkit.cli.commands.config.Path.exists", side_effect=[True, False])
-    def test_diff_baseline_not_found(self, mock_exists: MagicMock) -> None:
+    def test_diff_compare_not_found(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """The baseline exists on disk; the compare file is the missing one.
+
+        The previous form patched ``Path.exists`` with ``side_effect=[True,
+        False]``, i.e. it simulated the two halves with a counter. Writing the
+        baseline for real keeps the "exists" half honest and leaves the
+        "missing" half to the filesystem.
+        """
         from quadkit.cli.commands.config import app as config_app
-        result = self.runner.invoke(config_app, ["diff", "--baseline", "a.yaml", "--compare", "b.yaml"])
+
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "a.yaml").write_text("app:\n  name: demo\n")
+        result = self.runner.invoke(
+            config_app, ["diff", "--baseline", "a.yaml", "--compare", "b.yaml"]
+        )
+
         assert result.exit_code != 0
+        assert "Compare file not found: b.yaml" in result.output

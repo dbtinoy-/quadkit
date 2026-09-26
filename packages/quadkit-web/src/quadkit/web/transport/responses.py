@@ -10,7 +10,7 @@ from starlette.responses import (
     FileResponse as StarletteFileResponse,
 )
 from starlette.responses import (
-    HTMLResponse as StarletteHTMLResponse,  # type: ignore[import]
+    HTMLResponse as StarletteHTMLResponse,
 )
 from starlette.responses import (
     RedirectResponse as StarletteRedirectResponse,
@@ -59,10 +59,11 @@ class FastJSONResponse(Response):
         # Check if content is a Pydantic model
         if hasattr(content, "model_dump_json"):
             # Use Pydantic's efficient Rust-based serializer
-            return content.model_dump_json().encode("utf-8")
+            return str(content.model_dump_json()).encode("utf-8")
 
         # Use quadkit common JSON utilities for everything else
-        return cast("Any", dumps)(content)
+        raw: bytes = cast("Any", dumps)(content)
+        return raw
 
 
 class JSONResponse(FastJSONResponse):

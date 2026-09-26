@@ -1,0 +1,260 @@
+# ── Metadata ───────────────────────────────────────────────────────────────
+name: auth-rbac
+version: 0.1.0
+description: "Role-based access control with permission matrix and live authorize()"
+# ────────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# Auth Rbac Demo — Complete Configuration Reference
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Every configuration key available for this demo.
+# Uncommented lines are the values we override; commented lines show
+# defaults.  Each section maps 1:1 to a typed config model — the
+# framework validates your yaml against it at boot time.
+#
+# LEARNING PATH:
+#   1. web:        HTTP server, security, rate limiting
+#   2. auth:       Users, roles, JWT, password rules
+#
+# For full reference see the typed config models rendered below; each
+# section header names its model, and env overrides follow the pattern
+# QK_<SECTION>__<KEY> with '__' as the delimiter.  Examples:
+#   QK_WEB__SERVER__BACKEND=<value>
+#   QK_WEB__SECURITY__ENABLED=<value>
+#   QK_WEB__CORS__ENABLED=<value>
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Web ───────────────────────────────────────────────────────────────────────
+# Quadkit Web auto-configures Starlette, OpenAPI, CORS, CSRF, and
+# rate limiting from this single section.  The WebModule reads it
+# automatically via config_key="web" / config_model=WebConfig.
+# Typed model: quadkit.web.config.top_level.WebConfig
+# ─────────────────────────────────────────────────────────────────────────────
+web:
+  # name: web
+  # enabled: true
+  # env: null  # Deployment environment
+  server:
+    backend: uvicorn  # ASGI server backend (granian | uvicorn | hypercorn | gunicorn)
+    host: 127.0.0.1  # Bind host
+    port: 8090  # Bind port
+    # workers: 1  # Number of workers
+    # reload: false  # Enable auto-reload
+    # debug: false  # Enable debug mode
+  security:
+    # enabled: true  # Enable the security subsystem
+    # cors:
+    #   enabled: true  # Enable CORS
+    #   allowed_origins: []  # Allowed origins (use ['*'] to allow all). Deny-by-default: an empty list blocks every cross-origin request.
+    #   allow_methods: [GET, POST, PUT, DELETE, PATCH]
+    #   allow_headers: ['*']
+    #   expose_headers: []
+    #   allow_credentials: false
+    #   debug_permissive: false  # When True and debug mode is active, allow any origin via wildcard (explicit opt-in replacement for the old implicit debug widening)
+    #   max_age: 600
+    #   allow_origin_regex: null  # Regex pattern for allowed origins (matched when not in allowed_origins)
+    csrf:
+      enabled: false
+      # cookie_name: csrf_token
+      # header_name: X-CSRF-Token
+      # cookie_secure: true
+      # cookie_httponly: true
+      # cookie_samesite: Lax
+      # cookie_domain: null
+      # cookie_path: /
+      # token_length: 32
+      # token_ttl: 3600  # TTL in seconds for synchronizer-mode tokens stored in cache.
+      # excluded_paths: []  # URL path prefixes exempt from CSRF validation for cookie-less requests; cookie-bearing requests on these paths are still validated.
+      # exclude_content_types: []  # Content-Type values that bypass CSRF validation (explicit opt-in — JSON requests are validated by default so cookie-authenticated SPA flows cannot bypass CSRF).
+      # exclude_auth_schemes: []  # Authorization header schemes that bypass CSRF validation (explicit opt-in).
+      # secret_key: null  # HMAC secret used to sign and verify CSRF tokens (populated via QK_WEB__SECURITY__CSRF__SECRET_KEY)
+    # enable_csrf: true
+    # enable_cors: true
+    # allowed_hosts: []  # Hostnames permitted to reach the application. Empty by default; must be configured before production deployment.
+    # hsts:
+    #   enabled: false  # Emit the Strict-Transport-Security header
+    #   max_age: 31536000  # HSTS max-age in seconds (default 1 year)
+    #   include_subdomains: true  # Apply HSTS to all subdomains
+    #   preload: false  # Include site in HSTS preload list
+    # csp:
+    #   enabled: false  # Emit the Content-Security-Policy header
+    #   directives: {default-src: '''self''', script-src: '''self'' ''unsafe-inline'' ''unsafe-eval'' https://unpkg.com https://cdn.jsdelivr.net https://cdn.redoc.ly https://cdn.plot.ly', script-src-elem: '''self'' ''unsafe-inline'' ''unsafe-eval'' https://unpkg.com https://cdn.jsdelivr.net https://cdn.redoc.ly https://cdn.plot.ly', style-src: '''self'' ''unsafe-inline'' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com', style-src-elem: '''self'' ''unsafe-inline'' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com', img-src: '''self'' data: https: blob:', font-src: '''self'' data: https://fonts.googleapis.com https://fonts.gstatic.com', connect-src: '''self'' https: wss: ws: https://unpkg.com', frame-ancestors: '''none''', base-uri: '''self''', form-action: '''self'''}  # CSP directives mapping directive name to source expression(s)
+    # cross_origin:
+    #   enabled: false  # Emit cross-origin isolation headers
+    #   embedder_policy: require-corp  # Cross-Origin-Embedder-Policy header value
+    #   opener_policy: same-origin  # Cross-Origin-Opener-Policy header value
+    #   resource_policy: same-origin  # Cross-Origin-Resource-Policy header value
+    # referrer_policy: strict-origin-when-cross-origin  # Referrer-Policy header value
+    # custom_headers: {x-content-type-options: nosniff, x-frame-options: DENY, x-xss-protection: 1; mode=block}  # Additional HTTP response headers emitted verbatim
+    # permissions_policy: {geolocation: (), microphone: (), camera: (), payment: (), usb: ()}  # Permissions-Policy directive map
+  # cors:
+  #   enabled: true  # Enable CORS
+  #   allowed_origins: []  # Allowed origins (use ['*'] to allow all). Deny-by-default: an empty list blocks every cross-origin request.
+  #   allow_methods: [GET, POST, PUT, DELETE, PATCH]
+  #   allow_headers: ['*']
+  #   expose_headers: []
+  #   allow_credentials: false
+  #   debug_permissive: false  # When True and debug mode is active, allow any origin via wildcard (explicit opt-in replacement for the old implicit debug widening)
+  #   max_age: 600
+  #   allow_origin_regex: null  # Regex pattern for allowed origins (matched when not in allowed_origins)
+  # static:
+  #   enabled: false  # Enable static file serving
+  #   directory: static  # Directory to serve
+  #   prefix: /static  # URL prefix for static files
+  #   html: false  # Serve HTML files (SPA mode)
+  # rate_limit:
+  #   enabled: false  # Enable rate limiting. When true, RateLimitMiddleware enforces the matched per-path rule or the default_limit/default_window on every HTTP request.
+  #   default_limit: 100  # Max requests per window
+  #   default_window: 60  # Window size in seconds
+  #   whitelist_ips: []  # Exempt IP addresses
+  #   storage_backend: memory  # Storage backend (memory/redis)
+  #   rules: {}  # Per-path rate limit rules; longest-prefix match wins
+  # openapi_title: API  # OpenAPI Title
+  # openapi_version: 1.0.0  # OpenAPI Version
+  # openapi_url: /openapi.json
+  # swagger_ui_url: /docs
+  # redoc_url: /redoc
+  # swagger_js_url: null
+  # swagger_css_url: null
+  # redoc_js_url: null
+  # compression_enabled: true
+  # api_docs:
+  #   enabled: null  # Serve API documentation endpoints (/docs, /redoc, /openapi.json) and auto-configure CSP for their assets. Default null: served outside production and withheld in production; true/false decide explicitly
+  #   provider: both  # Documentation provider: 'swagger', 'redoc', or 'both'
+  #   cdn_base: null  # Base URL under which the vendored docs asset filenames are served (e.g. 'https://unpkg.com/swagger-ui-dist@5.10.3' or a private mirror). Default null: assets are served by the application itself from /docs-static/ with zero third-party requests. Its origin is automatically allowed in the CSP when set. Per-asset web.swagger_js_url / web.swagger_css_url / web.redoc_js_url overrides take precedence over this base.
+  # debug_routes: false  # Enable debug routes
+  # enable_debug_routes_env_gate: false  # Require explicit opt-in for debug route registration.
+  # debug_routes_token: null  # Token required to access debug routes (sent as X-Debug-Token header).
+  # enable_identity_resolution: false  # Automatically resolve OAuth external IDs to internal UUIDs in authenticated requests
+  # enable_auth: false  # Enable built-in authentication middleware. Requires authenticators to be registered in the container.
+  # max_body_size: 10485760  # Maximum allowed request body size in bytes. Requests with a Content-Length header exceeding this limit receive a 413 response before the body is read. Set to None to disable the body size limit (not recommended in production).
+  # auth_exclude_paths: [/health, /health/, /docs, /redoc, /openapi.json]  # Paths to exclude from authentication
+  # role_guard:
+  #   rules: []  # Role guard rules in declaration order
+  # excluded_contributors: []  # Contributor IDs excluded from entry-point web contributor mounting
+
+# ── Auth ──────────────────────────────────────────────────────────────────────
+# Quadkit Auth handles users, roles, RBAC, JWT tokens, and password
+# hashing.  The AuthModule reads this section automatically via
+# config_key="auth" / config_model=AuthConfig.
+# Typed model: quadkit.auth.config.AuthConfig
+# ─────────────────────────────────────────────────────────────────────────────
+auth:
+  # name: auth
+  # enabled: true
+  # env: null  # Deployment environment
+  users:  # Initial users
+    - name: admin
+      email: admin@example.com
+      password: Admin-Pass-123!
+      roles:
+      - admin
+    - name: editor
+      email: editor@example.com
+      password: Editor-Pass-123!
+      roles:
+      - editor
+    - name: viewer
+      email: viewer@example.com
+      password: Viewer-Pass-123!
+      roles:
+      - viewer
+  roles:  # Role definitions
+    admin:
+      description: Full system access
+      permissions:
+      - articles.view
+      - articles.create
+      - articles.update
+      - articles.delete
+      - personas.view
+      - personas.create
+      - personas.update
+      - personas.delete
+      - admin_console.open
+      - users.manage
+    editor:
+      description: Can manage articles and personas
+      permissions:
+      - articles.view
+      - articles.create
+      - articles.update
+      - articles.delete
+      - personas.view
+      inherits:
+      - viewer
+    viewer:
+      description: Read-only access
+      permissions:
+      - articles.view
+      - personas.view
+  rbac:
+    enabled: true  # Enable RBAC enforcement
+    superuser_bypass: true  # Allow superuser role to bypass all checks
+    default_role: viewer  # Default role for new users
+    cache_permissions: true  # Cache resolved permissions
+    permission_cache_ttl: 300  # Permission cache TTL in seconds
+  # password:
+  #   min_length: 12  # Minimum password length
+  #   max_length: 128  # Maximum password length
+  #   require_uppercase: true  # Require at least one uppercase letter
+  #   require_lowercase: false  # Require at least one lowercase letter
+  #   require_digits: true  # Require at least one digit
+  #   require_special: false  # Require at least one special character (non-alphanumeric)
+  #   banned_patterns: []  # Substrings that must not appear in the password (case-insensitive). Use to reject common passwords or the user's own name.
+  #   bcrypt_rounds: 12  # bcrypt cost factor for new hashes (minimum 12 in production)
+  #   argon2_memory_cost: 65536  # Argon2id memory cost in KiB (OWASP floor is 19456)
+  #   argon2_time_cost: 3  # Argon2id time cost
+  #   argon2_parallelism: 4  # Argon2id parallelism
+  token:
+    secret_key: "dev-secret-change-in-production-32b!"  # Secret key for signing tokens
+    # algorithm: HS256  # Algorithm
+    # access_token_expire:
+    #   total_seconds: "<required>"
+    # refresh_token_expire:
+    #   total_seconds: "<required>"
+    # id_token_expire:
+    #   total_seconds: "<required>"
+    # key_rotation_grace_period:
+    #   total_seconds: "<required>"
+    # required_audience: null  # Expected ``aud`` claim for every token verified by this service. When set, tokens whose audience does not match are rejected outright. Leave as ``None`` only for internal, single-service deployments where audience segregation is not required.
+  # middleware:
+  #   exclude_paths: []  # Paths excluded from auth
+  #   backend: session  # Auth backend type
+  #   header_name: Authorization  # Header name for token
+  #   scheme: Bearer  # Token scheme
+  #   roles_required: []  # Roles required
+  #   permissions_required: []  # Permissions required
+  #   optional_auth: false  # Whether authentication is optional
+  #   login_url: null  # URL to redirect for login
+  #   exclude_prefixes: []  # Path prefixes excluded
+  #   login_rate_limit: 5/minute  # Rate limit for auth endpoints
+  secret_key: "dev-secret-change-in-production-32b!"  # Secret key for signing
+  # admin_email: null  # Initial admin email
+  # admin_password: null  # Initial admin password
+  # login_rate_limit: 5/minute  # Default rate limit
+  # oauth2_providers: {}  # OAuth2 configs
+  # max_sessions_per_user: null  # Maximum number of concurrent sessions allowed per user. ``None`` (the default) means unlimited.  When a positive integer is set and the limit is exceeded, the least-recently-used session is evicted.
+  # relay_verification: false  # Enable binding ``RelayAuthVerifierProtocol`` for the relay gateway's inbound API-key authentication.  When ``False`` (default) no relay binding is registered.
+  # mfa:
+  #   enabled: true  # Enable MFA subsystem globally
+  #   totp:
+  #     digits: 6  # Number of digits in the TOTP code
+  #     interval: 30  # Time-step period in seconds
+  #     valid_window: 1  # Number of time steps to check before/after current
+  #   backup:
+  #     issuer: quadkit  # Issuer label shown in authenticator apps
+  #     count: 10  # Number of backup codes to generate
+  #     length: 8  # Length of each backup code
+  #   max_challenge_attempts: 3  # Max failed MFA challenge attempts before session is revoked
+
+# ── Rbac Console ──────────────────────────────────────────────────────────────
+# Demo-owned section bound to RbacConsoleConfig via
+# config_key="rbac_console"; see the demo's config.py.
+# Typed model: rbac_console.config.RbacConsoleConfig
+# ─────────────────────────────────────────────────────────────────────────────
+rbac_console:
+  # name: rbac_console
+  # enabled: true
+  # env: null  # Deployment environment
+  service_name: "rbac console"  # Service label shown in demo health output

@@ -6,7 +6,7 @@ Provides a concrete :class:`InMemoryUnitOfWork` that extends
 database persistence is required.
 
 For production, use a backend that overrides :meth:`_flush` to write to a
-database (e.g. ``the optional provider``'s ``SQLUnitOfWork``).
+database (e.g. ``quadkit-sql``'s ``SQLUnitOfWork``).
 """
 
 from __future__ import annotations

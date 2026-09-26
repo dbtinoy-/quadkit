@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
@@ -96,8 +97,17 @@ class EventBusProtocol(Protocol):
         """
         ...
 
-    def subscribe(self, event_type: type, handler: EventHandlerProtocol) -> None:
+    def subscribe(
+        self,
+        event_type: type,
+        handler: EventHandlerProtocol | Callable[..., Awaitable[Any]],
+    ) -> None:
         """Subscribe a handler to an event type.
+
+        Implementations accept either an ``EventHandlerProtocol`` object or a
+        plain async callable — the latter is what ``@event_handler`` produces
+        and what the flagship
+        :class:`~quadkit.events.buses.event.EventBus` dispatches directly.
 
         Args:
             event_type: Type of event to subscribe to.
@@ -105,7 +115,21 @@ class EventBusProtocol(Protocol):
         """
         ...
 
-    def unsubscribe(self, event_type: type, handler: EventHandlerProtocol) -> None:
+    async def flush(self) -> None:
+        """Wait until all pending events have been dispatched.
+
+        Useful in tests and during shutdown to drain in-flight handler
+        dispatches before tearing the bus down.  Implemented by the flagship
+        :class:`~quadkit.events.buses.event.EventBus`; engines that dispatch
+        synchronously may implement it as a no-op.
+        """
+        ...
+
+    def unsubscribe(
+        self,
+        event_type: type,
+        handler: EventHandlerProtocol | Callable[..., Awaitable[Any]],
+    ) -> None:
         """Remove a handler subscription for an event type.
 
         Args:

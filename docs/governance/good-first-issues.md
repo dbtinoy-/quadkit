@@ -17,7 +17,7 @@ three properties, enforced by the triager who applied the label:
 Comment on the issue before starting (one line: "I'm on this"). Duplicate
 work is the only failure mode worth avoiding. Setup is in
 [development setup](../contributing/development.md); the public surfaces
-you can touch are the five distributions under `core/` and `packages/`.
+you can touch are the thirteen distributions under `core/` and `packages/`.
 
 Other labels you'll meet:
 

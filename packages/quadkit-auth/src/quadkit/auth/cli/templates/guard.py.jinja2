@@ -1,0 +1,158 @@
+"""{{ guard_name }} authorization guard.
+
+This module provides a custom authorization guard for Quadkit.
+"""
+
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, Any, cast
+
+from quadkit.auth.types import GuardContext
+{% if guard_type == 'role' %}from quadkit.auth.web.guards import RoleGuard{% else %}from quadkit.auth.web.guards import PermissionGuard{% endif %}
+from quadkit.contracts.web import ResponseFactoryProtocol
+
+if TYPE_CHECKING:
+    from quadkit.contracts.web import ResponseProtocol
+
+
+class {{ guard_name }}Guard:
+    """Custom authorization guard for {{ guard_name }}.
+
+    Implements :class:`~quadkit.contracts.web.guard.GuardProtocol`
+    (``can_activate`` / ``handle_rejection``) so it can be applied with
+    ``@use_guards(...)``.
+    """
+
+    async def can_activate(self, context: GuardContext) -> bool:
+        """Check if the request is authorized.
+
+        Args:
+            context: Guard context containing request and user info.
+
+        Returns:
+            ``True`` if authorized, ``False`` otherwise.
+        """
+        user = context.user
+        if user is None:
+            return False
+
+        # Add your authorization logic here.
+        # Examples:
+        # if not getattr(user, "is_active", True):
+        #     return False
+        # if await self._has_permission(user, "{{ guard_name_snake }}:access"):
+        #     return True
+        return await self._check_{{ guard_name_snake }}(user, context)
+
+    async def _check_{{ guard_name_snake }}(
+        self,
+        user: Any,
+        context: GuardContext,
+    ) -> bool:
+        """Custom authorization check for {{ guard_name }}.
+
+        Args:
+            user: The authenticated user.
+            context: The guard context.
+
+        Returns:
+            ``True`` if authorized.
+        """
+        return True
+
+    async def handle_rejection(self, context: GuardContext) -> ResponseProtocol:
+        """Return the rejection response when authorization fails."""
+        from quadkit.di.resolution.context import get_resolver
+
+        resolver = get_resolver(context.request)
+        if resolver is None:
+            raise RuntimeError(
+                "Guard requires a DI resolver on the request — ensure the "
+                "request passed through the app's DI middleware",
+            )
+        response_factory = await resolver.resolve(ResponseFactoryProtocol)
+        return cast(
+            "ResponseProtocol",
+            response_factory.json(
+                {
+                    "error": "forbidden",
+                    "message": "{{ guard_name }} authorization failed",
+                },
+                status_code=403,
+            ),
+        )
+
+
+# =============================================================================
+# Role Guard Variant
+# =============================================================================
+
+{% if guard_type == 'role' %}
+class {{ guard_name }}RoleGuard(RoleGuard):
+    """Role-based guard for {{ guard_name }}.
+
+    Checks if the user has one of the required roles; override
+    :meth:`can_activate` to add custom authorization logic.
+    """
+
+    def __init__(self, *roles: str) -> None:
+        """Initialize the role guard.
+
+        Args:
+            roles: List of allowed roles.
+        """
+        super().__init__(*roles)
+{% endif %}
+
+
+# =============================================================================
+# Permission Guard Variant
+# =============================================================================
+
+{% if guard_type == 'permission' %}
+class {{ guard_name }}PermissionGuard(PermissionGuard):
+    """Permission-based guard for {{ guard_name }}.
+
+    Checks if the user has the required permissions; override
+    :meth:`can_activate` to add custom authorization logic.
+    """
+
+    def __init__(
+        self,
+        *permissions: str,
+        require_all: bool = True,
+    ) -> None:
+        """Initialize the permission guard.
+
+        Args:
+            permissions: List of required permissions.
+            require_all: Require all permissions (default) or any of them.
+        """
+        super().__init__(*permissions, require_all=require_all)
+{% endif %}
+
+
+# =============================================================================
+# Usage
+# =============================================================================
+
+# In routes:
+#
+# from quadkit.auth.web import use_guards
+#
+# @use_guards({{ guard_name }}Guard())
+# async def protected_endpoint(request):
+#     return {"message": "Authorized!"}
+{% if guard_type == 'role' %}#
+# Or with roles:
+#
+# @use_guards({{ guard_name }}RoleGuard("admin"))
+# async def admin_endpoint(request):
+#     return {"message": "Admin only!"}
+{% else %}#
+# Or with permissions:
+#
+# @use_guards({{ guard_name }}PermissionGuard("orders:write"))
+# async def admin_endpoint(request):
+#     return {"message": "Permitted!"}
+{% endif %}

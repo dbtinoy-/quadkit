@@ -2,6 +2,14 @@
 
 This module contains the HealthChecker and related Pydantic models. Keeping
 this logic here helps keep `health.py` small and focused on HTTP handlers.
+
+A component that is **not configured** is not a component that is broken: a
+service that deliberately has no database must not report itself unhealthy for
+the absence of one, or every deployment that skips an optional dependency
+looks like an outage to whatever is watching `/health`. Unconfigured
+components are reported honestly as ``UNKNOWN`` with the reason, and they do
+not decide the application's status — a registered component that fails still
+does, and that is the only reading an alert should act on.
 """
 
 from __future__ import annotations
@@ -100,9 +108,9 @@ class WebHealthChecker:
     async def _check_database(self) -> ComponentHealth:
         if not self.db_provider:
             return ComponentHealth(
-                status=HealthStatus.UNHEALTHY,
+                status=HealthStatus.UNKNOWN,
                 latency_ms=0,
-                message="Database provider not configured",
+                message="No database provider is registered",
                 checked_at=ambient_clock.now(),
             )
 
@@ -145,9 +153,9 @@ class WebHealthChecker:
     async def _check_redis(self) -> ComponentHealth:
         if not self.cache_backend:
             return ComponentHealth(
-                status=HealthStatus.UNHEALTHY,
+                status=HealthStatus.UNKNOWN,
                 latency_ms=0,
-                message="Cache backend not configured",
+                message="No cache backend is registered",
                 checked_at=ambient_clock.now(),
             )
 
@@ -191,6 +199,13 @@ class WebHealthChecker:
         self,
         components: dict[str, ComponentHealth],
     ) -> HealthStatus:
+        """The worst judgement among the components that made one.
+
+        ``UNKNOWN`` and ``STARTING`` are not judgements about correctness —
+        they are statements about information — so they neither fail the
+        application nor mask a failure elsewhere. A single ``UNHEALTHY``
+        still decides the outcome, which is what an alert should key on.
+        """
         statuses = [c.status for c in components.values()]
 
         if HealthStatus.UNHEALTHY in statuses:

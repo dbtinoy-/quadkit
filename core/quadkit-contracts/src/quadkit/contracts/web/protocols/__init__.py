@@ -13,6 +13,9 @@ from quadkit.contracts.web.protocols.app import (
     BackgroundTaskRunnerProtocol as BackgroundTaskRunnerProtocol,
 )
 from quadkit.contracts.web.protocols.app import (
+    ConditionalWebContributorProtocol as ConditionalWebContributorProtocol,
+)
+from quadkit.contracts.web.protocols.app import (
     ConnectionManagerProtocol as ConnectionManagerProtocol,
 )
 from quadkit.contracts.web.protocols.app import (
@@ -56,6 +59,7 @@ __all__ = [
     "CORSPolicyProtocol",
     "CRUDServiceProtocol",
     "CSRFProtectionProtocol",
+    "ConditionalWebContributorProtocol",
     "ConnectionManagerProtocol",
     "ExceptionFilterChainProtocol",
     "ExceptionFilterProtocol",

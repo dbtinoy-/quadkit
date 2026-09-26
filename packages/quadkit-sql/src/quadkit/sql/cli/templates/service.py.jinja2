@@ -1,0 +1,104 @@
+"""{{ class_name }} service.
+
+Application service for {{ resource_name }} backed by the SQL unit of work.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from quadkit.contracts import DatabaseProviderProtocol
+from quadkit.logging import get_logger
+from quadkit.sql.unit_of_work import SimpleUnitOfWork
+
+logger = get_logger(__name__)
+
+
+class {{ entity_class_name }}:
+    """Row entity for the ``{{ table_name }}`` table."""
+
+    __table_name__ = "{{ table_name }}"
+
+    def __init__(self, **data: Any) -> None:
+        """Populate row attributes from *data*."""
+        for key, value in data.items():
+            setattr(self, key, value)
+
+
+class {{ class_name }}Service:
+    """Service for {{ resource_name }}.
+
+    Write operations use :class:`~quadkit.sql.SimpleUnitOfWork` so entity
+    changes and domain events commit atomically.  Single-statement reads go
+    straight through the injected :class:`~quadkit.contracts.DatabaseProviderProtocol`.
+    """
+
+    def __init__(self, provider: DatabaseProviderProtocol) -> None:
+        """Initialize the service.
+
+        Args:
+            provider: Database provider (typically resolved from DI after
+                registering :class:`~quadkit.sql.di.provider.DatabaseProvider`).
+        """
+        self._provider = provider
+
+    async def create(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Persist a new ``{{ table_name }}`` row.
+
+        Args:
+            data: Row values{% if fields %} (keys: {% for field in fields %}{{ field.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
+
+        Returns:
+            The persisted row data.
+        """
+        async with SimpleUnitOfWork(self._provider) as uow:
+            uow.register_new({{ entity_class_name }}(**data))
+            await uow.commit()
+        logger.info("{{ snake_name }}_created", table="{{ table_name }}")
+        return data
+
+    async def get(self, entity_id: Any) -> dict[str, Any] | None:
+        """Fetch a ``{{ table_name }}`` row by primary key.
+
+        Args:
+            entity_id: Primary key value.
+
+        Returns:
+            The row as a dict, or ``None`` when not found.
+        """
+        result = await self._provider.execute_query(
+            "SELECT * FROM {{ table_name }} WHERE id = ?",
+            params=[entity_id],
+        )
+        return result.rows[0] if result.rows else None
+
+    async def list(
+        self,
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        """List ``{{ table_name }}`` rows with pagination.
+
+        Args:
+            limit: Maximum number of rows.
+            offset: Number of rows to skip.
+
+        Returns:
+            The matching rows.
+        """
+        result = await self._provider.execute_query(
+            "SELECT * FROM {{ table_name }} LIMIT ? OFFSET ?",
+            params=[limit, offset],
+        )
+        return result.rows
+
+    async def delete(self, entity_id: Any) -> None:
+        """Delete a ``{{ table_name }}`` row by primary key.
+
+        Args:
+            entity_id: Primary key value.
+        """
+        async with SimpleUnitOfWork(self._provider) as uow:
+            uow.register_deleted({{ entity_class_name }}(id=entity_id))
+            await uow.commit()
+        logger.info("{{ snake_name }}_deleted", table="{{ table_name }}")

@@ -1,7 +1,7 @@
 """Inbound relay authentication contracts.
 
 The gateway itself never validates keys: a host binds a
-``RelayAuthVerifierProtocol`` implementation (e.g. the the optional provider
+``RelayAuthVerifierProtocol`` implementation (e.g. the quadkit-auth
 adapter) through the container, and the gateway only calls it.  When no
 verifier is bound the gateway stays open by default (``require_auth``
 is opt-in at the config level).

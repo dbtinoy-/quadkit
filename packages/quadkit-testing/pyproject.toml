@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-testing"
-version = "0.0.41"
+version = "0.0.42"
 description = "Centralized testing infrastructure for Quadkit Framework - Fixtures, factories, and utilities"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -162,6 +162,9 @@ overrides = [
 workspace = true
 
 [tool.uv.sources.quadkit-contracts]
+workspace = true
+
+[tool.uv.sources.quadkit-sql]
 workspace = true
 
 [tool.pytest.ini_options]

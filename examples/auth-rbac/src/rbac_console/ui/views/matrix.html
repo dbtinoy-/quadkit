@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>Permission Matrix · Auth RBAC</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="matrix">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth RBAC</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>Permission matrix</h1>
+  <p class="muted">Live permission grid showing role capabilities</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+  <footer class="auth-footer">
+    <a href="#" id="logout">Log out</a>
+    <span id="who" class="chip"></span>
+  </footer>
+  <div class="card">
+    <div class="card-header"><strong>Live grid — computed via authorize()</strong></div>
+    <p id="error" class="error"></p>
+    <table>
+      <thead><tr><th>required permission</th><th>viewer</th><th>editor</th><th>admin</th></tr></thead>
+      <tbody id="grid"></tbody>
+    </table>
+    <p class="muted">admin bypasses every check (role-name bypass); editor inherits viewer.</p>
+  </div>
+  <div class="card">
+    <div class="card-header"><strong>Try a verdict</strong></div>
+    <form id="try-form">
+      <select id="try-role">
+        <option value="viewer">viewer</option>
+        <option value="editor">editor</option>
+        <option value="admin">admin</option>
+      </select>
+      <input id="try-action" placeholder="action (e.g. view)" required />
+      <input id="try-resource" placeholder="resource (e.g. articles)" required />
+      <button type="submit">authorize()</button>
+    </form>
+    <pre id="verdict" class="muted"></pre>
+  </div>
+  <div class="card">
+    <div class="card-header"><strong>Articles</strong></div>
+      <form id="create-form" style="display:flex;gap:0.5rem">
+        <input id="new-title" placeholder="new title" required />
+        <button type="submit">Create</button>
+      </form>
+    <ul id="article-list"></ul>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+</div>
+</main>
+  <script src="/static/matrix.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

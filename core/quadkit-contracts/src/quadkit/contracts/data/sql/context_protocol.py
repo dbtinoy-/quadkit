@@ -12,7 +12,7 @@ class DatabaseContextProtocol(Protocol):
     """Protocol for database context that supports tenant isolation.
 
     This protocol allows packages like the optional provider to set tenant context
-    without importing from the optional provider directly.
+    without importing from quadkit-sql directly.
 
     The db_ctx is typically available in request scope at "state.db_ctx".
     """

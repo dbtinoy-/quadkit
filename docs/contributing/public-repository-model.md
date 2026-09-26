@@ -1,7 +1,7 @@
 # The public repository model
 
 This repository is **generated**: it is produced by an export pipeline
-from a development workspace, and it contains exactly the five public
+from a development workspace, and it contains exactly the thirteen public
 distributions — `quadkit`, `quadkit-contracts`, `quadkit-web`,
 `quadkit-testing`, `quadkit-cli` — plus their tests, examples, and
 documentation. Nothing else, by construction.
@@ -11,7 +11,7 @@ That design has three user-visible consequences, all of them features:
 **What you audit is what you install.** The tree you browse on GitHub
 and the tree the wheels build from are the same tree. There are no
 unpublished internals downstream of the public packages; cross-package
-dependencies between the five distributions resolve from the package
+dependencies between the thirteen distributions resolve from the package
 index like any other dependency you declare.
 
 **Internal-only names cannot appear.** During export, the tool chain
@@ -31,7 +31,7 @@ request for the rehearsal).
 
 - Open issues and pull requests against this repository as usual —
   review happens here, in the open.
-- Changes should use the five distributions' public APIs; the checks
+- Changes should use the thirteen distributions' public APIs; the checks
   above treat everything else as an error, immediately.
 - If a change would need an internal package to make sense, say so in
   the issue instead — that conversation is cheaper than a PR that cannot

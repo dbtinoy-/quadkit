@@ -302,5 +302,5 @@ class TestGenModuleOption:
 
         assert result.exit_code == 0, result.output
         assert (
-            project / "src/my_platform/shared/providers/billing_provider.py"
+            project / "src/my_platform/shared/di/billing_provider.py"
         ).exists()

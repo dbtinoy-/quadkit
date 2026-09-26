@@ -21,8 +21,11 @@ single reference for "is my setup supported".
 
 ## Distributions and deprecation policy
 
-The public surface is exactly five distributions: `quadkit-contracts`,
-`quadkit`, `quadkit-web`, `quadkit-testing`, `quadkit-cli`. All five release
+The public surface is exactly thirteen distributions: the core five
+(`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`,
+`quadkit-testing`) plus `quadkit-sql`, `quadkit-auth`, `quadkit-cache`,
+`quadkit-storage`, `quadkit-events`, `quadkit-tasks`, `quadkit-http`, and
+`quadkit-monitor`. All thirteen release
 in lockstep with the same version number — mixing versions across them is
 not a supported configuration.
 

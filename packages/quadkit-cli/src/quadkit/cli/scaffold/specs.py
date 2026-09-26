@@ -121,18 +121,20 @@ _TEMPLATE_SPECS: dict[str, ProjectTemplateSpec] = {
     ),
     "full": _spec(
         "full",
-        "Full application with auth, admin, feature flags, cache, tasks, and SQL",
+        "Full application: auth, cache, storage, events, tasks, HTTP, monitoring, and SQL",
         _dependencies(
             "web",
             "sql",
             "auth",
-            "admin",
-            "features",
             "cache",
+            "storage",
+            "events",
             "tasks",
+            "http",
+            "monitor",
             tools=("uvicorn",),
         ),
-        frozenset({"web", "sql", "auth", "admin", "features", "cache", "tasks"}),
+        frozenset({"web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor"}),
         (
             (
                 "Auth ships with dev secret keys; replace QK_AUTH__SECRET_KEY "

@@ -111,10 +111,10 @@ review release notes on upgrade. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.3` in the `0.x` series, released in lockstep with the
+Version `0.0.42` in the `0.x` series, released in lockstep with the
 other four distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-cli==0.0.3`) or a tight range
-(`>=0.0.3,<0.1.0`). Full policy:
+1.0 — pin an exact version (`quadkit-cli==0.0.42`) or a tight range
+(`>=0.0.42,<0.1.0`). Full policy:
 [stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
 
 ## Links

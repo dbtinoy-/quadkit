@@ -47,6 +47,8 @@ class TestResolveOutputDir:
             ("src/schema", "src/my_app/shared/schema"),
             ("src/schema/dataloaders", "src/my_app/shared/schema/dataloaders"),
             ("src/vector/collections", "src/my_app/shared/vector/collections"),
+            ("src/di", "src/my_app/shared/di"),
+            # Kept so projects that already generated here resolve.
             ("src/providers", "src/my_app/shared/providers"),
             ("src/storage/backends", "src/my_app/shared/storage/backends"),
         ):

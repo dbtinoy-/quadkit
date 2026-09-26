@@ -1,0 +1,103 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# Environment variable prefix: QK_SQL__
+#
+# IMPORTANT: Never commit database credentials.
+# Set the connection URL via: QK_SQL__BACKEND__URL=postgresql+asyncpg://...
+
+sql:
+  # Whether the database module is enabled.
+  enabled: true
+
+  # -------------------------------------------------------------------------
+  # Backend — connection settings
+  # -------------------------------------------------------------------------
+  backend:
+    # Database connection URL.
+    # Supported dialects: sqlite, postgresql, postgres, mysql, mariadb, oracle, mssql
+    # Examples:
+    #   SQLite (dev only):   sqlite+aiosqlite:///./app.db
+    #   PostgreSQL:          postgresql+asyncpg://user:pass@localhost:5432/dbname
+    #   MySQL:               mysql+aiomysql://user:pass@localhost:3306/dbname
+    # Set via environment: QK_SQL__BACKEND__URL
+    url: "${QK_SQL__BACKEND__URL}"
+
+  # -------------------------------------------------------------------------
+  # Connection pool
+  # -------------------------------------------------------------------------
+  pool:
+    # Minimum number of connections to maintain in the pool.
+    min_size: 2
+
+    # Maximum number of connections allowed in the pool.
+    max_size: 10
+
+    # Maximum connections above max_size allowed temporarily.
+    max_overflow: 5
+
+    # Maximum lifetime of a connection before it is recycled (seconds).
+    recycle: 3600
+
+    # Timeout to acquire a connection from the pool (seconds).
+    timeout: 30
+
+    # Connection acquisition timeout. Accepts float seconds or Duration string.
+    # Examples: 30, "30s", "1m"
+    # Set via: QK_SQL__POOL__ACQUIRE_TIMEOUT
+    acquire_timeout: 30s
+
+    # Max idle time before connection is closed. Accepts float seconds or Duration string.
+    # Examples: 300, "5m", "10m"
+    # Set via: QK_SQL__POOL__IDLE_TIMEOUT
+    idle_timeout: 5m
+
+    # Max lifetime for a connection. Accepts float seconds or Duration string.
+    # Examples: 3600, "1h"
+    # Set via: QK_SQL__POOL__MAX_LIFETIME
+    max_lifetime: 1h
+
+  # -------------------------------------------------------------------------
+  # Operations
+  # -------------------------------------------------------------------------
+  operations:
+    # Echo SQL statements to the log (enable only for debugging).
+    echo: false
+
+    # Query statement timeout. Accepts float seconds or Duration string.
+    # Examples: 60, "60s", "2m"
+    # Set via: QK_SQL__OPERATIONS__STATEMENT_TIMEOUT
+    statement_timeout: 60s
+
+  # -------------------------------------------------------------------------
+  # Outbox pattern
+  # -------------------------------------------------------------------------
+  outbox:
+    # Enable transactional outbox pattern.
+    enabled: true
+
+    # Polling interval for outbox messages. Accepts float seconds or Duration string.
+    # Examples: 5, "5s"
+    # Set via: QK_SQL__OUTBOX__POLL_INTERVAL
+    poll_interval: 5s
+
+    # Maximum age of batch before flush. Accepts float seconds or Duration string.
+    # Examples: 30, "30s"
+    # Set via: QK_SQL__OUTBOX__BATCH_MAX_AGE
+    batch_max_age: 30s
+
+  # -------------------------------------------------------------------------
+  # Migrations
+  # -------------------------------------------------------------------------
+  migrations:
+    # Advisory lock timeout for migrations. Accepts float seconds or Duration string.
+    # Examples: 30, "30s"
+    # Set via: QK_SQL__MIGRATIONS__LOCK_TIMEOUT
+    lock_timeout: 30s
+
+  # -------------------------------------------------------------------------
+  # Audit
+  # -------------------------------------------------------------------------
+  # HMAC key used to sign audit log checksums.
+  # Generate with: python -c "import secrets; print(secrets.token_hex(32))"
+  # Set via environment: QK_SQL__AUDIT_HMAC_KEY
+  # audit_hmac_key: "${QK_SQL__AUDIT_HMAC_KEY}"

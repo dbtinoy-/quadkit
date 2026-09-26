@@ -107,6 +107,7 @@ from quadkit.contracts.ai.relay.types import (
 from quadkit.contracts.ai.relay.usage import (
     RelayDailyUsage,
     RelayModelRank,
+    RelayModelRankBucket,
     RelayUsageServiceProtocol,
 )
 
@@ -151,6 +152,7 @@ __all__ = [
     "RelayLoss",
     "RelayMapperProtocol",
     "RelayModelRank",
+    "RelayModelRankBucket",
     "RelayOperationsControlProtocol",
     "RelayOperationsProtocol",
     "RelayOptions",

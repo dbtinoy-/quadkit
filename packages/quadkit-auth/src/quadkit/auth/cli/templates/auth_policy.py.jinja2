@@ -1,0 +1,46 @@
+"""{{ policy_name }} authorization policy.
+
+Generated scaffold — implement the rule evaluation below.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyDecision:
+    """Outcome of a policy evaluation."""
+
+    allowed: bool
+    reason: str
+
+
+class {{ policy_name }}Policy:
+    """Authorization policy for {{ policy_name }}.
+
+    Implement :meth:`evaluate` with your access rules; return a
+    :class:`PolicyDecision` describing the outcome.
+    """
+
+    name = "{{ policy_name_snake }}"
+
+    async def evaluate(self, principal: Any, resource: Any) -> PolicyDecision:
+        """Evaluate the policy for *principal* against *resource*.
+
+        Args:
+            principal: The authenticated user or service identity.
+            resource: The resource being accessed.
+
+        Returns:
+            A :class:`PolicyDecision` with ``allowed`` and a ``reason``.
+        """
+        # TODO: implement your authorization rules.
+        # Example:
+        #   if getattr(principal, "is_admin", False):
+        #       return PolicyDecision(True, "admin bypass")
+        #   return PolicyDecision(
+        #       resource.owner_id == principal.id, "owner match"
+        #   )
+        return PolicyDecision(False, "not implemented")

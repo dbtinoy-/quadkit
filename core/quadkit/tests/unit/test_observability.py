@@ -200,6 +200,7 @@ class TestObservabilityProvider:
 
         provider = ObservabilityProvider()
         container = MagicMock()
+        container.has.return_value = False
         await provider.register(container)
 
         bound_abstracts = [c.args[0] for c in container.singleton.call_args_list]
@@ -224,6 +225,7 @@ class TestObservabilityProvider:
             return None
 
         container = MagicMock()
+        container.has.return_value = False
         container.singleton = capture_singleton
 
         await provider.register(container)
@@ -269,9 +271,52 @@ class TestObservabilityProvider:
 
         provider = ObservabilityProvider()
         container = MagicMock()
+        container.has.return_value = False
         await provider.register(container)
 
         assert container.singleton.call_count == 6
+
+    @pytest.mark.asyncio
+    async def test_skips_tokens_a_real_implementation_already_holds(self) -> None:
+        """Fallback bindings must not overwrite an already-registered token.
+
+        The container keeps the last registration; an unconditional register
+        here let composition order decide the winner, and nested module graphs
+        can land the no-op *after* a real implementation.
+        """
+        from quadkit.observability.di.sub_providers.observability import (
+            ObservabilityProvider,
+        )
+
+        provider = ObservabilityProvider()
+        container = MagicMock()
+        container.has.return_value = True
+        await provider.register(container)
+
+        assert container.singleton.call_count == 0
+
+    @pytest.mark.asyncio
+    async def test_only_missing_tokens_are_filled(self) -> None:
+        """A partially populated container gets the remaining five no-ops."""
+        from quadkit.observability.di.sub_providers.observability import (
+            ObservabilityProvider,
+        )
+
+        provider = ObservabilityProvider()
+        container = MagicMock()
+        container.has.side_effect = (
+            lambda service_type: service_type is MetricsCollectorProtocol
+        )
+        await provider.register(container)
+
+        bound_abstracts = [c.args[0] for c in container.singleton.call_args_list]
+        assert bound_abstracts == [
+            MetricsRecorderProtocol,
+            MetricsFactoryProtocol,
+            TracerProtocol,
+            HealthCheckRegistryProtocol,
+            HealthCheckProtocol,
+        ]
 
 
 class TestPackageExports:

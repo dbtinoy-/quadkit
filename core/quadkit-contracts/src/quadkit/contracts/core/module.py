@@ -1,7 +1,7 @@
 """Module protocol definitions for the Quadkit framework.
 
 These protocols define the structural contracts for modules at the
-contract layer.  External packages (``quadkit-web``, ``the optional provider``,
+contract layer.  External packages (``quadkit-web``, ``quadkit-sql``,
 etc.) can type-hint against these protocols without importing
 ``quadkit`` core.
 

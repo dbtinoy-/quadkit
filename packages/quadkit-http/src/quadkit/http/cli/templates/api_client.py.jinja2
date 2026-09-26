@@ -1,0 +1,189 @@
+"""{{ client_name }} API client.
+
+This module provides a client for interacting with the {{ client_name }} API.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from quadkit.contracts.web import HttpResponse
+from quadkit.http import BaseURLHTTPClient
+from quadkit.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class {{ client_name }}Client:
+    """Client for the {{ client_name }} API.
+
+    Wraps :class:`~quadkit.http.BaseURLHTTPClient` which provides connection
+    pooling, base-URL resolution, default headers, and retry/circuit-breaker
+    support.  Responses are framework-owned :class:`~quadkit.contracts.web.HttpResponse`
+    objects, so no transport library leaks into calling code.
+    """
+
+    def __init__(
+        self,
+        base_url: str,
+        api_key: str | None = None,
+        timeout: float = 30.0,
+    ) -> None:
+        """Initialize the API client.
+
+        Args:
+            base_url: Base URL for the API.
+            api_key: Optional API key sent as a Bearer token.
+            timeout: Request timeout in seconds.
+        """
+        self.base_url = base_url.rstrip("/")
+        self.api_key = api_key
+        self.timeout = timeout
+
+        headers = {"Authorization": f"Bearer {api_key}"} if api_key else None
+        self._client = BaseURLHTTPClient(
+            base_url=self.base_url,
+            headers=headers,
+            timeout=timeout,
+            name="{{ client_name_snake }}",
+        )
+
+    async def __aenter__(self) -> "{{ client_name }}Client":
+        """Enter async context; the underlying client initializes lazily."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object,
+    ) -> None:
+        """Close the underlying HTTP client on context exit."""
+        await self.close()
+
+    async def close(self) -> None:
+        """Close the HTTP client and release all connections."""
+        await self._client.close()
+
+    # =========================================================================
+    # API Methods
+    # =========================================================================
+    # Add your API methods here. Examples:
+    #
+    # async def get_user(self, user_id: str) -> dict[str, Any]:
+    #     """Get a user by ID."""
+    #     response = await self._request("GET", f"/users/{user_id}")
+    #     return response.json or {}
+    #
+    # async def list_users(self, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
+    #     """List users with pagination."""
+    #     response = await self._request(
+    #         "GET", "/users", params={"limit": limit, "offset": offset}
+    #     )
+    #     return response.json or []
+    #
+    # async def create_user(self, data: dict[str, Any]) -> dict[str, Any]:
+    #     """Create a new user."""
+    #     response = await self._request("POST", "/users", json=data)
+    #     return response.json or {}
+    #
+    # async def update_user(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
+    #     """Update an existing user."""
+    #     response = await self._request("PATCH", f"/users/{user_id}", json=data)
+    #     return response.json or {}
+    #
+    # async def delete_user(self, user_id: str) -> None:
+    #     """Delete a user."""
+    #     await self._request("DELETE", f"/users/{user_id}")
+
+    # =========================================================================
+    # Helper Methods
+    # =========================================================================
+
+    async def _request(
+        self,
+        method: str,
+        endpoint: str,
+        **kwargs: Any,
+    ) -> HttpResponse:
+        """Make an HTTP request with error handling.
+
+        Args:
+            method: HTTP method (GET, POST, PUT, PATCH, DELETE).
+            endpoint: API endpoint path (relative to ``base_url``).
+            **kwargs: Additional arguments forwarded to the HTTP client.
+
+        Returns:
+            The framework HTTP response.
+
+        Raises:
+            {{ client_name }}APIError: If the API returns an error status.
+        """
+        try:
+            response = await self._client.request(method, endpoint, **kwargs)
+            if response.status >= 400:
+                raise {{ client_name }}APIError(
+                    message=f"API request failed: {response.status}",
+                    status_code=response.status,
+                    response=response,
+                )
+            return response
+        except {{ client_name }}APIError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("{{ client_name_snake }}_request_error", method=method)
+            raise {{ client_name }}APIError(
+                message=f"Request failed: {exc}",
+                status_code=None,
+                response=None,
+            ) from exc
+
+
+class {{ client_name }}APIError(Exception):
+    """Exception raised when the {{ client_name }} API returns an error."""
+
+    def __init__(
+        self,
+        message: str,
+        status_code: int | None,
+        response: HttpResponse | None,
+    ) -> None:
+        """Initialize the error.
+
+        Args:
+            message: Error message.
+            status_code: HTTP status code.
+            response: The response object if available.
+        """
+        super().__init__(message)
+        self.message = message
+        self.status_code = status_code
+        self.response = response
+
+
+# =============================================================================
+# Dependency Injection
+# =============================================================================
+
+def create_{{ client_name_snake }}_client(
+    base_url: str,
+    api_key: str | None = None,
+    timeout: float = 30.0,
+) -> {{ client_name }}Client:
+    """Create a {{ client_name }} client instance.
+
+    This function can be used with Quadkit's dependency injection.
+
+    Args:
+        base_url: Base URL for the API.
+        api_key: Optional API key.
+        timeout: Request timeout.
+
+    Returns:
+        Configured {{ client_name }}Client instance.
+    """
+    return {{ client_name }}Client(
+        base_url=base_url,
+        api_key=api_key,
+        timeout=timeout,
+    )

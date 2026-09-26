@@ -18,8 +18,8 @@ class AlertDispatcherProtocol(Protocol):
     """Protocol for dispatching operational alerts.
 
     Implementations route alerts to notification channels (logging,
-    PagerDuty, Slack, etc.).  ``the optional provider`` ships a built-in
-    :class:`~the optional provider module` that writes
+    PagerDuty, Slack, etc.).  ``quadkit-monitor`` ships a built-in
+    :class:`~quadkit.monitor.alerts.LoggingAlertDispatcher` that writes
     alerts to the structured logger.
 
     Example::
@@ -126,7 +126,7 @@ class MetricsRecorderProtocol(Protocol):
 
 @runtime_checkable
 class MetricsFactoryProtocol(Protocol):
-    """Create metric instruments. Extended interface for the optional provider."""
+    """Create metric instruments. Extended interface for quadkit-monitor."""
 
     def register_metric(self, metric: MetricProtocol) -> None:
         """Register an existing metric instrument.
@@ -257,7 +257,7 @@ class MetricsBackendProtocol(Protocol):
 class MetricsCollectorProtocol(
     MetricsRecorderProtocol, MetricsFactoryProtocol, Protocol
 ):
-    """Full metrics capability. Implemented by the optional provider.
+    """Full metrics capability. Implemented by quadkit-monitor.
 
     Combines recording capabilities (increment, gauge, histogram) with
     factory capabilities (create_counter, create_gauge, create_histogram).

@@ -77,11 +77,14 @@ production deployment withholds them until it opts in with
 [secure configuration](../security/secure-configuration.md).
 
 One honest note about `/health`: it reports the readiness of the
-components the framework knows about. On a bare web-only app it answers
-`503` and tells you exactly why — the response body lists each
-component, for example `database: "Database provider not configured"`.
-Add providers for the services you use and make them reachable, and the
-probe turns green. Your own routes, like `/hello`, are unaffected.
+components you actually configured. On a bare web-only app nothing is
+registered, so it answers `200` with `database` and `redis` marked
+`unknown` and a reason beside each — `"No database provider is registered"`.
+A component that is absent is not a component that is broken, and a probe
+that cannot tell those apart restarts healthy services. Register a provider
+and the same component becomes a real check: reachable answers `200`/`healthy`,
+unreachable answers `503`/`unhealthy` with the error. Your own routes, like
+`/hello`, are unaffected either way.
 
 ## What just happened
 

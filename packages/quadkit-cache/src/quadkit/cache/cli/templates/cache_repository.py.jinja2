@@ -1,0 +1,186 @@
+"""{{ entity_name }} repository with caching.
+
+This module provides a cached repository that wraps an underlying data
+repository and applies the cache-aside pattern:
+
+1. On read   – return the cached value when present; fall back to the
+               underlying repository on a cache miss and populate the cache.
+2. On write  – delegate to the underlying repository, then invalidate the
+               affected cache keys so stale data is never served.
+"""
+
+from __future__ import annotations
+
+from dataclasses import asdict, dataclass
+
+from quadkit.cache import CacheService
+from quadkit.contracts.data import RepositoryProtocol
+
+
+@dataclass
+class {{ entity_name }}Entity:
+    """Data model for the {{ entity_name }} domain object."""
+{% for field in fields %}
+    {{ field.name }}: {{ field.type }}
+{% endfor %}
+
+
+class {{ entity_name }}Repository:
+    """Cached repository for {{ entity_name }}.
+
+    Wraps any ``RepositoryProtocol[{{ entity_name }}Entity]`` implementation and
+    adds a transparent cache layer using ``CacheService``.
+
+    Cache-aside read flow
+    ---------------------
+    ``get_by_id`` and ``list_all`` first probe the cache.  On a miss they
+    delegate to the underlying repository, store the result, and return it.
+
+    Write-through invalidation
+    --------------------------
+    ``save`` and ``delete`` update the underlying repository first, then
+    delete the affected item key **and** the list-all key so subsequent
+    reads always reflect the new state.
+    """
+
+    CACHE_KEY_ALL = "{{ repo_name_snake }}:all"
+    CACHE_KEY_ITEM = "{{ repo_name_snake }}:item:"
+    CACHE_TTL = 300  # seconds; override per-instance as needed
+
+    def __init__(
+        self,
+        repository: RepositoryProtocol[{{ entity_name }}Entity],
+        cache: CacheService,
+    ) -> None:
+        """Initialise the cached repository.
+
+        Args:
+            repository: Underlying data repository that performs real I/O.
+            cache: Cache service used for read-through and invalidation.
+        """
+        self._repository = repository
+        self._cache = cache
+
+    # ------------------------------------------------------------------
+    # Read operations
+    # ------------------------------------------------------------------
+
+    async def get_by_id(
+        self, {{ pk_param }}: {{ pk_type }}
+    ) -> {{ entity_name }}Entity | None:
+        """Return the entity with the given primary key, using the cache.
+
+        Args:
+            {{ pk_param }}: Primary-key value (``{{ pk_name }}``) of the entity.
+
+        Returns:
+            The entity when found, ``None`` otherwise.
+        """
+        cache_key = f"{self.CACHE_KEY_ITEM}{{ '{' }}{{ pk_param }}{{ '}' }}"
+
+        cached = await self._cache.get(cache_key)
+        if cached is not None:
+            return {{ entity_name }}Entity(**cached)
+
+        entity = await self._repository.get({{ pk_param }})
+        if entity is not None:
+            await self._cache.set(
+                key=cache_key,
+                value=asdict(entity),
+                ttl=self.CACHE_TTL,
+            )
+        return entity
+
+    async def list_all(self) -> list[{{ entity_name }}Entity]:
+        """Return all entities, using the cache.
+
+        Returns:
+            List of all {{ entity_name }} entities.
+        """
+        cached = await self._cache.get(self.CACHE_KEY_ALL)
+        if cached is not None:
+            return [{{ entity_name }}Entity(**item) for item in cached]
+
+        entities = await self._repository.list()
+        await self._cache.set(
+            key=self.CACHE_KEY_ALL,
+            value=[asdict(e) for e in entities],
+            ttl=self.CACHE_TTL,
+        )
+        return entities
+
+    # ------------------------------------------------------------------
+    # Write operations (delegate → invalidate)
+    # ------------------------------------------------------------------
+
+    async def save(
+        self, entity: {{ entity_name }}Entity
+    ) -> {{ entity_name }}Entity:
+        """Create or update an entity and invalidate its cache entries.
+
+        ``save`` maps to ``RepositoryProtocol.save`` which handles both
+        insert and update semantics depending on whether the entity already
+        has a primary-key value.
+
+        Args:
+            entity: Entity to persist.
+
+        Returns:
+            The saved entity as returned by the underlying repository.
+        """
+        saved = await self._repository.save(entity)
+        await self._cache.delete(
+            f"{self.CACHE_KEY_ITEM}{{ '{' }}saved.{{ pk_name }}{{ '}' }}"
+        )
+        await self._cache.delete(self.CACHE_KEY_ALL)
+        return saved
+
+    async def delete(self, {{ pk_param }}: {{ pk_type }}) -> bool:
+        """Delete an entity by primary key and invalidate its cache entries.
+
+        Args:
+            {{ pk_param }}: Primary-key value (``{{ pk_name }}``) of the entity.
+
+        Returns:
+            ``True`` if the entity was deleted, ``False`` if it was not found.
+        """
+        deleted = await self._repository.delete({{ pk_param }})
+        await self._cache.delete(
+            f"{self.CACHE_KEY_ITEM}{{ '{' }}{{ pk_param }}{{ '}' }}"
+        )
+        await self._cache.delete(self.CACHE_KEY_ALL)
+        return deleted
+
+    # ------------------------------------------------------------------
+    # Explicit cache invalidation helpers
+    # ------------------------------------------------------------------
+
+    async def invalidate(self, {{ pk_param }}: {{ pk_type }}) -> None:
+        """Evict the cache entry for a single entity.
+
+        Args:
+            {{ pk_param }}: Primary-key value (``{{ pk_name }}``) of the entity.
+        """
+        await self._cache.delete(
+            f"{self.CACHE_KEY_ITEM}{{ '{' }}{{ pk_param }}{{ '}' }}"
+        )
+
+    async def invalidate_all(self) -> None:
+        """Evict the list-all cache entry."""
+        await self._cache.delete(self.CACHE_KEY_ALL)
+
+    # ------------------------------------------------------------------
+    # Add domain-specific query methods here.
+    # Example:
+    #
+    #   async def get_by_name(self, name: str) -> {{ entity_name }}Entity | None:
+    #       cache_key = f"{{ repo_name_snake }}:name:{name}"
+    #       cached = await self._cache.get(cache_key)
+    #       if cached is not None:
+    #           return {{ entity_name }}Entity(**cached)
+    #       entity = await self._repository.get_by_name(name)
+    #       if entity is not None:
+    #           await self._cache.set(cache_key, asdict(entity), ttl=self.CACHE_TTL)
+    #       return entity
+    # ------------------------------------------------------------------
+

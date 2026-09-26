@@ -1,0 +1,19 @@
+"use strict";
+const $ = (id) => document.getElementById(id);
+function esc(v) { const el = document.createElement("span"); el.textContent = String(v ?? ""); return el.innerHTML; }
+async function read(r) { const d = await r.json().catch(() => ({})); if (!r.ok || d.error) throw new Error(d.error || `HTTP ${r.status}`); return d; }
+async function load() {
+  try {
+    const d = await read(await fetch("/api/artifacts", { cache: "no-store" }));
+    $("vault-stats").textContent = `${d.count} object${d.count === 1 ? "" : "s"} · metadata from the active driver`;
+    $("artifacts").innerHTML = d.artifacts.length ? d.artifacts.map((item) => `<article class="artifact-row"><div><strong>${esc(item.path)}</strong><small>${esc(item.content_type)} · ${item.size} bytes · ${esc(item.metadata.owner || "unknown")}</small></div><div class="row-actions"><button type="button" data-preview="${encodeURIComponent(item.path)}">Preview</button><button type="button" data-access="${encodeURIComponent(item.path)}">Access</button><button type="button" data-delete="${encodeURIComponent(item.path)}" class="danger">Delete</button></div></article>`).join("") : `<p class="muted">No artifacts yet. Upload one above.</p>`;
+  } catch (error) { $("artifacts").innerHTML = `<p class="error">${esc(error.message)}</p>`; }
+}
+async function upload(event) {
+  event.preventDefault();
+  try { const d = await read(await fetch("/api/artifacts/upload", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: $("name").value, content_type: $("content-type").value, owner: $("owner").value, content: $("content").value }) })); $("upload-result").textContent = `Uploaded ${d.artifact.path} · ${d.artifact.size} bytes`; await load(); } catch (error) { $("upload-result").textContent = error.message; }
+}
+async function preview(path) { try { const d = await read(await fetch(`/api/artifacts/content/${path}`)); $("preview").innerHTML = `<div class="meta"><strong>${esc(d.metadata.path)}</strong><span>${esc(d.metadata.content_type)} · ${d.metadata.size} bytes</span></div><pre>${esc(d.content)}</pre>`; } catch (error) { $("preview").innerHTML = `<p class="error">${esc(error.message)}</p>`; } }
+async function access(path) { try { const d = await read(await fetch(`/api/artifacts/access/${path}`)); $("access").innerHTML = `<div class="access-card"><strong>Driver access</strong><span>URL: ${esc(d.public_url)}</span><span>${d.signed_access ? `Signed URL: ${esc(d.signed_url)}` : `Signed access unavailable: ${esc(d.message)}`}</span></div>`; } catch (error) { $("access").innerHTML = `<p class="error">${esc(error.message)}</p>`; } }
+async function remove(path) { if (!confirm(`Delete ${decodeURIComponent(path)}?`)) return; try { await read(await fetch(`/api/artifacts/${path}`, { method: "DELETE" })); $("upload-result").textContent = `Deleted ${decodeURIComponent(path)}`; await load(); } catch (error) { $("upload-result").textContent = error.message; } }
+$("file").addEventListener("change", async (event) => { const file = event.target.files?.[0]; if (!file) return; try { $("name").value = file.name; const option = [...$("content-type").options].find((item) => item.value === file.type); if (option) $("content-type").value = option.value; $("content").value = await file.text(); $("upload-result").textContent = `Loaded ${file.name}; review the fields, then upload.`; } catch (error) { $("upload-result").textContent = `Could not read ${file.name}: ${error.message}`; } }); $("upload-form").addEventListener("submit", upload); $("refresh").addEventListener("click", load); $("artifacts").addEventListener("click", (event) => { const b = event.target.closest("button"); if (!b) return; if (b.dataset.preview) preview(b.dataset.preview); if (b.dataset.access) access(b.dataset.access); if (b.dataset.delete) remove(b.dataset.delete); }); load(); setInterval(load, 8000);

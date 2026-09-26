@@ -70,7 +70,7 @@ class AdminContributorProtocol(Protocol):
 
     @property
     def package_source(self) -> str:
-        """Python package name that provides this contributor (e.g. 'the optional provider')."""
+        """Python package name that provides this contributor (e.g. 'quadkit-cache')."""
         ...
 
     @property

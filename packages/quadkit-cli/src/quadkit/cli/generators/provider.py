@@ -20,9 +20,9 @@ class ProviderGenerator(GeneratorBase):
 
     name = "provider"
     description = "Generate provider"
-    default_output_dir = "src/providers"
+    default_output_dir = "src/di"
 
-    def __init__(self, output_dir: str | Path = "src/providers") -> None:
+    def __init__(self, output_dir: str | Path = "src/di") -> None:
         super().__init__(output_dir=output_dir)
 
     def generate(

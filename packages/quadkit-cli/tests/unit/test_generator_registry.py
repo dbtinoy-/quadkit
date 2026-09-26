@@ -37,7 +37,7 @@ def _build_adapter_map() -> dict[str, GeneratorAdapter]:
     from quadkit.cli.generators.test import TestGenerator
 
     pairs: list[tuple[type, str]] = [
-        (ProviderGenerator, "src/providers"),
+        (ProviderGenerator, "src/di"),
         (TestGenerator, "tests/unit"),
     ]
     result: dict[str, GeneratorAdapter] = {}

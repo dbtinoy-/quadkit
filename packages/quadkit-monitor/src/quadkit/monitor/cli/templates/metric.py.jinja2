@@ -1,0 +1,38 @@
+"""{{ metric_name }} metric definition.
+
+Generated scaffold — record this metric from your services and let the
+monitoring backend export it.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(slots=True)
+class {{ metric_name }}Metric:
+    """Custom application metric: ``{{ metric_name_snake }}``."""
+
+    name = "{{ metric_name_snake }}"
+    description = "The {{ metric_name }} metric"
+    unit = "ms"
+    labels: dict[str, str] = field(default_factory=dict)
+
+    def record(self, value: float, **labels: str) -> None:
+        """Record one observation.
+
+        Args:
+            value: Measured value.
+            **labels: Dimension labels attached to the observation.
+        """
+        merged = {**self.labels, **labels}
+
+        # TODO: forward to the metrics backend resolved from the container.
+        # Example:
+        #   metrics = await container.resolve(MetricsProtocol)
+        #   metrics.record(self.name, value, labels=merged)
+        _ = value, merged
+
+    def observe_duration(self, seconds: float, **labels: str) -> None:
+        """Record a duration observation in milliseconds."""
+        self.record(seconds * 1000.0, **labels)

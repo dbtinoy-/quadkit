@@ -1,0 +1,158 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Every key below exists in quadkit.events.config.EventsConfig; the full field
+# reference (types, defaults, env vars) is in docs/CONFIGURATION.md.
+# Environment variable prefix: QK_EVENTS__ (nested keys join with __).
+
+events:
+  name: "events"
+  enabled: true
+  env: null  # development | staging | production | test (falls back to QK_ENV)
+  debug: false
+
+  # Event store: memory | postgres | mongodb | sqlite
+  event_store_backend: "memory"
+
+  # In-memory store (the default, no external service)
+  memory:
+    max_events_per_stream: 10000
+    enable_snapshots: true
+
+  # Postgres event store — used when event_store_backend is "postgres"
+  postgres:
+    dsn: null  # e.g. ${QK_EVENTS__POSTGRES__DSN}
+    pool_min_size: 1
+    pool_max_size: 10
+    command_timeout: 60.0
+    events_table: "domain_events"
+    snapshots_table: "snapshots"
+    auto_create_tables: true
+
+  # MongoDB event store — used when event_store_backend is "mongodb"
+  mongodb:
+    connection_string: "${QK_EVENTS__MONGODB__CONNECTION_STRING}"
+    database_name: "events"
+    events_collection: "domain_events"
+    snapshots_collection: "snapshots"
+    max_pool_size: 10
+    server_selection_timeout: 30000
+
+  # SQLite event store — used when event_store_backend is "sqlite"
+  sqlite:
+    database: "./events.db"
+    pragmas: {}
+    wal_mode: true
+    journal_mode: "WAL"
+    events_table: "events"
+    snapshots_table: "snapshots"
+    auto_create_tables: true
+
+  # Automatic snapshots of long event streams
+  snapshots:
+    enabled: true
+    strategy: "event_count"  # event_count | time
+    event_count_threshold: 100
+    time_threshold_seconds: 3600
+    max_snapshots_per_aggregate: 5
+
+  # Command bus
+  command_bus:
+    max_retries: 3
+    retry_delay_seconds: 1.0
+    timeout_seconds: 30.0
+    enable_validation: true
+    enable_logging: true
+    enable_metrics: true
+
+  # Query bus
+  query_bus:
+    timeout_seconds: 30.0
+    enable_logging: true
+    enable_metrics: true
+
+  # Event bus dispatch
+  event_bus:
+    max_concurrent_handlers: 10
+    handler_timeout_seconds: 30.0
+    retry_failed_handlers: true
+    max_handler_retries: 3
+    enable_dead_letter: true
+    allow_no_handlers: true
+    parallel_dispatch: true
+    continue_on_error: true
+    max_queue_per_subscriber: 1000
+
+  # Sagas (long-running process managers)
+  saga:
+    default_timeout_seconds: 300.0
+    max_retries_per_step: 3
+    retry_delay_seconds: 1.0
+    enable_compensation: true
+    persist_state: true
+    cleanup_completed_after_hours: 24
+
+  # Projections (read-model builders)
+  projection:
+    checkpoint_interval: 100
+    batch_size: 100
+    max_catch_up_events: 10000
+    rebuild_batch_size: 1000
+    enable_parallel_projections: true
+
+  # Live event streaming to subscribers
+  streaming:
+    buffer_size: 1000
+    batch_size: 100
+    poll_interval_ms: 100
+    max_subscribers: 100
+    enable_websocket: true
+    websocket_ping_interval: 30
+
+  # Alert when two instances run different event schema versions
+  version_skew_alerts_enabled: true
+
+  # Bus middleware
+  logging_middleware:
+    enabled: true
+    log_level: "INFO"
+    include_payload: false
+    max_payload_length: 1000
+  validation_middleware:
+    enabled: true
+    strict_mode: true
+  transaction_middleware:
+    enabled: true
+    isolation_level: "READ_COMMITTED"
+    timeout_seconds: 30.0
+  retry_middleware:
+    enabled: true
+    max_retries: 3
+    initial_delay_seconds: 0.1
+    max_delay_seconds: 10.0
+    exponential_base: 2.0
+  metrics_middleware:
+    enabled: true
+    prefix: "events"
+    include_histograms: true
+    histogram_buckets: [0.005, 0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1.0, 2.5, 5.0, 10.0]
+
+  # Adapters for the cross-instance bus — declare the one you run
+  rabbitmq:
+    url: "${QK_EVENTS__RABBITMQ__URL}"
+    exchange_name: "events"
+    queue_prefix: "events"
+    prefetch_count: 10
+    durable: true
+    timeout: 30.0
+    reconnect_attempts: 3
+    reconnect_delay: 1.0
+    enable_logging: true
+  kafka:
+    bootstrap_servers: "${QK_EVENTS__KAFKA__BOOTSTRAP_SERVERS}"
+    topic_prefix: "events"
+    consumer_group: "events-consumers"
+    auto_offset_reset: "earliest"
+    enable_auto_commit: true
+    timeout: 30.0
+    reconnect_attempts: 3
+    reconnect_delay: 1.0
+    enable_logging: true

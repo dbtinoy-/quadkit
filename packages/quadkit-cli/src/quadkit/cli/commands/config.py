@@ -78,6 +78,9 @@ def show(
             config_path = find_config()
             config_data = await load_config_yaml_async(config_path)
         except (ConfigNotFoundError, FileNotFoundError):
+            # Both are reachable here: find_config() raises the former, and
+            # the try also wraps the read, which can lose the file to a
+            # race after the walk.
             out.error(
                 "No application.yaml found in current directory or any parent.",
                 hint="Run `quadkit init` to create one.",
@@ -342,7 +345,10 @@ def env_cmd(
     async def _run() -> None:
         try:
             config_path = find_config()
-        except (ConfigNotFoundError, FileNotFoundError):
+        except ConfigNotFoundError:
+            # find_config() raises ConfigNotFoundError (a CliError), never
+            # FileNotFoundError: it walks candidates with ``.is_file()``. The
+            # old arm therefore never ran, and this message never printed.
             out.error("No application.yaml found")
             raise typer.Exit(1) from None
 
@@ -458,7 +464,10 @@ def env_example(
     async def _run() -> None:
         try:
             config_path = find_config()
-        except (ConfigNotFoundError, FileNotFoundError):
+        except ConfigNotFoundError:
+            # find_config() raises ConfigNotFoundError (a CliError), never
+            # FileNotFoundError: it walks candidates with ``.is_file()``. The
+            # old arm therefore never ran, and this message never printed.
             out.error("No application.yaml found")
             raise typer.Exit(1) from None
 

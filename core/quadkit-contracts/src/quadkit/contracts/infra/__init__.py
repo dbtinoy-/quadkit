@@ -7,6 +7,7 @@ caching, and task queue abstractions under a unified namespace.
 from __future__ import annotations
 
 from quadkit.contracts.infra.cache import (
+    CacheAdminProtocol,
     CacheBackendProtocol,
     CacheError,
     CacheKeyNotFoundError,
@@ -41,6 +42,7 @@ from quadkit.contracts.infra.tasks import (
 
 __all__ = [
     "AsyncStream",
+    "CacheAdminProtocol",
     "CacheBackendProtocol",
     "CacheError",
     "CacheKeyNotFoundError",

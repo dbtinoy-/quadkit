@@ -1,0 +1,287 @@
+"""AggregateRoot base class for event-sourced aggregates.
+
+An aggregate root is the entry point to an aggregate boundary and
+is responsible for ensuring invariants are maintained.
+"""
+
+from __future__ import annotations
+
+from abc import ABC
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, TypeVar
+from uuid import UUID, uuid4
+
+from quadkit.events.messages.event import Event
+from quadkit.events.types import Snapshot
+
+TEvent = TypeVar("TEvent", bound=Event)
+
+
+from quadkit.domain.models.aggregate import AggregateRoot as BaseAggregateRoot
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+
+class AggregateRoot(BaseAggregateRoot, ABC):
+    """Base class for event-sourced aggregates.
+
+    Aggregates:
+    - Maintain consistency boundaries
+    - Generate domain events on state changes
+    - Can be reconstructed from events (event sourcing)
+    - Support snapshotting for performance
+
+    Example:
+        ```python
+        class Order(AggregateRoot):
+            status: str = "draft"
+            items: list[OrderItem] = Field(default_factory=list)
+            total: Decimal = Decimal("0.00")
+
+            def add_item(self, product_id: str, quantity: int, price: Decimal):
+                if self.status != "draft":
+                    raise InvalidOperationError("Cannot modify non-draft order")
+
+                self._apply(ItemAddedEvent(
+                    order_id=self.id,
+                    product_id=product_id,
+                    quantity=quantity,
+                    price=price
+                ))
+
+            def _handle_item_added(self, event: ItemAddedEvent):
+                self.items.append(OrderItem(
+                    product_id=event.product_id,
+                    quantity=event.quantity,
+                    price=event.price
+                ))
+                self.total += event.price * event.quantity
+        ```
+    """
+
+    # version is inherited from BaseAggregateRoot dataclass but we ensure
+    # an attribute is present for plain-instance usage
+    version: int = 0
+
+    # timestamps are optional and may be managed externally; not relied on in tests
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+    # Replay flag - simple boolean, avoid Pydantic descriptors which break
+    # truthiness checks when this class is not a DomainModel.
+    _is_replaying: bool = False
+
+    # Metadata for propagation (MF-05)
+    _causation_id: UUID | None = None
+    _correlation_id: UUID | None = None
+
+    def __init__(self, id: UUID | None = None, **kwargs: Any) -> None:
+        """Initialise the aggregate, auto-generating a UUID id if none is given."""
+        entity_id = id if id is not None else uuid4()
+        super().__init__(id=entity_id)
+
+    # --- event-buffer helpers (bridge to core _pending_events) ---------------
+
+    def add_event(self, event: Any) -> None:
+        """Buffer a domain event for persistence, calling invariant checks first."""
+        self._check_invariants()
+        self._pending_events.append(event)
+
+    def pull_events(self) -> list[Any]:
+        """Return a copy of pending events without clearing them."""
+        return list(self._pending_events)
+
+    def clear_events(self) -> None:
+        """Discard all buffered events."""
+        self._pending_events.clear()
+
+    @property
+    def has_uncommitted_events(self) -> bool:
+        """True when there are buffered events awaiting persistence."""
+        return bool(self._pending_events)
+
+    def _check_invariants(self) -> None:
+        """Hook for subclasses to enforce domain invariants before adding events."""
+
+    def _apply(self, event: Event, is_new: bool = True) -> None:
+        """Apply an event to the aggregate.
+
+        This method:
+        1. Finds the appropriate event handler
+        2. Updates aggregate state
+        3. Tracks the event for persistence (if new)
+
+        Args:
+            event: The domain event to apply
+            is_new: Whether this is a new event (True) or replay (False)
+        """
+        # Find and call the event handler
+        handler = self._get_event_handler(type(event))
+        if handler:
+            handler(event)
+
+        # Track new events for persistence
+        if is_new and not self._is_replaying:
+            # Propagate causation/correlation IDs (MF-05)
+            if self._causation_id:
+                object.__setattr__(event, "causation_id", self._causation_id)
+            if self._correlation_id:
+                object.__setattr__(event, "correlation_id", self._correlation_id)
+
+            self.add_event(event)  # Use inherited method
+            object.__setattr__(self, "version", self.version + 1)
+            self.updated_at = datetime.now(UTC)
+
+    def _set_context(
+        self, causation_id: UUID | None, correlation_id: UUID | None = None
+    ) -> None:
+        """Set the execution context (MF-05).
+
+        This context will be attached to any new events generated by
+        the aggregate.
+
+        Args:
+            causation_id: The ID of the command or event that caused this action.
+            correlation_id: The ID of the original request/transaction.
+        """
+        self._causation_id = causation_id
+        if correlation_id:
+            self._correlation_id = correlation_id
+        elif causation_id:
+            # If no correlation ID, default to causation ID
+            self._correlation_id = correlation_id or causation_id
+
+    def _get_event_handler(
+        self,
+        event_type: type[Event],
+    ) -> Callable[[Event], Any] | None:
+        """Get the handler method for an event type.
+
+        Follows naming convention: _handle_{event_name} or _on_{event_name}
+
+        Args:
+            event_type: The event class
+
+        Returns:
+            Handler method if found
+        """
+        # Try different naming conventions
+        event_name = event_type.__name__
+
+        # Convention: _handle_OrderCreatedEvent -> _handle_order_created
+        snake_case = self._to_snake_case(event_name.replace("Event", ""))
+        handler_names = [
+            f"_handle_{snake_case}",
+            f"_on_{snake_case}",
+            f"_handle_{event_name}",
+            f"_on_{event_name}",
+            f"handle_{snake_case}",
+            f"on_{snake_case}",
+        ]
+
+        from typing import cast
+
+        for name in handler_names:
+            handler = getattr(self, name, None)
+            if handler and callable(handler):
+                return cast("Callable[[Event], Any]", handler)
+
+        return None
+
+    @staticmethod
+    def _to_snake_case(name: str) -> str:
+        """Convert CamelCase to snake_case."""
+        import re
+
+        s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+        return re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
+
+    def get_pending_events(self) -> list[Event]:
+        """Get events pending persistence.
+
+        Returns:
+            List of uncommitted events
+        """
+        from typing import cast
+
+        return cast("list[Event]", self.pull_events())
+
+    def clear_pending_events(self) -> None:
+        """Clear pending events after persistence."""
+        self.clear_events()
+
+    def load_from_history(self, events: list[Event]) -> None:
+        """Reconstruct aggregate state from event history.
+
+        This is used during aggregate loading to replay all events
+        and rebuild the current state.
+
+        Args:
+            events: Historical events to replay
+        """
+        self._is_replaying = True
+        try:
+            for event in events:
+                self._apply(event, is_new=False)
+                self.version += 1
+        finally:
+            self._is_replaying = False
+
+    def load_from_snapshot(self, snapshot: Snapshot) -> None:
+        """Restore aggregate state from a snapshot.
+
+        Args:
+            snapshot: The snapshot to restore from
+        """
+        self.version = snapshot.version
+
+        # Restore state from snapshot data
+        state = snapshot.state
+        for key, value in state.items():
+            if hasattr(self, key):
+                setattr(self, key, value)
+
+    def create_snapshot(self) -> Snapshot:
+        """Create a snapshot of current aggregate state.
+
+        Returns:
+            Snapshot instance
+        """
+        # Get state dict excluding private attributes and events
+        # fall back when model_dump not available
+        if hasattr(self, "model_dump"):
+            state = self.model_dump(exclude={"domain_events", "_is_replaying"})
+            # include any additional attributes not covered by model_dump
+            for k, v in self.__dict__.items():
+                if k not in state:
+                    state[k] = v
+        else:
+            state = {
+                k: v
+                for k, v in self.__dict__.items()
+                if k not in {"_domain_events", "_is_replaying"}
+            }
+
+        return Snapshot(
+            aggregate_id=self.id,
+            aggregate_type=self.__class__.__name__,
+            version=self.version,
+            state=state,
+        )
+
+
+class VersionedAggregateRoot(AggregateRoot):
+    """AggregateRoot with explicit version tracking for optimistic locking.
+
+    Use this when you need strict version checking during persistence.
+    """
+
+    expected_version: int | None = None
+
+    def set_expected_version(self, version: int) -> None:
+        """Set the expected version for optimistic concurrency check."""
+        self.expected_version = version
+
+
+__all__ = ["AggregateRoot", "VersionedAggregateRoot"]

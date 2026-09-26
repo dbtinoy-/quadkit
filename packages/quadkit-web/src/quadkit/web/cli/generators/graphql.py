@@ -109,7 +109,7 @@ class GraphQLGenerator(GeneratorBase):
             {
                 "name": name,
                 "class_name": self._to_pascal_case(name),
-                "singular_name": type_name,
+                "singular_name": self._singularize(type_name),
                 "resource_name": resource_name,
                 "doc": doc,
                 "fields": prepared_fields,
@@ -128,10 +128,43 @@ class GraphQLGenerator(GeneratorBase):
         return self.finalize(self.commit(resolve_options(dry_run=dry_run, force=force)))
 
     @staticmethod
+    def _singularize(value: str) -> str:
+        """Best-effort singular of an English noun, for a field name.
+
+        The by-id query and the list query must not share a name: two
+        ``async def`` methods with the same name in one class body are an
+        F811 redefinition, and Strawberry then sees one field where the
+        generator meant two. Given ``orders`` the list field is ``orders``
+        and the by-id field is ``order``. A real inflection library is not
+        worth a dependency for a scaffold; the common endings are handled and
+        anything unrecognised is returned unchanged, which is what a singular
+        input produces anyway.
+        """
+        if value.endswith("ies") and not value.endswith(("eies", "aies")):
+            return f"{value[:-3]}y"
+        for ending in ("ches", "shes", "xes", "zes", "ses"):
+            if value.endswith(ending):
+                return value[:-2]
+        if value.endswith("s") and not value.endswith("ss"):
+            return value[:-1]
+        return value
+
+    @staticmethod
     def _pluralize(value: str) -> str:
+        """Best-effort plural, mirroring `_singularize`.
+
+        The sibilant endings take ``-es`` (``box`` → ``boxes``, ``church`` →
+        ``churches``) rather than being left alone or suffixed with ``-s``:
+        the plural is the list field's *name*, so ``boxs`` would be the field
+        a client queries.
+        """
         if value.endswith("y") and value[-2:-1] not in {"a", "e", "i", "o", "u"}:
             return f"{value[:-1]}ies"
+        if value.endswith(("ss", "x", "z", "ch", "sh")):
+            return f"{value}es"
         if value.endswith("s"):
+            # Already plural: ``orders`` stays ``orders``. Singular nouns
+            # ending in -ss took the branch above.
             return value
         return f"{value}s"
 

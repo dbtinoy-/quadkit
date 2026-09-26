@@ -27,7 +27,7 @@ class TestGenProvider:
             ],
         )
         assert result.exit_code == 0
-        created = temp_project / "src/test_project/shared/providers/my_awesome_provider.py"
+        created = temp_project / "src/test_project/shared/di/my_awesome_provider.py"
         # The console hard-wraps a long path mid-word, so compare with all
         # whitespace removed rather than on where rich broke the line.
         assert "".join(f"Created: {created}".split()) in "".join(
@@ -47,7 +47,7 @@ class TestGenProvider:
             ],
         )
         assert result.exit_code == 0
-        content = (temp_project / "src/test_project/shared/providers/my_awesome_provider.py").read_text()
+        content = (temp_project / "src/test_project/shared/di/my_awesome_provider.py").read_text()
         assert "class MyAwesomeProvider(Provider):" in content
 
     def test_gen_provider_is_valid_python(

@@ -1,0 +1,1 @@
+"""Tests for quadkit-auth admin widget handlers."""

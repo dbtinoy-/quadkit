@@ -49,6 +49,7 @@ from quadkit.contracts.web.http_protocols import (
 from quadkit.contracts.web.http_types import ServiceInfo
 from quadkit.contracts.web.protocols import (
     BackgroundTaskRunnerProtocol,
+    ConditionalWebContributorProtocol,
     CORSPolicyProtocol,
     CSRFProtectionProtocol,
     ExceptionFilterProtocol,
@@ -93,6 +94,7 @@ __all__ = [
     "BackgroundTaskRunnerProtocol",
     "CORSPolicyProtocol",
     "CSRFProtectionProtocol",
+    "ConditionalWebContributorProtocol",
     "ConnectMetricsCollectorProtocol",
     "ControllerProtocol",
     "ErrorDetail",

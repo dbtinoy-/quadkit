@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Register · Auth Web</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="register">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth Web</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>Register</h1>
+  <p class="muted">Create a new account</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+  <div class="card">
+    <p id="error" class="error"></p>
+    <form id="register-form">
+      <label for="reg-name">Name</label>
+      <input id="reg-name" name="name" placeholder="name" minlength="3" required />
+      <label for="reg-email">Email</label>
+      <input id="reg-email" name="email" type="email" placeholder="email" required />
+      <label for="reg-password">Password</label>
+      <input id="reg-password" name="password" type="password" placeholder="password (8+ chars, mixed case)" required />
+      <label for="reg-confirm">Confirm password</label>
+      <input id="reg-confirm" name="confirm_password" type="password" placeholder="confirm password" required />
+      <button type="submit">Create account</button>
+    </form>
+    <div class="auth-footer"><p class="muted">Already registered? <a href="/login">Log in</a></p></div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+</div>
+  <script>
+    document.getElementById("register-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      showError("");
+      const submit = event.target.querySelector("button[type=submit]");
+      submit.disabled = true;
+      const form = new FormData(event.target);
+      try {
+        const result = await api("/api/register", {
+          method: "POST",
+          body: JSON.stringify(Object.fromEntries(form)),
+        });
+        if (result.ok) {
+          window.location.href = "/profile";
+        } else {
+          showError(result.body.error || result.body.detail || "Registration failed");
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</div>
+</main>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

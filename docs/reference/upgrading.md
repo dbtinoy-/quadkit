@@ -9,7 +9,7 @@ tiers, deprecation windows); the compatibility rules live in
 
 1. **Read the release notes** for every version you cross — deprecations
    are announced there first, before removal.
-2. **Bump all five distributions together.** Lockstep releases mean mixing
+2. **Bump all thirteen distributions together.** Lockstep releases mean mixing
    versions is unsupported:
    ```bash
    pip install -U "quadkit==X.Y.Z" "quadkit-web==X.Y.Z" \

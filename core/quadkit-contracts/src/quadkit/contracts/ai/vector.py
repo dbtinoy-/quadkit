@@ -5,6 +5,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
+from quadkit.contracts.data.vector.filters import MetadataFilter
+
 if TYPE_CHECKING:
     from quadkit.contracts.core import HealthCheckResult
     from quadkit.contracts.core.result import Result
@@ -131,7 +133,7 @@ class DocumentVectorStoreProtocol(Protocol):
         query: list[float],
         *,
         top_k: int = 10,
-        filters: dict[str, Any] | None = None,
+        filters: MetadataFilter | None = None,
         score_threshold: float | None = None,
     ) -> Result[list[SearchResultProtocol], VectorError]:
         """Search for similar documents using a vector.
@@ -153,7 +155,7 @@ class DocumentVectorStoreProtocol(Protocol):
         query: str,
         *,
         top_k: int = 10,
-        filters: dict[str, Any] | None = None,
+        filters: MetadataFilter | None = None,
     ) -> Result[list[SearchResultProtocol], VectorError]:
         """Search for similar documents using text.
 

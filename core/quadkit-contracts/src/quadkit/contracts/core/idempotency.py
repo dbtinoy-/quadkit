@@ -14,16 +14,26 @@ if TYPE_CHECKING:
 class IdempotencyStoreProtocol(Protocol):
     """Protocol for storing and checking idempotency keys."""
 
-    async def get(self, key: str) -> Result[Any | None, IdempotencyError]:
+    async def get(self, key: str) -> Any | None:
         """Retrieve a stored result by idempotency key.
 
         Args:
             key: The idempotency key.
 
         Returns:
-            ``Ok(value)`` when a cached result exists.
-            ``Ok(None)`` when the key is not present or expired.
-            ``Err(IdempotencyError)`` on store failures.
+            The stored result, or ``None`` when the key is not present or
+            expired.  Store failures raise.
+
+        Note:
+            Implementations return the unwrapped value directly — this is the
+            shape implemented by every concrete store
+            (:class:`~the optional provider module`,
+            :class:`~the optional provider module`,
+            :class:`~the optional provider module`,
+            and the multimedia in-memory store) and consumed by
+            :class:`~the optional provider module`.
+            The previous revision declared a ``Result`` wrapper here that no
+            implementation ever returned.
         """
         ...
 
@@ -39,7 +49,7 @@ class IdempotencyStoreProtocol(Protocol):
         key: str,
         value: Any,
         ttl: float | None = None,
-    ) -> Result[None, IdempotencyError]:
+    ) -> None:
         """Store a result with an optional time-to-live.
 
         Args:
@@ -49,11 +59,11 @@ class IdempotencyStoreProtocol(Protocol):
         """
         ...
 
-    async def delete(self, key: str) -> Result[None, IdempotencyError]:
+    async def delete(self, key: str) -> None:
         """Remove an idempotency record by key."""
         ...
 
-    async def acquire(self, key: str, ttl: int) -> Result[bool, IdempotencyError]:
+    async def acquire(self, key: str, ttl: int) -> bool:
         """Atomically claim an idempotency key if it is not already held.
 
         Args:
@@ -61,9 +71,9 @@ class IdempotencyStoreProtocol(Protocol):
             ttl: Time-to-live in seconds for the claimed key.
 
         Returns:
-            ``Ok(True)`` if this caller should proceed.
-            ``Ok(False)`` if the key is already claimed.
-            ``Err(IdempotencyError)`` on store failures.
+            ``True`` if this caller should proceed.
+            ``False`` if the key is already claimed.
+            Store failures raise.
         """
         ...
 

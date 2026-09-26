@@ -175,6 +175,26 @@ class ContainerResolverProtocol(Protocol):
         """
         ...
 
+    def resolve_sync(self, service_type: type[T]) -> T:
+        """Synchronously resolve an already-instantiated singleton.
+
+        Intended for decorators and other synchronous contexts where starting
+        a coroutine is impossible, such as register-phase configuration reads
+        and sync message handlers. Only singletons already instantiated during
+        boot are resolvable through this method.
+
+        Args:
+            service_type: The service type to resolve.
+
+        Returns:
+            The resolved instance.
+
+        Raises:
+            UnresolvableDependencyError: If the service is not a singleton or
+                has not been instantiated yet.
+        """
+        ...
+
     async def call(
         self,
         func: Callable[..., Awaitable[T] | T],

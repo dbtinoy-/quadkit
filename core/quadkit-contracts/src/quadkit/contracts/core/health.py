@@ -75,7 +75,7 @@ class HealthCheckResult:
         if self.error:
             result["error"] = self.error
         if self.details:
-            result["details"] = self.details
+            result["details"] = _json_safe_details(self.details)
         if self.checked_at:
             result["checked_at"] = self.checked_at.isoformat()
         return result
@@ -178,6 +178,21 @@ class HealthCheckAggregatorProtocol(Protocol):
     async def run_startup(self, timeout: float = 5.0) -> AggregateHealthResult:
         """Run only startup checks and aggregate results."""
         ...
+
+
+def _json_safe_details(value: Any) -> Any:
+    """Recursively turn health-check details into JSON-compatible values."""
+    if isinstance(value, HealthCheckResult):
+        return value.to_dict()
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, StrEnum):
+        return value.value
+    if isinstance(value, dict):
+        return {str(key): _json_safe_details(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set, frozenset)):
+        return [_json_safe_details(item) for item in value]
+    return value
 
 
 # Canonical alias — infrastructure protocols should reference this name.

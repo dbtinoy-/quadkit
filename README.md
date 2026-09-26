@@ -67,15 +67,15 @@ Also available by default:
 
 ## why quadkit?
 
-Quadkit is built on **4 published packages** — a kit of four, installed
-à la carte: four to build, one optional to test.
+**Start with 4 packages.** That is the whole starter kit — the protocol
+layer, the container, an ASGI stack, and a generator for whatever you
+build next. You install only what you use, and it all fits in your head:
+contracts → core → web, with the CLI scaffolding the next project.
 
 ```mermaid
-graph TD
-    QC[quadkit-contracts<br/>protocols & types] --> Q[quadkit<br/>DI container, modules, config]
-    Q --> W[quadkit-web<br/>ASGI, controllers, routing]
-    Q --> CLI[quadkit-cli<br/>scaffolding & generators]
-    W --> APP[Your Application]
+graph LR
+    QC[quadkit-contracts] --> Q[quadkit] --> W[quadkit-web] --> APP[Your&nbsp;Application]
+    Q --> CLI[quadkit-cli]
 
     style QC fill:#166534,stroke:#22c55e,color:#fff
     style Q fill:#166534,stroke:#22c55e,color:#fff
@@ -91,8 +91,12 @@ graph TD
 | [`quadkit-web`](https://pypi.org/project/quadkit-web/) | ASGI layer — controllers, routing, middleware, OpenAPI docs, websockets |
 | [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
 
-The contracts define interfaces for SQL, cache, auth, events, tasks,
-queues, LLM, RAG, and more — all built against the same protocol layer.
+When your service grows — data, auth, background jobs, observability —
+the rest of the ecosystem speaks these same contracts and slots in
+without a migration, staying out of your dependency tree until you ask
+for it. The contracts already define interfaces for SQL, cache, auth,
+events, tasks, queues, LLM, RAG, and more — all against the same
+protocol layer.
 
 ## testing
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import MutableMapping
 from typing import Any
 
 from starlette.websockets import WebSocket as StarletteWebSocket
@@ -24,6 +25,25 @@ class WebSocket:
 
     async def receive_json(self) -> Any:
         return await self._starlette.receive_json()
+
+    async def receive_event(self) -> MutableMapping[str, Any]:
+        """Receive a raw ASGI WebSocket event for protocol bridges.
+
+        Starlette types the ASGI message as a mutable mapping, not a plain
+        ``dict``; declaring the wider type is what keeps ``make type`` honest
+        without an unchecked cast.
+        """
+        return await self._starlette.receive()
+
+    @property
+    def headers(self) -> Any:
+        """Handshake headers exposed read-only to gateway handlers."""
+        return self._starlette.headers
+
+    @property
+    def query_params(self) -> Any:
+        """Handshake query parameters exposed to gateway handlers."""
+        return self._starlette.query_params
 
     async def send_text(self, data: str) -> None:
         await self._starlette.send_text(data)

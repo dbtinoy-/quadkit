@@ -1,0 +1,40 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# Environment variable prefix: QK_HTTP__
+
+http:
+  # -------------------------------------------------------------------------
+  # Connection pool
+  # -------------------------------------------------------------------------
+  pool:
+    # Maximum total concurrent connections across all hosts.
+    max_connections: 10
+
+    # Maximum keep-alive connections maintained per host.
+    max_keepalive_connections: 5
+
+    # Maximum connections per individual host.
+    max_connections_per_host: 10
+
+    # Default request timeout (seconds).
+    timeout: 30.0
+
+    # DNS cache TTL (seconds).
+    ttl_dns_cache: 300
+
+    # Force-close connections after each request (disables keep-alive).
+    force_close: false
+
+  # -------------------------------------------------------------------------
+  # Client
+  # -------------------------------------------------------------------------
+
+  # HTTP/HTTPS proxy URL. null = no proxy.
+  # Example: "http://proxy.example.com:8080"
+  proxy: null
+
+  # Read proxy settings from environment variables (HTTP_PROXY, HTTPS_PROXY, NO_PROXY).
+  trust_env: true
+
+  # Enable an in-memory cookie jar shared across requests from the same client.
+  cookie_jar: true

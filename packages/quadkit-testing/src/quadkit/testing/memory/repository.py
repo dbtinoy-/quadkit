@@ -3,7 +3,7 @@
 Provides a generic, async-safe in-memory implementation of the RepositoryProtocol
 pattern backed by :class:`~quadkit.data.repository.base.AbstractRepository`.
 Intended as a zero-infrastructure drop-in for unit tests and local development.
-For production, replace with ``the optional provider``'s SQLRepository or a
+For production, replace with ``quadkit-sql``'s SQLRepository or a
 domain-specific storage backend.
 """
 
@@ -26,7 +26,7 @@ class InMemoryRepository(AbstractRepository[T, Any], Generic[T]):
     This class lives in ``quadkit-testing`` intentionally — it is not exported
     from ``quadkit`` core.  Production code should depend on the
     ``RepositoryProtocol`` protocol from ``quadkit.contracts.data`` and receive a
-    concrete implementation (e.g. ``SQLRepository`` from ``the optional provider``)
+    concrete implementation (e.g. ``SQLRepository`` from ``quadkit-sql``)
     via dependency injection.
 
     Stores entities in a plain dict keyed by their identity attribute.
@@ -36,7 +36,7 @@ class InMemoryRepository(AbstractRepository[T, Any], Generic[T]):
 
     Extends :class:`~quadkit.data.repository.base.AbstractRepository` and
     implements all required primitives.  For production persistence, use
-    ``the optional provider``'s ``SQLRepository`` or any other storage backend.
+    ``quadkit-sql``'s ``SQLRepository`` or any other storage backend.
 
     Args:
         id_attr: Name of the entity attribute that holds the primary key.

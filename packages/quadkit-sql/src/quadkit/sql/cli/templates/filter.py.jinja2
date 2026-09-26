@@ -1,0 +1,44 @@
+"""Exception filter for {{ name }}."""
+
+from __future__ import annotations
+
+from typing import Any
+
+from starlette.requests import Request
+
+from quadkit.web import JSONResponse
+
+
+class {{ name }}:
+    """Exception filter for handling {{ exception_type }}.
+
+    Matches the protocol implemented by the built-in filters in
+    :mod:`quadkit.web.filters` (``can_handle`` / ``handle``) and registered
+    through ``use_filters`` / ``ExceptionFilterProtocol``.
+    """
+
+    def can_handle(self, exc: Exception) -> bool:
+        """Return ``True`` when this filter owns *exc*."""
+        return isinstance(exc, {{ exception_type }})
+
+    async def handle(self, exc: Exception, request: Request) -> JSONResponse:
+        """Transform the exception into a structured JSON error response.
+
+        Args:
+            exc: The exception being handled.
+            request: The request that triggered the exception.
+
+        Returns:
+            A JSON error response.
+        """
+        return JSONResponse(
+            status_code=400,
+            content={
+                "error": "{{ name }} Error",
+                "message": str(exc),
+                "type": "{{ snake_name }}",
+            },
+        )
+
+
+__all__ = ["{{ name }}"]

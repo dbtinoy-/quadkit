@@ -17,6 +17,7 @@ from quadkit.contracts.ai.relay.logs import (
 from quadkit.contracts.ai.relay.usage import (
     RelayDailyUsage,
     RelayModelRank,
+    RelayModelRankBucket,
     RelayUsageServiceProtocol,
 )
 
@@ -46,6 +47,20 @@ def test_entry_has_required_metadata_fields() -> None:
     assert entry.error_code == ""
 
 
+def test_rank_value_carries_total_tokens_for_leaderboards() -> None:
+    """The shared rank value exposes prompt and total usage without raw SQL."""
+    rank = RelayModelRank(
+        model="gpt-4",
+        prompt_tokens=100,
+        completion_tokens=200,
+        total_tokens=300,
+        request_count=2,
+        cost="0.5",
+    )
+    assert rank.total_tokens == 300
+    assert rank.prompt_tokens == 100
+
+
 def test_log_store_protocol_is_runtime_checkable() -> None:
     assert RelayRequestLogStoreProtocol.__name__ == "RelayRequestLogStoreProtocol"
     assert hasattr(RelayRequestLogStoreProtocol, "append")
@@ -64,8 +79,24 @@ def test_usage_value_types() -> None:
     assert rank.request_count == 4
 
 
+def test_rank_bucket_value_carries_utc_history_usage() -> None:
+    bucket = RelayModelRankBucket(
+        bucket_start=datetime(2026, 8, 10, 12, 0, 0),
+        model="gpt-4",
+        prompt_tokens=10,
+        completion_tokens=20,
+        total_tokens=30,
+        request_count=1,
+        cost="0.05",
+    )
+    assert bucket.bucket_start.hour == 12
+    assert bucket.total_tokens == 30
+
+
 def test_usage_service_protocol_is_runtime_checkable() -> None:
     assert RelayUsageServiceProtocol.__name__ == "RelayUsageServiceProtocol"
     assert hasattr(RelayUsageServiceProtocol, "daily_usage")
     assert hasattr(RelayUsageServiceProtocol, "model_rank")
+    assert hasattr(RelayUsageServiceProtocol, "model_rank_window")
+    assert hasattr(RelayUsageServiceProtocol, "model_rank_history")
     assert hasattr(RelayUsageServiceProtocol, "list_requests")

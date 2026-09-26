@@ -15,7 +15,7 @@ Kernel providers (boot order governed by provider ``priority`` and ``dependencie
 For a batteries-included bundle that also provides serialization and
 concurrency, use :class:`~quadkit.app.standard.StandardModule` instead.
 
-Extension packages (``the optional provider``, ``the optional provider``, ``quadkit-web``,
+Extension packages (``quadkit-cache``, ``quadkit-auth``, ``quadkit-web``,
 etc.) register their own providers via ``app.add_provider()`` or
 ``app.add_module()``.  ``CoreModule`` intentionally imports **only** from
 ``quadkit-contracts`` and the ``quadkit`` core package — zero cross-package

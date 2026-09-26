@@ -1,0 +1,196 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-monitor"
+version = "0.0.42"
+description = "Monitoring and observability for Quadkit Framework - Health checks, metrics, and system monitoring"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "monitoring",
+    "observability",
+    "health-checks",
+    "metrics",
+    "prometheus",
+    "grafana",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: System :: Monitoring",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "typing-extensions>=4.0.0",
+    "starlette>=0.28.0",
+    "structlog>=25.1.0,<27",
+    "typer>=0.9.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+system = [
+    "psutil>=5.9.0",
+]
+prometheus = [
+    "prometheus-client>=0.19.0",
+]
+otel = [
+    "opentelemetry-distro>=0.43b0",
+    "opentelemetry-instrumentation>=0.43b0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "quadkit-tasks>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+all = [
+    "psutil>=5.9.0",
+    "prometheus-client>=0.19.0",
+    "opentelemetry-distro>=0.43b0",
+    "opentelemetry-instrumentation>=0.43b0",
+    "opentelemetry-exporter-otlp>=1.22.0",
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points."quadkit.modules"]
+MonitorModule = "quadkit.monitor.module:MonitorModule"
+
+[project.entry-points."quadkit.config"]
+monitor = "quadkit.monitor.config:MonitorConfig"
+
+[project.entry-points."quadkit.cli.contributors"]
+monitor = "quadkit.monitor.cli.contributor:MonitorCliContributor"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "quadkit-tasks>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+    { module = "prometheus_client.*", ignore_missing_imports = true },
+    { module = "opentelemetry.*", ignore_missing_imports = true },
+    { module = "sentry_sdk.*", ignore_missing_imports = true },
+    # Optional-dependency shim modules: OTel/prometheus stubs are present or
+    # absent depending on which dependency groups are installed, so the
+    # conditional-import fallback typing (class rebinding, dummy spans, shim
+    # functions) cannot be made stable in both environments. Runtime fallback
+    # behavior is covered by the monitor tests.
+    { module = "quadkit.monitor.instrumentation.*", disable_error_code = ["misc", "assignment", "arg-type"] },
+    { module = "quadkit.monitor.metrics.prometheus", disable_error_code = ["misc", "assignment", "arg-type"] },
+]
+
+[tool.uv.sources.quadkit]
+workspace = true
+
+[tool.uv.sources.quadkit-testing]
+workspace = true
+
+[tool.uv.sources.quadkit-contracts]
+workspace = true
+
+[tool.uv.sources.quadkit-tasks]
+workspace = true
+
+[tool.pytest.ini_options]
+addopts = ["--cov=quadkit.monitor", "--cov-report=html", "--cov-report=term", "--cov-fail-under=82"]
+testpaths = ["tests"]
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_postgres: marks tests that require a live PostgreSQL connection",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

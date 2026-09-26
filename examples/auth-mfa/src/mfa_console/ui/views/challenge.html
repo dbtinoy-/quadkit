@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>Two-factor check · Auth MFA</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="challenge">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth MFA</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>Two-factor verification</h1>
+  <p class="muted">Enter the 6-digit code from your authenticator app</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+    <div class="card">
+      <p id="error" class="error"></p>
+      <p class="muted">Enter the 6-digit code from your authenticator (or a backup code).</p>
+      <form id="challenge-form">
+        <label for="code">Authentication code</label>
+        <input id="code" name="code" inputmode="numeric" pattern="[0-9]*" placeholder="123456" required />
+        <button type="submit">Verify</button>
+      </form>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+  <script>
+    document.getElementById("challenge-form").addEventListener("submit", async (event) => {
+      event.preventDefault();
+      showError("");
+      const submit = event.target.querySelector("button[type=submit]");
+      submit.disabled = true;
+      const form = new FormData(event.target);
+      try {
+        const result = await api("/api/mfa/challenge", {
+          method: "POST",
+          body: JSON.stringify({ code: form.get("code") }),
+        });
+        if (result.ok) {
+          window.location.href = "/profile";
+        } else {
+          const message = result.body.error || result.body.detail || "Verification failed";
+          showError(message);
+          if (message.includes("too many attempts")) {
+            setTimeout(() => { window.location.href = "/login"; }, 1200);
+          }
+        }
+      } catch (error) {
+        showError(error.message);
+      } finally {
+        submit.disabled = false;
+      }
+    });
+  </script>
+</div>
+</main>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

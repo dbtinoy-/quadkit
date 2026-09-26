@@ -1,0 +1,95 @@
+"""{{ entity_name }} repository."""
+
+from __future__ import annotations
+
+from typing import Any
+import uuid as _uuid
+from datetime import datetime as _datetime, timezone as _timezone
+
+from quadkit.contracts import DatabaseProviderProtocol
+
+from quadkit.sql.repositories.generic_repository import GenericRepository
+
+
+class {{ entity_name }}Entity:
+    """{{ entity_name }} row entity (plain attrs; swap for a model later)."""
+
+{% for field in fields %}
+    {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
+
+{% endfor %}
+    def __init__(self, **kwargs: Any) -> None:
+        for key, value in kwargs.items():
+            setattr(self, key, value)
+
+
+class _{{ repo_name }}Inner(GenericRepository[{{ entity_name }}Entity, str]):
+    """Row mapper bridge over the generic SQL repository."""
+
+    def _entity_to_dict(self, entity: {{ entity_name }}Entity) -> dict[str, Any]:
+        return dict(vars(entity))
+
+    def _row_to_entity(self, row: dict[str, Any]) -> {{ entity_name }}Entity:
+        return self.entity_class(**dict(row))
+
+
+class {{ repo_name }}Repository:
+    """Working CRUD repository for {{ resource_name }}.
+
+    Backed by ``GenericRepository`` and the injected
+    ``DatabaseProviderProtocol``; requires migrations to have created the
+    ``{{ table_name }}`` table.
+    """
+
+    def __init__(self, provider: DatabaseProviderProtocol) -> None:
+        self._provider = provider
+        self._inner = _{{ repo_name }}Inner(
+            provider=provider,
+            table_name="{{ table_name }}",
+            entity_class={{ entity_name }}Entity,
+            key_field="{{ key_field }}",
+        )
+
+    def _prepare(self, data: dict[str, Any]) -> dict[str, Any]:
+        row = dict(data)
+        row.setdefault("{{ key_field }}", _uuid.uuid4().hex)
+        now = _datetime.now(_timezone.utc).isoformat()
+        row.setdefault("created_at", now)
+        row["updated_at"] = now
+        return row
+
+    async def create(self, data: dict[str, Any]) -> {{ entity_name }}Entity:
+        row = self._prepare(data)
+        await self._provider.execute_insert("{{ table_name }}", row)
+        found = await self._inner.find_by_id(row["{{ key_field }}"])
+        if found is None:
+            raise RuntimeError(
+                "Insert succeeded but fetch failed for {{ table_name }}:"
+                + str(row["{{ key_field }}"])
+            )
+        return found
+
+    async def get(self, key: str) -> dict[str, Any] | None:
+        entity = await self._inner.find_by_id(key)
+        if entity is None:
+            return None
+        return self._inner._entity_to_dict(entity)
+
+    async def list(self, limit: int = 50) -> list[dict[str, Any]]:
+        entities = await self._inner.find(limit=limit)
+        return [self._inner._entity_to_dict(e) for e in entities]
+
+    async def update(self, key: str, data: dict[str, Any]) -> dict[str, Any] | None:
+        async with self._provider.transaction():
+            row = {
+                **data,
+                "{{ key_field }}": key,
+                "updated_at": _datetime.now(_timezone.utc).isoformat(),
+            }
+            await self._provider.execute_update(
+                "{{ table_name }}", row, '"{{ key_field }}" = ?', [key]
+            )
+            return await self.get(key)
+
+    async def delete(self, key: str) -> bool:
+        return await self._inner.delete_by_id(key)

@@ -1,0 +1,207 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-events"
+version = "0.0.42"
+description = "Event Sourcing and CQRS engine for Quadkit Framework - Domain events, aggregates, and projections"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "event-sourcing",
+    "cqrs",
+    "ddd",
+    "domain-driven-design",
+    "events",
+    "aggregates",
+    "projections",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "typing-extensions>=4.0.0",
+    "typer>=0.9.0",
+    "jinja2>=3.1.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+postgres = [
+    "asyncpg>=0.29.0",
+]
+sqlite = [
+    "aiosqlite>=0.19.0",
+]
+mongo = [
+    "motor>=3.0.0",
+]
+rabbitmq = [
+    "aio-pika>=9.0.0",
+]
+kafka = [
+    "aiokafka>=0.10.0",
+]
+azure = [
+    "azure-servicebus>=7.0.0",
+]
+messaging = [
+    "aio-pika>=9.0.0",
+    "aiokafka>=0.10.0",
+    "azure-servicebus>=7.0.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+all = [
+    "asyncpg>=0.29.0",
+    "aiosqlite>=0.19.0",
+    "motor>=3.0.0",
+    "aio-pika>=9.0.0",
+    "aiokafka>=0.10.0",
+    "azure-servicebus>=7.0.0",
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points."quadkit.modules"]
+events = "quadkit.events.module:EventsModule"
+
+[project.entry-points."quadkit.config"]
+events = "quadkit.events.config:EventsConfig"
+
+[project.entry-points."quadkit.cli.contributors"]
+events = "quadkit.events.cli.contributor:EventsCliContributor"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "F823",  # undefined `__all__` member — alembic/SQLAlchemy patterns
+    "PYI034",  # `self` return without `Self` type — Protocol patterns
+    "PYI036",  # `__exit__` return type — Protocol stubs
+    "PYI046",  # unused Protocol — intentional base Protocol definitions
+    "PYI056",  # calling `.append()` and `.extend()` in `__init_subclass__`
+    "RET503",  # missing explicit return at end of function — sqlalchemy patterns
+    "RUF059",  # unused unpacked variable
+    "SIM103",  # return condition directly (not always clearer)
+    "TC010",  # runtime string union in TYPE_CHECKING
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+ignore_missing_imports = true
+python_version = "3.13"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+]
+
+[tool.uv.sources.quadkit]
+workspace = true
+
+[tool.uv.sources.quadkit-testing]
+workspace = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+addopts = ["--cov=quadkit.events", "--cov-report=html", "--cov-report=term", "--cov-fail-under=72"]
+testpaths = ["tests"]
+markers = [
+    "e2e: mark a test as an end-to-end test",
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_kafka: marks tests that require a live Kafka connection",
+    "requires_postgres: marks tests that require a live PostgreSQL connection",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

@@ -9,15 +9,34 @@ import hashlib
 import hmac
 import logging
 import os
-from typing import Any
-
-from quadkit.serialization import JSONDecodeError, loads
-
+from collections.abc import Mapping
+{% for line in imports %}{{ line }}
+{% endfor %}
 from pydantic import BaseModel, ConfigDict, Field
+from quadkit.serialization import JSONDecodeError, loads
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
+
+#: Signature header, named once. Requests reach ASGI transports with their
+#: header names lower-cased, so a lookup has to be case-insensitive rather
+#: than assume the casing a sender used.
+SIGNATURE_HEADER = "x-webhook-signature"
+
+
+def _header(headers: Mapping[str, str], name: str) -> str | None:
+    """Read *name* from *headers*, ignoring case.
+
+    ``headers.get(name)`` alone is not enough: the mapping is whatever the
+    caller built, and the same header can arrive as ``X-Webhook-Signature``,
+    ``x-webhook-signature`` or any other case. Returning ``None`` for a header
+    that *is* present would reject a correctly-signed request, so this scans.
+    """
+    for key, value in headers.items():
+        if key.lower() == name:
+            return value
+    return None
 
 
 class {{ webhook_name }}Payload(BaseModel):
@@ -89,16 +108,7 @@ class {{ webhook_name }}Webhook:
                         "message": "Webhook secret is not configured",
                     }
 
-                signature = headers.get("x-webhook-signature")
-                if signature is None:
-                    signature = next(
-                        (
-                            value
-                            for key, value in headers.items()
-                            if key.lower() == "x-webhook-signature"
-                        ),
-                        None,
-                    )
+                signature = _header(headers, SIGNATURE_HEADER)
                 if not signature:
                     return {
                         "status": "error",

@@ -18,7 +18,7 @@ from quadkit.contracts.events import EventBusProtocol as EventBusProtocol
 from quadkit.contracts.events import EventHandlerProtocol
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from quadkit.contracts.core import MiddlewarePipelineProtocol
     from quadkit.contracts.domain.events import DomainEvent
@@ -76,11 +76,14 @@ class InMemoryEventBus(EventBusProtocol):
                 the originating request context.
         """
         # handlers stored as (priority, handler) tuples, sorted by priority
-        self._handlers: dict[type | str, list[tuple[int, EventHandlerProtocol]]] = (
-            defaultdict(list)
-        )
+        self._handlers: dict[
+            type | str,
+            list[tuple[int, EventHandlerProtocol | Callable[..., Awaitable[Any]]]],
+        ] = defaultdict(list)
         # wildcard subscriptions receive every published event regardless of type
-        self._wildcard_handlers: list[tuple[int, EventHandlerProtocol]] = []
+        self._wildcard_handlers: list[
+            tuple[int, EventHandlerProtocol | Callable[..., Awaitable[Any]]]
+        ] = []
         from quadkit.app.pipeline import (
             MiddlewarePipeline as _MiddlewarePipeline,
         )
@@ -98,7 +101,7 @@ class InMemoryEventBus(EventBusProtocol):
     def subscribe(
         self,
         event_type: type | str,
-        handler: EventHandlerProtocol,
+        handler: EventHandlerProtocol | Callable[..., Awaitable[Any]],
         *,
         priority: int = 0,
     ) -> None:
@@ -121,7 +124,9 @@ class InMemoryEventBus(EventBusProtocol):
             self._handlers[event_type].sort(key=lambda entry: entry[0])
 
     def unsubscribe(
-        self, event_type: type | str, handler: EventHandlerProtocol
+        self,
+        event_type: type | str,
+        handler: EventHandlerProtocol | Callable[..., Awaitable[Any]],
     ) -> None:
         """Remove a previously registered handler for an event type.
 
@@ -140,6 +145,15 @@ class InMemoryEventBus(EventBusProtocol):
         if handlers is None:
             return
         self._handlers[event_type] = [(p, h) for p, h in handlers if h is not handler]
+
+    async def flush(self) -> None:
+        """Wait until all pending events have been dispatched.
+
+        A no-op here: ``publish`` awaits every handler before it returns, so
+        this engine never has an in-flight dispatch to drain. The member
+        exists because ``EventBusProtocol`` declares it — the flagship bus
+        dispatches in the background and does need it.
+        """
 
     def add_middleware(self, middleware: Any) -> None:
         """Add a middleware function to the event processing chain.

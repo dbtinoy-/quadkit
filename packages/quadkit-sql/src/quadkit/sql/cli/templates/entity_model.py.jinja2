@@ -1,0 +1,44 @@
+"""{{ entity_name }} entity model.
+{% if extra_dependencies %}
+
+Requires: {{ extra_dependencies | join(', ') }} — install it alongside pydantic
+(``uv add {{ extra_dependencies | join(' ') }}``) or the constrained types
+below fail to validate at import time.
+{% endif %}"""
+from __future__ import annotations
+
+import uuid
+{% for line in import_lines %}{{ line }}
+{% endfor %}
+
+class {{ entity_name }}(BaseModel):
+    """{{ entity_name }} entity."""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    created_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+    updated_at: datetime = Field(
+        default_factory=lambda: datetime.now(timezone.utc)
+    )
+{%- for field in fields %}
+    {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
+{%- endfor %}
+
+
+class {{ entity_name }}Create(BaseModel):
+    """Payload for creating a {{ model_name }}."""
+
+{%- for field in create_fields %}
+{{ field }}
+{%- endfor %}
+
+
+class {{ entity_name }}Update(BaseModel):
+    """Partial patch payload for a {{ model_name }}."""
+
+{%- for field in update_fields %}
+{{ field }}
+{%- endfor %}

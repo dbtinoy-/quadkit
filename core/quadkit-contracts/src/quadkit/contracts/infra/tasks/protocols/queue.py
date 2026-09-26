@@ -24,9 +24,9 @@ T = TypeVar("T")
 class TaskManagerProtocol(Protocol):
     """Shared background-task management service.
 
-    Implemented by ``the optional provider module``
+    Implemented by ``quadkit.tasks.background_task_manager.BackgroundTaskManager``
     (QK-006).  Consumers resolve this protocol from the container instead of
-    importing the implementation package (e.g. ``the optional provider module``).
+    importing the implementation package (e.g. ``quadkit.monitor``).
     """
 
     def track(self, coro: Awaitable[T]) -> asyncio.Task[T]:
@@ -309,7 +309,7 @@ class TaskProviderProtocol(Protocol):
 
         Cross-package consumers (e.g. ``the optional provider``) build the
         idempotency machinery through this factory instead of importing
-        ``the optional provider`` internals directly.
+        ``quadkit-tasks`` internals directly.
 
         Args:
             storage: Storage backend for idempotency keys.
@@ -329,7 +329,7 @@ class TaskProviderProtocol(Protocol):
 
         Cross-package consumers (e.g. ``the optional provider``) obtain their
         duplicate-protected task submitter through this factory instead of
-        importing ``the optional provider`` internals directly.
+        importing ``quadkit-tasks`` internals directly.
 
         Args:
             queue_client: Task queue client (``TaskQueueProtocol``) to

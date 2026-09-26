@@ -4,7 +4,14 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from quadkit.codegen import GenerationResult, GeneratorBase, parse_fields
+from quadkit.codegen import (
+    FieldSpec,
+    GenerationResult,
+    GeneratorBase,
+    annotation_for,
+    import_lines,
+    parse_fields,
+)
 from quadkit.contracts.cli.generators import resolve_options
 
 
@@ -39,13 +46,38 @@ class WebhookGenerator(GeneratorBase):
             ``GenerationResult`` with created/skipped/overwritten paths.
         """
         file_path = self.output_dir / f"{self._to_snake_case(name)}_webhook.py"
+        parsed = list(parse_fields(fields_str or ""))
+        if parsed and not any(field.name == "event_type" for field in parsed):
+            # The handler dispatches on ``webhook_payload.event_type``, so a
+            # payload without that field builds a model the handler cannot
+            # read: every request answers with an AttributeError wrapped in an
+            # error response. Asking for fields is not asking to lose the
+            # dispatch key, so it is added first unless the caller named it.
+            parsed.insert(0, FieldSpec(name="event_type", type="str", required=True))
         content = self.render_template(
             "webhook.py.jinja2",
             {
                 "webhook_name": self._to_pascal_case(name),
                 "webhook_name_snake": self._to_snake_case(name),
                 "package_name": self._package_name(),
-                "fields": parse_fields(fields_str or ""),
+                # The payload is a Pydantic model, so a field token has to
+                # render a type Pydantic can build the model from -- a bare
+                # ``decimal`` (or any other non-builtin token) makes
+                # ``Payload(**data)`` raise PydanticUserError at request time.
+                "fields": [
+                    {
+                        "name": field.name,
+                        "type": annotation_for(field.type),
+                        "required": field.required,
+                        "description": _field_description(field),
+                    }
+                    for field in parsed
+                ],
+                # ``Any`` is used by the handler registry outside the payload,
+                # so it is imported whether or not a field asks for it.
+                "imports": import_lines(
+                    (field.type for field in parsed), always=["Any"]
+                ),
             },
         )
         self.stage(file_path, content)
@@ -56,6 +88,15 @@ class WebhookGenerator(GeneratorBase):
         if parts[:1] == ("src",):
             parts = parts[1:]
         return ".".join(parts) if parts else "app"
+
+
+def _field_description(field: FieldSpec) -> str:
+    """Human text for a payload field, from its type token.
+
+    The template used to fall back to the field name, which told a reader
+    nothing. Nothing downstream parses this, so it only has to be true.
+    """
+    return field.type.replace("_", " ")
 
 
 __all__ = ["WebhookGenerator"]

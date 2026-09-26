@@ -10,6 +10,8 @@
 #   - Structured logging foundation
 #
 # It does NOT contain:
+#   - Database code          → quadkit-sql
+#   - Auth/JWT/crypto        → quadkit-auth
 #   - HTTP/ASGI/routing      → quadkit-web
 #   - Any domain-specific feature
 #
@@ -128,7 +130,7 @@ web = [
 # events, tasks, monitor, graphql) were removed. Those packages are not
 # published, so the extras resolved against name-reservation placeholders
 # that contain no code: `pip install quadkit[cache]` succeeded and then
-# `import the optional provider module` raised ModuleNotFoundError. Install extension
+# `import quadkit.cache` raised ModuleNotFoundError. Install extension
 # packages directly once they are published.
 
 # =============================================================================

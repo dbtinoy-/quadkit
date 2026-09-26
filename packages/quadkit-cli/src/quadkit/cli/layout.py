@@ -65,16 +65,43 @@ COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("admin/actions", "admin/actions", False, ("admin_action",)),
     ComponentDir("admin/resources", "admin/resources", False, ("admin_resource",)),
     ComponentDir("audit", "audit", True, ("audited",)),
+    # ``auth``, ``contracts`` and ``validators`` carry no generators on
+    # purpose: no registered generator writes there yet (the CLI ships
+    # ``provider`` and ``test``; subsystems contribute the rest), and a
+    # ``generators`` entry is the map's authorisation for a generator's
+    # declared output directory, so it should name a generator that exists.
+    # The rows are the map's answer for *placement and scope*, which is what
+    # the builder needed to delete its own copy of them
+    # (docs/upstream/2026-09-02-component-rows.md).
+    # API-key issuance and verification. Cross-cutting by definition: one
+    # key store, checked by every bounded context.
+    ComponentDir("auth", "auth", True, ()),
     ComponentDir("clients", "clients", False, ("api_client",)),
     ComponentDir("commands", "commands", False, ("command",)),
     ComponentDir("consumers", "consumers", False, ("message_consumer",)),
+    # Request/response schemas shared across controllers. They are the
+    # interface between a context and its callers, so they cannot be
+    # module-local without every consumer reaching across a boundary.
+    ComponentDir("contracts", "contracts", True, ()),
     ComponentDir("controllers", "controllers", False, ("controller",)),
+    # Cross-cutting DI providers. Every quadkit subsystem keeps its own
+    # provider at ``<subsystem>/di/provider.py`` (30 of them, no
+    # exceptions), so a generated provider reads like the framework it
+    # is built on. The ``providers`` row below is kept for projects
+    # that already generated into it.
+    ComponentDir("di", "di", True, ("provider",)),
     ComponentDir("domains", "domains", False, ("domain",)),
     ComponentDir("errors", "errors", True, ("error",)),
     ComponentDir("events", "events", False, ("event",)),
     ComponentDir("features", "features", True, ("feature_flag",)),
     ComponentDir("filters", "filters", True, ("exception_filter", "filter")),
-    ComponentDir("guards", "guards", False, ("auth_guard", "guard")),
+    # Cross-cutting, like ``filters`` above: ``@require_auth()`` decorates
+    # controllers in every bounded context, and the palette already scopes
+    # ``auth``/``role`` as shared kinds. While this row said module-local,
+    # the two answers met at generation time and a modular app containing
+    # an Auth Guard could not be generated at all (playground TASK-6 /
+    # MODULAR-3).
+    ComponentDir("guards", "guards", True, ("auth_guard", "guard")),
     ComponentDir("handlers", "handlers", False, ("event_handler",)),
     ComponentDir("health", "health", True, ("health",)),
     ComponentDir("interceptors", "interceptors", True, ("interceptor",)),
@@ -85,7 +112,9 @@ COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("pipelines", "pipelines", False, ("pipeline",)),
     ComponentDir("policies", "policies", False, ("auth_policy",)),
     ComponentDir("projections", "projections", False, ("projection",)),
-    ComponentDir("providers", "providers", True, ("provider",)),
+    # Superseded by the ``di`` row above; kept (with no generators) so a
+    # project that already has ``shared/providers/`` keeps resolving.
+    ComponentDir("providers", "providers", True, ()),
     ComponentDir("queries", "queries", False, ("query",)),
     ComponentDir(
         "repositories",
@@ -97,10 +126,20 @@ COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("schema", "schema", True, ("graphql",)),
     ComponentDir("schema/dataloaders", "schema/dataloaders", True, ("dataloader",)),
     ComponentDir("search", "search", True, ("search_index",)),
+    # Generated seeders live inside the application package so they are
+    # importable: a project boots them from its persistence provider, and
+    # `quadkit db seed` imports the same modules. ``seeds`` (project root)
+    # stays resolvable in ROOT_DIRS below, because that is where every
+    # project generated before 2026-09-23 kept them and where the command
+    # still looks second.
+    ComponentDir("seeders", "seeders", True, ("seeder",)),
     ComponentDir("services", "services", False, ("service",)),
     ComponentDir("storage/backends", "storage/backends", True, ("storage_driver",)),
     ComponentDir("tasks", "tasks", False, ("task",)),
     ComponentDir("tenancy", "tenancy", True, ("tenant_resolver",)),
+    # Per-entity rules. They know an entity's fields, so they belong
+    # wherever that entity belongs: module-local.
+    ComponentDir("validators", "validators", False, ()),
     ComponentDir(
         "vector/collections", "vector/collections", True, ("vector_collection",)
     ),
@@ -112,6 +151,10 @@ COMPONENTS: tuple[ComponentDir, ...] = (
 # Root-level output directories of the generator SDK (no ``src/`` prefix).
 ROOT_DIRS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("migrations/versions", ("migration",)),
+    # ``seeds`` is legacy-but-supported: the ``seeders`` component above is
+    # where the generator writes now, while this row keeps ``quadkit gen
+    # seeder --output seeds`` and projects generated before 2026-09-23
+    # resolvable. ``quadkit db seed`` looks here second.
     ("seeds", ("seeder",)),
     ("tests/unit", ("test",)),
 )

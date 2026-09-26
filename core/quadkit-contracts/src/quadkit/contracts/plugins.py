@@ -1,17 +1,45 @@
-"""Plugin descriptor contract type.
+"""Plugin descriptor and task-plugin marketplace contracts.
 
 A ``PluginDescriptor`` is metadata-only — discovering it via the
 ``quadkit.plugins`` entry-point group (``EP_PLUGINS``) never imports or
 instantiates the plugin's actual DI ``Provider``. That keeps listing
-available plugins (e.g. for an admin UI) cheap even when a plugin's
-provider class is heavy to import.
+available plugins (e.g. for an admin UI) cheap even when a plugin's provider
+class is heavy to import.
+
+The task-plugin marketplace contract is intentionally metadata/settings only.
+It does not prescribe a JavaScript runtime or plugin execution model; those
+remain application/runtime concerns. Consumers can share validated marketplace
+source values without reaching into a particular settings repository.
 """
 
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Protocol, runtime_checkable
 
-__all__ = ["PluginDescriptor"]
+
+@dataclass(frozen=True, slots=True)
+class TaskPluginMarketplaceSource:
+    """One configured task-plugin marketplace index source."""
+
+    name: str
+    index_url: str
+
+
+@runtime_checkable
+class TaskPluginMarketplaceProtocol(Protocol):
+    """Durable read/update boundary for task-plugin marketplace sources."""
+
+    async def get_sources(self) -> list[TaskPluginMarketplaceSource]:
+        """Return configured sources in display order."""
+        ...
+
+    async def update_sources(
+        self,
+        sources: list[TaskPluginMarketplaceSource],
+    ) -> list[TaskPluginMarketplaceSource]:
+        """Validate, persist, and return the configured sources."""
+        ...
 
 
 @dataclass(frozen=True)
@@ -38,3 +66,10 @@ class PluginDescriptor:
     version: str = ""
     requires: tuple[str, ...] = ()
     conflicts: tuple[str, ...] = ()
+
+
+__all__ = [
+    "PluginDescriptor",
+    "TaskPluginMarketplaceProtocol",
+    "TaskPluginMarketplaceSource",
+]

@@ -1,0 +1,18 @@
+<!doctype html>
+<html lang="en">
+<head>  <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Artifact Vault · Quadkit</title><link rel="icon" href="/static/icon.png" type="image/png"><link rel="stylesheet" href="/static/style.css"></head>
+<body>
+<nav class="demo-nav"><a href="/" class="nav-brand">Quadkit</a><span class="nav-demo">Artifact Vault</span><div class="nav-links"><a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div></nav>
+<header><div class="eyebrow">STORAGE · STANDARD MODULE</div><h1>Artifact Vault</h1><p class="muted">Upload text artifacts, inspect package metadata, preview content, and understand backend access capabilities.</p></header>
+<main>
+  <section class="panel upload-panel"><div><h2>Upload an artifact</h2><p class="muted">This offline lab uses Quadkit's in-memory BlobStore, so content resets on restart.</p></div><form id="upload-form"><label>Choose a local text file (optional)<input id="file" type="file" accept=".txt,.md,.json,text/plain,text/markdown,application/json"></label><label>Artifact name<input id="name" value="notes/release-plan.txt" required></label><label>Content type<select id="content-type"><option value="text/plain">text/plain</option><option value="text/markdown">text/markdown</option><option value="application/json">application/json</option></select></label><label>Owner<input id="owner" value="demo-user"></label><label>Content<textarea id="content" rows="3" required>Ship the release when both checks are green.</textarea></label><button class="accent" type="submit">Upload artifact</button></form><p id="upload-result" class="result" role="status" aria-live="polite"></p></section>
+  <div class="dashboard-grid"><section class="panel"><div class="section-heading"><h2>Stored objects</h2><button type="button" id="refresh">Refresh</button></div><p id="vault-stats" class="muted"></p><div id="artifacts" aria-live="polite"></div></section><section class="panel"><div class="section-heading"><h2>Preview</h2><span class="pill">BlobStoreProtocol</span></div><div id="preview" class="preview"><p class="muted">Select Preview on an object.</p></div><div id="access" class="access"></div></section></div>
+</main>
+<footer class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a> · memory backend · no external services</footer>
+<script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

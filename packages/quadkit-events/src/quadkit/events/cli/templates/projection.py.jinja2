@@ -1,0 +1,68 @@
+"""{{ class_name }} projection.
+
+{% if doc %}
+{{ doc }}
+{% endif %}
+Maintains a read-optimized view derived from domain events.
+"""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from quadkit.events import ProjectionProtocol
+
+if TYPE_CHECKING:
+    from quadkit.events import Event
+
+
+class {{ class_name }}Projection(ProjectionProtocol):
+    """Projection for {{ class_name }} read models.
+
+    Override :attr:`handles` with the event types to consume and add
+    ``@event_handler(...)`` decorated methods (or override
+    :meth:`apply`) to update the read model.
+    """
+
+    @property
+    def name(self) -> str:
+        """Unique projection name."""
+        return "{{ projection_name }}"
+
+    @property
+    def handles(self) -> set[type[Event]]:
+        """Event types this projection handles.
+
+        Example:
+            ``return {OrderCreatedEvent, OrderCancelledEvent}``
+        """
+        return set()
+
+    @property
+    def depends_on(self) -> list[str]:
+        """Projection names that must be rebuilt first."""
+        return []
+
+    async def reset(self) -> None:
+        """Clear the read model before a rebuild."""
+        # Await your read-model truncation here.
+        return
+
+
+# =============================================================================
+# Wiring
+# =============================================================================
+#
+# from quadkit.events.projections import ProjectionManager
+#
+# projection = {{ class_name }}Projection()
+# manager = ProjectionManager(event_store=..., checkpoint_store=...)
+# manager.register(projection)
+#
+# To consume events, override `handles` and add an `@event_handler(...)`
+# method to the projection class:
+#
+#     from quadkit.events import event_handler
+#
+#     @event_handler(OrderCreatedEvent)
+#     async def on_order_created(self, event: Event) -> None:
+#         await self.read_model.upsert(event.order_id, ...)

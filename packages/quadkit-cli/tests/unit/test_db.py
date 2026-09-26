@@ -165,3 +165,53 @@ def test_db_setup_reports_nothing_to_do_when_no_contributions(monkeypatch):
 
     assert result.exit_code == 0
     assert "Nothing to do" in result.stdout
+
+
+@patch(
+    "quadkit.cli.commands.db_bootstrap.get_migration_manager",
+    new_callable=AsyncMock,
+)
+def test_db_seed_finds_package_seeders_and_imports_them(
+    mock_get_manager, tmp_path: Path, monkeypatch
+) -> None:
+    """Seeders inside the application package are imported, not path-loaded.
+
+    A generated project keeps its seeders under ``src/<app>/shared/seeders/``
+    (the canonical ``seeders`` component) so that its persistence provider can
+    import them at boot. ``quadkit db seed`` has to run the same modules --
+    the path-loading it did before cannot import a seeder that itself imports
+    application packages.
+    """
+    mock_manager = AsyncMock()
+    mock_manager.provider = AsyncMock()
+    mock_get_manager.return_value = mock_manager
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.quadkit]\nmodule = "shop_api.app:app"\n'
+    )
+    seeders = tmp_path / "src" / "shop_api" / "shared" / "seeders"
+    seeders.mkdir(parents=True)
+    (seeders / "__init__.py").write_text("")
+    (seeders / "users.py").write_text(
+        "from __future__ import annotations\n"
+        "\n"
+        "\n"
+        "async def run(provider) -> None:\n"
+        "    import shop_api.shared.seeders as package\n"
+        "\n"
+        '    package.RUNS.append("users")\n'
+    )
+    (seeders / "__init__.py").write_text("RUNS: list[str] = []\n")
+
+    result = CliRunner().invoke(app, ["seed"])
+
+    assert result.exit_code == 0, result.output
+    assert "Running seeder: src/shop_api/shared/seeders/users.py" in result.output
+
+    # The same module object the command imported: proof the body ran, which a
+    # text-only assertion on the output cannot give (the import could have
+    # failed silently and left the file unexecuted).
+    from shop_api.shared.seeders import RUNS
+
+    assert RUNS == ["users"]

@@ -2,10 +2,10 @@
 
 Defines the contract for database migration execution so that ``quadkit-cli``
 and other consumers can resolve a runner from the container without importing
-``the optional provider`` directly.
+``quadkit-sql`` directly.
 
 Concrete implementations (Alembic adapter, ``SimpleMigrationManager``, etc.)
-live in ``the optional provider`` and are registered by ``DatabaseProvider`` at boot time.
+live in ``quadkit-sql`` and are registered by ``DatabaseProvider`` at boot time.
 
 Example::
 

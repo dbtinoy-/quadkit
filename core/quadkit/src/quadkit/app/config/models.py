@@ -23,6 +23,12 @@ class AppConfig:
     # ``name`` is the canonical YAML key under ``app:``; ``app_name`` remains
     # supported for compatibility with the original flat configuration.
     name: str | None = None
+    # ``version`` is the canonical YAML key under ``app:`` (application
+    # version string). Declared so apps that pin ``app.version`` in
+    # application.yaml bind cleanly — unknown keys raise ConfigSourceError
+    # from Application.stop()/get_section().
+    version: str = "0.0.0"
+    # consumed by: Application — version surfaced in health/telemetry
     # consumed by: OTEL resource attribute, logger context, AppProvider
     debug: bool | str = False
     # consumed by: Application — verbose startup/teardown logging

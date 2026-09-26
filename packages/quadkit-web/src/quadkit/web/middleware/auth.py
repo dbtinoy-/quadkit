@@ -1,11 +1,11 @@
 """Authentication middleware base.
 
 This module provides HTTP transport layer authentication middleware.
-Authentication logic (JWT, OAuth2, etc.) is implemented in the optional provider package.
+Authentication logic (JWT, OAuth2, etc.) is implemented in quadkit-auth package.
 
 Architecture:
 - quadkit-web: HTTP transport (middleware, headers, cookies)
-- the optional provider: Security logic (JWT decoding, password hashing, OAuth flows)
+- quadkit-auth: Security logic (JWT decoding, password hashing, OAuth flows)
 """
 
 from __future__ import annotations

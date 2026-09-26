@@ -1,16 +1,19 @@
 # Quadkit documentation
 
 Async Python, contract-driven, container-assembled. These pages cover the
-five distributions published from this repository — `quadkit-contracts`,
-`quadkit`, `quadkit-web`, `quadkit-testing`, and `quadkit-cli` — and only
-those. Every Python snippet in them is compiled in CI, and the getting-
+thirteen distributions published from this repository — the core five
+(`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`,
+`quadkit-testing`) plus the data, security, and integration families
+(`quadkit-sql`, `quadkit-auth`, `quadkit-cache`, `quadkit-storage`,
+`quadkit-events`, `quadkit-tasks`, `quadkit-http`, `quadkit-monitor`) — and
+only those. Every Python snippet in them is compiled in CI, and the getting-
 started examples run as real tests against the published wheels.
 
 ## Getting started
 
 | Page | What you get |
 | --- | --- |
-| [Installation](getting-started/installation.md) | The five packages, extras, and Python support |
+| [Installation](getting-started/installation.md) | The thirteen packages, extras, and Python support |
 | [Your first app](getting-started/first-app.md) | A working endpoint in about five minutes |
 | [Configuration](getting-started/configuration.md) | `application.yaml` and `QK_*` environment overrides |
 | [Testing](getting-started/testing.md) | Test your routes without starting a server |
@@ -71,7 +74,7 @@ kept byte-identical with the page and executed in CI.
 - [Development setup](contributing/development.md) — DCO, checks, layout
   (authoritative: [CONTRIBUTING.md](https://github.com/dbtinoy-/quadkit/blob/main/CONTRIBUTING.md)).
 - [The public repository model](contributing/public-repository-model.md)
-  — why this tree contains exactly the five distributions.
+  — why this tree contains exactly the thirteen distributions.
 - [Release process](contributing/release-process.md) — lockstep
   versioning and what a release validates.
 
@@ -80,10 +83,23 @@ kept byte-identical with the page and executed in CI.
 - [example-hub](https://github.com/dbtinoy-/quadkit/tree/main/examples/example-hub) — a full application with
   controllers, a DI provider, typed configuration, and tests.
 - [storefront](https://github.com/dbtinoy-/quadkit/tree/main/examples/storefront) — a second public example
-  application assembled from the same five packages.
+  application assembled from the same thirteen packages.
+- Capability demos — one runnable, tested app per module family — live under
+  [`examples/`](https://github.com/dbtinoy-/quadkit/tree/main/examples):
+  `sql-repository`, `auth-apikeys`, `auth-mfa`, `auth-rbac`, `auth-web`,
+  `cache-aside`, `http-client`, `artifact-vault`, `event-driven-orders`,
+  `event-timeline`, `task-console`, and `monitor-stack`.
 - Package-level documentation lives in each distribution:
   [quadkit](https://github.com/dbtinoy-/quadkit/blob/main/core/quadkit/README.md),
   [quadkit-web](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-web/README.md),
   [quadkit-testing](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-testing/README.md),
   [quadkit-cli](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-cli/README.md),
-  [quadkit-contracts](https://github.com/dbtinoy-/quadkit/blob/main/core/quadkit-contracts/README.md).
+  [quadkit-contracts](https://github.com/dbtinoy-/quadkit/blob/main/core/quadkit-contracts/README.md),
+  [quadkit-sql](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-sql/README.md),
+  [quadkit-auth](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-auth/README.md),
+  [quadkit-cache](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-cache/README.md),
+  [quadkit-storage](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-storage/README.md),
+  [quadkit-events](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-events/README.md),
+  [quadkit-tasks](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-tasks/README.md),
+  [quadkit-http](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-http/README.md),
+  [quadkit-monitor](https://github.com/dbtinoy-/quadkit/blob/main/packages/quadkit-monitor/README.md).

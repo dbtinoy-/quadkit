@@ -1,0 +1,201 @@
+[build-system]
+requires = [
+    "hatchling",
+]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-sql"
+version = "0.0.42"
+description = "SQL database abstractions for Quadkit Framework — Postgres, MySQL, SQLite with migrations, repositories, and query building"
+readme = "README.md"
+requires-python = ">=3.11"
+keywords = [
+    "database",
+    "sqlalchemy",
+    "orm",
+    "migrations",
+    "alembic",
+    "postgres",
+    "mysql",
+    "sqlite",
+    "sql",
+    "async",
+    "framework",
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Database",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+dependencies = [
+    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.2",
+    "typing-extensions>=4.0.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "alembic>=1.17.2",
+    "aiosqlite>=0.22.1",
+    "jinja2>=3.1.0",
+    "typer>=0.9.0",
+    "anyio>=4.0.0",
+]
+authors = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+maintainers = [
+    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+]
+
+[project.license]
+text = "Apache-2.0"
+
+[project.optional-dependencies]
+postgres = [
+    "asyncpg>=0.29.0",
+]
+mysql = [
+    "aiomysql>=0.1.0",
+]
+sqlite = [
+    "aiosqlite>=0.22.1",
+]
+
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+]
+all = [
+    "asyncpg>=0.29.0",
+    "aiomysql>=0.1.0",
+    "aiosqlite>=0.19.0",
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.entry-points."quadkit.providers"]
+database = "quadkit.sql.di.provider:DatabaseProvider"
+
+[project.entry-points."quadkit.config"]
+database = "quadkit.sql.config:DatabaseConfig"
+
+[project.entry-points."quadkit.cli.contributors"]
+sql = "quadkit.sql.cli.contributor:SqlCliContributor"
+
+[dependency-groups]
+dev = [
+    "black>=23.0.0",
+    "ruff>=0.16.4",
+    "mypy>=1.0.0",
+    "quadkit-testing>=0.0.2",
+]
+test = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.21.0",
+    "pytest-cov>=4.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint]
+extend-ignore = [
+    "A001",  # builtin shadowed by function argument (e.g., `id`, `type`)
+    "EXE001",  # shebang is present but file is executable — migration scripts
+    "F823",  # undefined `__all__` member — alembic/SQLAlchemy patterns
+    "N818",  # exception name should be named with `Error` suffix
+    "PYI021",  # docstring in stub — generated stub files
+    "PYI036",  # `__exit__` return type — Protocol stubs
+    "RET503",  # missing explicit return at end of function — sqlalchemy patterns
+    "RET504",  # unnecessary assignment before return — ORM building patterns
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+    { module = "docs.*", ignore_errors = true },
+    { module = "asyncpg", ignore_missing_imports = true },
+    { module = "aiomysql", ignore_missing_imports = true },
+    { module = "yaml", ignore_missing_imports = true },
+]
+
+[tool.uv.sources.quadkit]
+workspace = true
+
+[tool.uv.sources.quadkit-testing]
+workspace = true
+
+[tool.uv.sources.quadkit-contracts]
+workspace = true
+
+[tool.pytest.ini_options]
+addopts = ["--cov=quadkit.sql", "--cov-report=html", "--cov-report=term", "--cov-fail-under=80"]
+testpaths = ["tests"]
+pythonpath = ["src"]
+asyncio_mode = "auto"
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+    "requires_postgres: marks tests that require a live PostgreSQL connection",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/quadkit",
+]

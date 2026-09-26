@@ -19,13 +19,19 @@ def _render(tmp_path: Path, name: str, **kwargs: object) -> str:
     return Path(result.files_created[0]).read_text()
 
 
-def test_webhook_generator_uses_server_side_secret_and_lowercase_header(
+def test_webhook_generator_uses_server_side_secret_and_case_insensitive_header(
     tmp_path: Path,
 ) -> None:
-    """Generated webhook shims should read secrets server-side and normalize headers."""
+    """Generated webhook shims read secrets server-side and normalize headers.
+
+    Behaviour is exercised against the running module in
+    ``test_webhook_shim_behaviour.py``; these assertions cover the shape a
+    reader greps for.
+    """
     content = _render(tmp_path, "payment")
 
-    assert 'signature = headers.get("x-webhook-signature")' in content
+    assert 'SIGNATURE_HEADER = "x-webhook-signature"' in content
+    assert "signature = _header(headers, SIGNATURE_HEADER)" in content
     assert 'secret=os.getenv("WEBHOOK_PAYMENT_SECRET")' in content
     assert 'request.headers.get("x-webhook-secret")' not in content
     assert 'headers.get("X-Webhook-Signature")' not in content

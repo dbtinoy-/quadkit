@@ -89,7 +89,7 @@ class HTMLSerializer(AbstractMediaSerializer):
         if not isinstance(data, str):
             data = str(data)
 
-        return QuadkitHTMLResponse(content=data, status_code=status_code)  # type: ignore[return-value]
+        return QuadkitHTMLResponse(content=data, status_code=status_code)
 
 
 class PlainTextSerializer(AbstractMediaSerializer):

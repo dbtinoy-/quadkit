@@ -1,7 +1,7 @@
 """SQL identifier exceptions.
 
 This module contains only exception types for SQL identifier handling.
-The concrete identifier implementations have been moved to the optional provider.
+The concrete identifier implementations have been moved to quadkit-sql.
 """
 
 from __future__ import annotations

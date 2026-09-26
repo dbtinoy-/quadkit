@@ -9,6 +9,7 @@ from quadkit.contracts.infra.cache.exceptions import (
     CacheWriteError,
 )
 from quadkit.contracts.infra.cache.protocols import (
+    CacheAdminProtocol,
     CacheBackendProtocol,
     CacheHealthCheckerProtocol,
     CacheKeyBuilderProtocol,
@@ -18,6 +19,7 @@ from quadkit.contracts.infra.cache.protocols import (
 
 __all__ = [
     "AsyncStringSerializerProtocol",
+    "CacheAdminProtocol",
     "CacheBackendProtocol",
     "CacheError",
     "CacheHealthCheckerProtocol",

@@ -2,7 +2,7 @@
 
 Provides the cross-package contract for task progress reporting, enabling any
 package (``the optional provider``, ``quadkit-web``, …) to depend on the protocol
-without importing from ``the optional provider`` directly.
+without importing from ``quadkit-tasks`` directly.
 
 Example:
     ```python

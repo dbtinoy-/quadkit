@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Events Timeline · Quadkit</title>
+  <link rel="icon" href="/static/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav"><span class="nav-brand">Quadkit</span><span class="nav-demo">Events Timeline</span><div class="nav-links"><a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div></nav>
+  <main class="shell">
+    <header class="hero">
+      <div class="eyebrow"><span class="pulse"></span> QUADKIT EVENTS · OFFLINE LAB</div>
+      <h1>See the event stream<br><em>as it happens.</em></h1>
+      <p class="lede">Publish facts, watch subscribers react, provoke a safe failure, then replay the history — all on one in-memory stream.</p>
+      <div class="contract-line"><span>CONTRACT</span> <code>EventsModule + WebModule</code><span class="slash">/</span><span>STREAM</span> <code id="stream-name">checkout-demo</code></div>
+    </header>
+
+    <section class="metrics" aria-label="Event metrics">
+      <div class="metric"><span class="metric-label">STORED EVENTS</span><strong id="event-count">0</strong><span class="metric-note">event-store history</span></div>
+      <div class="metric"><span class="metric-label">DELIVERED</span><strong id="delivery-count">0</strong><span class="metric-note">subscriber callbacks</span></div>
+      <div class="metric"><span class="metric-label">REPLAYED</span><strong id="replay-count">0</strong><span class="metric-note">last replay run</span></div>
+      <div class="metric health-metric"><span class="metric-label">READINESS</span><strong id="health-status">checking</strong><span class="metric-note" id="health-backend">in-memory event store</span></div>
+    </section>
+
+    <section class="work-grid">
+      <article class="panel publish-panel">
+        <div class="panel-heading"><div><span class="kicker">01 / PRODUCE</span><h2>Publish a fact</h2></div><span class="badge">EVENT BUS</span></div>
+        <p class="panel-copy">Each action is appended to the stream, published through <code>EventBusProtocol</code>, and drained before the result is shown.</p>
+        <form id="publish-form">
+          <label for="actor">Actor</label>
+          <input id="actor" name="actor" value="browser-operator" maxlength="80">
+          <label for="note">Note <span>(optional)</span></label>
+          <input id="note" name="note" placeholder="What changed?" maxlength="160">
+          <div class="action-grid">
+            <button type="button" class="action action-open" data-action="open"><span class="action-mark">↗</span><span><b>Open checkout</b><small>normal event</small></span></button>
+            <button type="button" class="action action-approve" data-action="approve"><span class="action-mark">✓</span><span><b>Approve checkout</b><small>normal event</small></span></button>
+            <button type="button" class="action action-fail" data-action="fail"><span class="action-mark">!</span><span><b>Simulate failure</b><small>retrying handler</small></span></button>
+          </div>
+        </form>
+        <div id="publish-result" class="result empty">Choose an action to publish an event.</div>
+      </article>
+
+      <article class="panel replay-panel">
+        <div class="panel-heading"><div><span class="kicker">02 / REBUILD</span><h2>Replay history</h2></div><span class="badge badge-purple">EVENT STORE</span></div>
+        <p class="panel-copy">Run the store's <code>replay_events()</code> contract against the complete stream. Replay reads history; it does not append duplicates.</p>
+        <button id="replay-button" class="primary-button" type="button"><span>↺</span> Replay history</button>
+        <div class="replay-callout"><span class="callout-icon">i</span><span><b>Per-aggregate ordering</b><br>The package replay helper orders events by aggregate and sequence number.</span></div>
+        <div class="last-replay"><span>LAST RUN</span><strong id="last-replay">No replay yet</strong></div>
+      </article>
+    </section>
+
+    <section class="panel timeline-panel">
+      <div class="panel-heading"><div><span class="kicker">03 / INSPECT</span><h2>Stream timeline</h2></div><button id="refresh-button" class="quiet-button" type="button">Refresh ↻</button></div>
+      <div id="timeline" class="timeline empty-timeline"><div class="empty-state"><span class="empty-icon">⌁</span><b>No events yet</b><span>Publish an action above to start the stream.</span></div></div>
+    </section>
+
+    <section class="lower-grid">
+      <article class="panel handler-panel">
+        <div class="panel-heading"><div><span class="kicker">04 / OBSERVE</span><h2>Handler deliveries</h2></div><span class="badge badge-green">SUBSCRIBED</span></div>
+        <p class="panel-copy">The projection callback records successful deliveries. The failure probe intentionally raises only for <code>fail</code>.</p>
+        <div id="deliveries" class="log-list"><div class="muted">No deliveries yet.</div></div>
+      </article>
+      <article class="panel failure-panel">
+        <div class="panel-heading"><div><span class="kicker">05 / DIAGNOSE</span><h2>Failure report</h2></div><span class="badge badge-red">RETRY × 3</span></div>
+        <p class="panel-copy">Publication is an enqueue result. Handler errors happen during drain and are isolated so later events continue.</p>
+        <div id="failures" class="log-list"><div class="muted">No handler failures. Try “Simulate failure”.</div></div>
+      </article>
+    </section>
+
+    <footer class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a> · one stream · two subscribers · zero external services</footer>
+  </main>
+  <script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Profile · Auth Web</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="profile">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth Web</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>Profile</h1>
+  <p class="muted">Your account details and sessions</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+  <div class="card" id="identity">
+    <div class="card-header"><strong>Identity</strong></div>
+    <p class="muted">Loading…</p>
+  </div>
+  <div class="card">
+    <div class="card-header"><strong>Token claims</strong></div>
+    <pre id="claims" class="muted"></pre>
+  </div>
+  <div class="card">
+    <div class="card-header"><strong>Active sessions</strong></div>
+    <table>
+      <thead><tr><th>Session</th><th>Expires</th><th></th></tr></thead>
+      <tbody id="sessions"></tbody>
+    </table>
+  </div>
+  <p id="error" class="error" role="alert"></p>
+  <nav>
+    <a href="/password">Change password</a>
+    <a href="#" id="logout">Log out</a>
+  </nav>
+</div>
+</main>
+
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+  <script>
+    async function loadProfile() {
+      const me = await api("/api/me");
+      if (!me.ok) {
+        window.location.href = "/login";
+        return;
+      }
+      const profile = await api("/api/profile");
+      if (!profile.ok) {
+        window.location.href = "/login";
+        return;
+      }
+      document.getElementById("identity").innerHTML =
+        `<div class="card-header"><strong>Identity</strong></div>` +
+        `<div class="row"><span>${profile.body.user.name}</span>` +
+        `<span class="muted">${profile.body.user.email}</span></div>` +
+        `<div class="muted">roles: ${profile.body.claims.roles.join(", ") || "—"}</div>`;
+      document.getElementById("claims").textContent = JSON.stringify(
+        { roles: profile.body.claims.roles,
+          permissions: profile.body.claims.permissions,
+          key_id: profile.body.claims.key_id,
+          expires_at: profile.body.claims.expires_at },
+        null, 2
+      );
+      const rows = profile.body.sessions
+        .map((session) =>
+          `<tr><td><code>${session.session_id.slice(0, 18)}…</code></td>` +
+          `<td class="muted">${session.expires_at ?? ""}</td>` +
+          `<td><button type="button" class="secondary" data-session="${session.session_id}">Revoke</button></td></tr>`)
+        .join("");
+      document.getElementById("sessions").innerHTML = rows;
+      for (const button of document.querySelectorAll("button[data-session]")) {
+        button.addEventListener("click", async () => {
+          button.disabled = true;
+          try {
+            const result = await api(`/api/sessions/${button.dataset.session}/revoke`, { method: "POST" });
+            if (!result.ok) throw new Error(result.body.error || result.body.detail || "Could not revoke session");
+            await loadProfile();
+          } catch (error) {
+            showError(error.message);
+            button.disabled = false;
+          }
+        });
+      }
+    }
+
+    document.getElementById("logout").addEventListener("click", async (event) => {
+      event.preventDefault();
+      const link = event.currentTarget;
+      link.setAttribute("aria-busy", "true");
+      try {
+        await api("/api/logout", { method: "POST" });
+        window.location.href = "/login";
+      } catch (error) {
+        showError(error.message);
+        link.removeAttribute("aria-busy");
+      }
+    });
+
+    loadProfile().catch((error) => showError(error.message));
+  </script>
+</div>
+</main>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

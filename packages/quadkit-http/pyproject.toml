@@ -1,0 +1,133 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "quadkit-http"
+version = "0.0.42"
+description = "Outbound HTTP client for the Quadkit Framework"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "Apache-2.0" }
+keywords = ["quadkit", "http", "client", "requests", "framework", "async", "python"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Application Frameworks",
+    "Framework :: AsyncIO",
+    "Typing :: Typed",
+]
+authors = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
+maintainers = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
+
+dependencies = [
+    "quadkit-contracts>=0.0.2",
+    "quadkit>=0.0.2",
+    "aiohttp>=3.9.0",
+    "jinja2>=3.1.0",
+    "yarl>=1.9.0,<2",
+]
+
+[project.urls]
+Homepage = "https://dbtinoy-.github.io/quadkit"
+Repository = "https://github.com/dbtinoy-/quadkit"
+Documentation = "https://dbtinoy-.github.io/quadkit"
+Issues = "https://github.com/dbtinoy-/quadkit/issues"
+Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
+
+[project.optional-dependencies]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "pytest-aiohttp>=1.0.0",
+    "pytest-mock>=3.10.0",
+]
+dev = ["ruff>=0.16.4", "mypy>=1.0.0"]
+
+[dependency-groups]
+dev = ["ruff>=0.16.4", "mypy>=1.0.0"]
+test = [
+    "quadkit-testing>=0.0.2",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "pytest-aiohttp>=1.0.0",
+    "pytest-mock>=3.10.0",
+]
+
+[project.entry-points."quadkit.modules"]
+http = "quadkit.http.module:HTTPModule"
+
+[project.entry-points."quadkit.providers"]
+http = "quadkit.http.di.provider:HTTPProvider"
+
+[project.entry-points."quadkit.cli.contributors"]
+http = "quadkit.http.cli.contributor:HttpCliContributor"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/quadkit"]
+
+[tool.uv.sources]
+quadkit = { workspace = true }
+quadkit-contracts = { workspace = true }
+quadkit-testing = { workspace = true }
+
+[tool.mypy]
+python_version = "3.11"
+namespace_packages = true
+explicit_package_bases = true
+mypy_path = ["src"]
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+strict = true
+show_error_codes = true
+overrides = [
+    { module = "tests.*", ignore_errors = true },
+]
+
+[tool.ruff]
+extend = "../../pyproject.toml"
+line-length = 88
+target-version = "py311"
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401", "TID252"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.isort]
+known-first-party = ["quadkit"]
+force-sort-within-sections = true
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = [
+    "--cov=quadkit.http",
+    "--cov-report=term",
+    "--cov-report=html",
+    "--cov-fail-under=96",
+]
+markers = [
+    "integration: mark a test as an integration test",
+    "scenario: marks cross-package scenario integration tests",
+]

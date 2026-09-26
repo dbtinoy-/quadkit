@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>API Keys · Auth API Keys</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="keys">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth API Keys</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>API keys</h1>
+  <p class="muted">Manage machine-to-machine credentials</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+    <p id="error" class="error" role="alert"></p>
+
+    <div class="card raw-key-box" id="raw-key-box" style="display:none">
+      <div class="card-header"><strong>Raw key — shown once, copy it now</strong></div>
+      <code id="raw-key"></code>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><strong>Your keys</strong></div>
+      <table>
+        <thead><tr><th>Name</th><th>Prefix</th><th>Scopes</th><th>Expires</th><th></th></tr></thead>
+        <tbody id="key-rows"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><strong>Issue a new key</strong></div>
+      <form id="create-form">
+        <input name="name" placeholder="key name" required />
+        <label><input type="checkbox" name="scope-read" checked /> read</label>
+        <label><input type="checkbox" name="scope-write" /> write</label>
+        <button type="submit">Create key</button>
+      </form>
+      <p class="muted">Machine usage:
+        <code>curl -H "X-API-Key: &lt;raw&gt;" http://127.0.0.1:8084/api/me</code></p>
+    </div>
+
+    <footer class="auth-footer"><a href="#" id="logout">Log out</a></footer>
+</div>
+</main>
+
+<script src="/static/app.js"></script>
+<div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+<script src="/static/keys.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

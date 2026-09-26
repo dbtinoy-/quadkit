@@ -1,0 +1,146 @@
+# ── Metadata ──────────────────────────────────────────────────────────────────
+name: http-client
+version: 0.1.0
+description: "Outbound HTTP with quadkit-http: call an in-process mock upstream through the framework client"
+# ────────────────────────────────────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════════════════════
+# HTTP Client Demo — Complete Configuration Reference
+# ══════════════════════════════════════════════════════════════════════════════
+#
+# Every configuration key available for this demo.
+# Uncommented lines are the values we override; commented lines show
+# defaults.  Each section maps 1:1 to a typed config model — the
+# framework validates your yaml against it at boot time.
+#
+# DEMO FOCUS: Outbound HTTP on quadkit-http — the framework's real client makes a loopback round-trip to an in-process mock upstream (no third party, no resilience layer). One controller (GET /upstream/echo, GET /upstream/status/{code}), one service holding the call, one typed knob (upstream_host), and the canonical src/ layout (app/main/config/controllers/services/mock/di/tests).
+#
+# LEARNING PATH:
+#   1. web:          HTTP server, security, CSRF
+#   2. http_side:    upstream_host — loopback host the mock upstream binds to
+#
+# For full reference see the typed config models rendered below; each
+# section header names its model, and env overrides follow the pattern
+# QK_<SECTION>__<KEY> with '__' as the delimiter.  Examples:
+#   QK_WEB__SERVER__PORT=<value>
+#   QK_HTTP_SIDE__UPSTREAM_HOST=<value>
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ── Web ───────────────────────────────────────────────────────────────────────
+# Quadkit Web auto-configures Starlette, OpenAPI, CORS, CSRF, and
+# rate limiting from this single section.  The WebModule reads it
+# automatically via config_key="web" / config_model=WebConfig.
+# Typed model: quadkit.web.config.top_level.WebConfig
+# ─────────────────────────────────────────────────────────────────────────────
+web:
+  # name: web
+  # enabled: true
+  # env: null  # Deployment environment
+  server:
+    backend: uvicorn  # ASGI server backend (granian | uvicorn | hypercorn | gunicorn)
+    host: 127.0.0.1  # Bind host
+    port: 8132  # Bind port
+    # workers: 1  # Number of workers
+    # reload: false  # Enable auto-reload
+    # debug: false  # Enable debug mode
+  security:
+    # enabled: true  # Enable the security subsystem
+    # cors:
+    #   enabled: true  # Enable CORS
+    #   allowed_origins: []  # Allowed origins (use ['*'] to allow all). Deny-by-default: an empty list blocks every cross-origin request.
+    #   allow_methods: [GET, POST, PUT, DELETE, PATCH]
+    #   allow_headers: ['*']
+    #   expose_headers: []
+    #   allow_credentials: false
+    #   debug_permissive: false  # When True and debug mode is active, allow any origin via wildcard (explicit opt-in replacement for the old implicit debug widening)
+    #   max_age: 600
+    #   allow_origin_regex: null  # Regex pattern for allowed origins (matched when not in allowed_origins)
+    csrf:
+      enabled: false
+      # cookie_name: csrf_token
+      # header_name: X-CSRF-Token
+      # cookie_secure: true
+      # cookie_httponly: true
+      # cookie_samesite: Lax
+      # cookie_domain: null
+      # cookie_path: /
+      # token_length: 32
+      # token_ttl: 3600  # TTL in seconds for synchronizer-mode tokens stored in cache.
+      # excluded_paths: []  # URL path prefixes exempt from CSRF validation for cookie-less requests; cookie-bearing requests on these paths are still validated.
+      # exclude_content_types: []  # Content-Type values that bypass CSRF validation (explicit opt-in — JSON requests are validated by default so cookie-authenticated SPA flows cannot bypass CSRF).
+      # exclude_auth_schemes: []  # Authorization header schemes that bypass CSRF validation (explicit opt-in).
+      # secret_key: null  # HMAC secret used to sign and verify CSRF tokens (populated via QK_WEB__SECURITY__CSRF__SECRET_KEY)
+    # enable_csrf: true
+    # enable_cors: true
+    # allowed_hosts: []  # Hostnames permitted to reach the application. Empty by default; must be configured before production deployment.
+    # hsts:
+    #   enabled: false  # Emit the Strict-Transport-Security header
+    #   max_age: 31536000  # HSTS max-age in seconds (default 1 year)
+    #   include_subdomains: true  # Apply HSTS to all subdomains
+    #   preload: false  # Include site in HSTS preload list
+    # csp:
+    #   enabled: false  # Emit the Content-Security-Policy header
+    #   directives: {default-src: '''self''', script-src: '''self'' ''unsafe-inline'' ''unsafe-eval'' https://unpkg.com https://cdn.jsdelivr.net https://cdn.redoc.ly https://cdn.plot.ly', script-src-elem: '''self'' ''unsafe-inline'' ''unsafe-eval'' https://unpkg.com https://cdn.jsdelivr.net https://cdn.redoc.ly https://cdn.plot.ly', style-src: '''self'' ''unsafe-inline'' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com', style-src-elem: '''self'' ''unsafe-inline'' https://unpkg.com https://cdn.jsdelivr.net https://fonts.googleapis.com', img-src: '''self'' data: https: blob:', font-src: '''self'' data: https://fonts.googleapis.com https://fonts.gstatic.com', connect-src: '''self'' https: wss: ws: https://unpkg.com', frame-ancestors: '''none''', base-uri: '''self''', form-action: '''self'''}  # CSP directives mapping directive name to source expression(s)
+    # cross_origin:
+    #   enabled: false  # Emit cross-origin isolation headers
+    #   embedder_policy: require-corp  # Cross-Origin-Embedder-Policy header value
+    #   opener_policy: same-origin  # Cross-Origin-Opener-Policy header value
+    #   resource_policy: same-origin  # Cross-Origin-Resource-Policy header value
+    # referrer_policy: strict-origin-when-cross-origin  # Referrer-Policy header value
+    # custom_headers: {x-content-type-options: nosniff, x-frame-options: DENY, x-xss-protection: 1; mode=block}  # Additional HTTP response headers emitted verbatim
+    # permissions_policy: {geolocation: (), microphone: (), camera: (), payment: (), usb: ()}  # Permissions-Policy directive map
+  # cors:
+  #   enabled: true  # Enable CORS
+  #   allowed_origins: []  # Allowed origins (use ['*'] to allow all). Deny-by-default: an empty list blocks every cross-origin request.
+  #   allow_methods: [GET, POST, PUT, DELETE, PATCH]
+  #   allow_headers: ['*']
+  #   expose_headers: []
+  #   allow_credentials: false
+  #   debug_permissive: false  # When True and debug mode is active, allow any origin via wildcard (explicit opt-in replacement for the old implicit debug widening)
+  #   max_age: 600
+  #   allow_origin_regex: null  # Regex pattern for allowed origins (matched when not in allowed_origins)
+  # static:
+  #   enabled: false  # Enable static file serving
+  #   directory: static  # Directory to serve
+  #   prefix: /static  # URL prefix for static files
+  #   html: false  # Serve HTML files (SPA mode)
+  # rate_limit:
+  #   enabled: false  # Enable rate limiting. When true, RateLimitMiddleware enforces the matched per-path rule or the default_limit/default_window on every HTTP request.
+  #   default_limit: 100  # Max requests per window
+  #   default_window: 60  # Window size in seconds
+  #   whitelist_ips: []  # Exempt IP addresses
+  #   storage_backend: memory  # Storage backend (memory/redis)
+  #   rules: {}  # Per-path rate limit rules; longest-prefix match wins
+  # openapi_title: API  # OpenAPI Title
+  # openapi_version: 1.0.0  # OpenAPI Version
+  # openapi_url: /openapi.json
+  # swagger_ui_url: /docs
+  # redoc_url: /redoc
+  # swagger_js_url: null
+  # swagger_css_url: null
+  # redoc_js_url: null
+  # compression_enabled: true
+  # api_docs:
+  #   enabled: null  # Serve API documentation endpoints (/docs, /redoc, /openapi.json) and auto-configure CSP for their assets. Default null: served outside production and withheld in production; true/false decide explicitly
+  #   provider: both  # Documentation provider: 'swagger', 'redoc', or 'both'
+  #   cdn_base: null  # Base URL under which the vendored docs asset filenames are served (e.g. 'https://unpkg.com/swagger-ui-dist@5.10.3' or a private mirror). Default null: assets are served by the application itself from /docs-static/ with zero third-party requests. Its origin is automatically allowed in the CSP when set. Per-asset web.swagger_js_url / web.swagger_css_url / web.redoc_js_url overrides take precedence over this base.
+  # debug_routes: false  # Enable debug routes
+  # enable_debug_routes_env_gate: false  # Require explicit opt-in for debug route registration.
+  # debug_routes_token: null  # Token required to access debug routes (sent as X-Debug-Token header).
+  # enable_identity_resolution: false  # Automatically resolve OAuth external IDs to internal UUIDs in authenticated requests
+  # enable_auth: false  # Enable built-in authentication middleware. Requires authenticators to be registered in the container.
+  # max_body_size: 10485760  # Maximum allowed request body size in bytes. Requests with a Content-Length header exceeding this limit receive a 413 response before the body is read. Set to None to disable the body size limit (not recommended in production).
+  # auth_exclude_paths: [/health, /health/, /docs, /redoc, /openapi.json]  # Paths to exclude from authentication
+  # role_guard:
+  #   rules: []  # Role guard rules in declaration order
+  # excluded_contributors: []  # Contributor IDs excluded from entry-point web contributor mounting
+
+# ── HTTP Client ───────────────────────────────────────────────────────────────
+# Demo-owned section bound to MinimalApiConfig via config_key="minimal_api";
+# see the demo's config.py.
+# Typed model: http_side.config.HttpSideConfig
+# ─────────────────────────────────────────────────────────────────────────────
+http_side:
+  name: http_side
+  enabled: true
+  env: demo  # Deployment environment
+  upstream_host: 127.0.0.1  # Loopback host the in-process mock upstream binds to

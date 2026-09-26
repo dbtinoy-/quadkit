@@ -63,12 +63,15 @@ orchestrator. See [configuration](../getting-started/configuration.md).
 ## Health and readiness
 
 `/health` is the built-in probe. It reports the readiness of every
-component the framework knows about, and it is honest by default: a
-service with no optional providers answers `503` with a per-component
-body (`database: "Database provider not configured"`, ...) — *unready*,
-not unlucky. Register providers as you add backing services and keep
-their `health_check()` truthful; the probe then turns `200` when the
-graph is actually ready.
+component you registered, and it distinguishes two things most probes
+conflate: a component that is **absent** (`unknown` with the reason —
+`"No database provider is registered"`) and one that is **failing**
+(`unhealthy` with the error). Only the second decides the status code, so
+a service that legitimately has no database answers `200` instead of
+reporting itself as an outage — while a registered, unreachable database
+still answers `503`. Register providers as you add backing services and
+keep their `health_check()` truthful, and the probe turns `503` for the
+reasons worth paging on.
 
 Wire the orchestrator's readiness probe to `/health`; a plain TCP check
 cannot tell you the difference between "port bound" and "dependencies
@@ -94,7 +97,7 @@ The full hardening checklist is in
 
 ## Before you deploy: the checklist
 
-1. **Pin the 0.x line** — `quadkit-web==0.0.3` (or `>=0.0.3,<0.1.0`);
+1. **Pin the 0.x line** — `quadkit-web==0.0.42` (or `>=0.0.42,<0.1.0`);
    minor releases can move APIs until 1.0. See
    [stability](../reference/stability.md).
 2. **Serve with workers, not reload** — `web.server.workers` for

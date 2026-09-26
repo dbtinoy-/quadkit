@@ -1,7 +1,7 @@
 """Core no-op observability primitives for Quadkit Framework.
 
 These implementations satisfy the observability contracts without requiring
-``the optional provider``. They are intentionally lightweight and safe to keep as
+``quadkit-monitor``. They are intentionally lightweight and safe to keep as
 long-lived singletons in the container.
 """
 

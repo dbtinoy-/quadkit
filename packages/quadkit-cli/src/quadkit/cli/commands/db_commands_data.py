@@ -6,11 +6,13 @@ import asyncio
 import importlib
 import importlib.util
 from pathlib import Path
+import sys
 from typing import Annotated
 
 import typer
 
 from quadkit.cli.commands import db_bootstrap
+from quadkit.cli.layout import read_project_layout, resolve_output_dir
 from quadkit.cli.output import OutputManager
 from quadkit.cli.runtime import handle_errors
 from quadkit.contracts.cli.contributions import (
@@ -19,6 +21,106 @@ from quadkit.contracts.cli.contributions import (
     SchemaSetupResult,
 )
 from quadkit.contracts.data.sql.database import DatabaseProviderProtocol
+
+
+def _seeder_source() -> tuple[Path, str | None]:
+    """Where this project's seeders are, and how to import them.
+
+    Resolution order:
+
+    1. the canonical ``seeders`` component — ``src/<app>/shared/seeders``,
+       where ``quadkit gen seeder`` writes and where a generated application
+       keeps the seeders its persistence provider boots;
+    2. the project-root ``seeds/`` directory — what a project generated before
+       the ``seeders`` row landed has, and what a hand-written collection of
+       seeders looks like. Those files sit outside any package, so they stay
+       path-loaded, exactly as this command always loaded them.
+
+    Returns:
+        ``(directory, module_prefix)``: the directory to read, and the dotted
+        package its modules belong to (``my_app.shared.seeders``) when the
+        directory lives inside ``src/`` — ``None`` when it does not, which is
+        the signal to load files by path instead.
+    """
+    layout = read_project_layout()
+    canonical = Path(resolve_output_dir("src/seeders", app_package=layout.app_package))
+    if canonical.is_dir():
+        return canonical, _module_prefix(canonical)
+    return Path("seeds"), None
+
+
+def _module_prefix(directory: Path) -> str | None:
+    """Dotted package name for *directory*, when it is inside ``src/``."""
+    parts = directory.parts
+    if "src" not in parts:
+        return None
+    after_src = parts[parts.index("src") + 1 :]
+    return ".".join(after_src) if after_src else None
+
+
+def _make_importable(directory: Path) -> None:
+    """Put the package root of *directory* on ``sys.path``.
+
+    Seeders import the application's own packages (``from my_app.shared...``),
+    and the CLI is not run with the project's ``src`` on the path the way the
+    project's own entry point is.
+    """
+    parts = directory.parts
+    if "src" not in parts:
+        return
+    root = Path(*parts[: parts.index("src") + 1])
+    resolved = str(root.resolve())
+    if resolved not in sys.path:
+        sys.path.insert(0, resolved)
+
+
+def _seed_files(directory: Path) -> list[Path]:
+    """Seeders to run, in filename order.
+
+    ``__init__.py`` is skipped: seeders below ``src/`` live in a package, and
+    the package marker is not a seeder -- running it would report "No 'run'
+    function found" for a file the user never wrote.
+    """
+    return [
+        path for path in sorted(directory.glob("*.py")) if path.name != "__init__.py"
+    ]
+
+
+async def _run_seeder(
+    out: OutputManager,
+    provider: DatabaseProviderProtocol,
+    seed_file: Path,
+    module_prefix: str | None,
+) -> None:
+    """Execute one seeder file.
+
+    A seeder inside the application package is *imported*: it is an ordinary
+    module there, and importing is what the generated application itself does
+    when it boots its seeders. Anything else is loaded from its path, which is
+    the only thing that works for a file outside ``src/``.
+    """
+    out.info(f"Running seeder: {seed_file}")
+
+    if module_prefix is not None:
+        _make_importable(seed_file)
+        module = importlib.import_module(f"{module_prefix}.{seed_file.stem}")
+    else:
+        spec = importlib.util.spec_from_file_location("seed_module", seed_file)
+        if spec is None or spec.loader is None:
+            out.warning(f"Could not load seeder: {seed_file}")
+            return
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+
+    if not hasattr(module, "run"):
+        out.warning(f"No 'run' function found in {seed_file}")
+        return
+
+    if asyncio.iscoroutinefunction(module.run):
+        await module.run(provider)
+    else:
+        module.run(provider)
+    out.success(f"Seeder {seed_file} completed.")
 
 
 @handle_errors
@@ -33,33 +135,26 @@ def seed(
         manager = await db_bootstrap.get_migration_manager()
         await manager.provider.boot()
         try:
-            seeds_dir = Path("seeds")
+            seeds_dir, module_prefix = _seeder_source()
             if not seeds_dir.exists() and not file:
                 out.warning("No seeds directory found.")
                 return
 
-            files_to_run = []
+            # Annotated: the first branch appends ``(path, None)`` and the
+            # second rebuilds with a module prefix, so inference from the
+            # empty list would pin the tuple's second element to ``None``.
+            files_to_run: list[tuple[Path, str | None]] = []
             if file:
-                files_to_run.append(Path(file))
+                # An explicit file is run as given, by path: the user named a
+                # file, not a module.
+                files_to_run.append((Path(file), None))
             else:
-                files_to_run = sorted(seeds_dir.glob("*.py"))
+                files_to_run = [
+                    (seed_file, module_prefix) for seed_file in _seed_files(seeds_dir)
+                ]
 
-            for seed_file in files_to_run:
-                out.info(f"Running seeder: {seed_file}")
-
-                spec = importlib.util.spec_from_file_location("seed_module", seed_file)
-                if spec and spec.loader:
-                    module = importlib.util.module_from_spec(spec)
-                    spec.loader.exec_module(module)
-
-                    if hasattr(module, "run"):
-                        if asyncio.iscoroutinefunction(module.run):
-                            await module.run(manager.provider)
-                        else:
-                            module.run(manager.provider)
-                        out.success(f"Seeder {seed_file} completed.")
-                    else:
-                        out.warning(f"No 'run' function found in {seed_file}")
+            for seed_file, prefix in files_to_run:
+                await _run_seeder(out, manager.provider, seed_file, prefix)
 
         except Exception as e:  # noqa: BLE001 — any seeder failure is a CLI error
             out.error(f"Seeder failed: {e}")
@@ -121,25 +216,12 @@ def reset(
                 out.info("No pending migrations.")
 
             if seed:
-                seeds_dir = Path("seeds")
+                seeds_dir, module_prefix = _seeder_source()
                 if seeds_dir.exists():
-                    files_to_run = sorted(seeds_dir.glob("*.py"))
-                    for seed_file in files_to_run:
-                        out.info(f"Running seeder: {seed_file}")
-
-                        spec = importlib.util.spec_from_file_location(
-                            "seed_module",
-                            seed_file,
+                    for seed_file in _seed_files(seeds_dir):
+                        await _run_seeder(
+                            out, manager.provider, seed_file, module_prefix
                         )
-                        if spec and spec.loader:
-                            module = importlib.util.module_from_spec(spec)
-                            spec.loader.exec_module(module)
-                            if hasattr(module, "run"):
-                                if asyncio.iscoroutinefunction(module.run):
-                                    await module.run(manager.provider)
-                                else:
-                                    module.run(manager.provider)
-                                out.success(f"Seeder {seed_file} completed.")
                 else:
                     out.warning("No seeds directory found, skipping seed step.")
 

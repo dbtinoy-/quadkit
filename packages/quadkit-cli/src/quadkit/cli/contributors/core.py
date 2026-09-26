@@ -13,7 +13,7 @@ _GENERATOR_SPECS: tuple[tuple[str, str, str, str], ...] = (
         "provider",
         "Generate provider",
         "quadkit.cli.generators.provider:ProviderGenerator",
-        "src/providers",
+        "src/di",
     ),
     (
         "test",

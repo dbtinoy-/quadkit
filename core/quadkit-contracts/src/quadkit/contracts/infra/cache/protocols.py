@@ -165,6 +165,27 @@ class CacheBackendProtocol(Protocol):
 
 
 @runtime_checkable
+class CacheAdminProtocol(Protocol):
+    """Optional operational contract exposed by inspectable cache backends.
+
+    ``CacheBackendProtocol`` intentionally stays focused on cache data-plane
+    operations. Operator consoles also need a safe, backend-neutral way to
+    inspect and reset counters without reaching into private implementation
+    fields. Backends that can expose local counters implement this optional
+    protocol; distributed backends may return ``None`` for unavailable
+    statistics.
+    """
+
+    def get_stats(self) -> dict[str, int | float | str] | None:
+        """Return backend counters and capacity information, when available."""
+        ...
+
+    def reset_stats(self) -> None:
+        """Reset operator-facing counters without deleting cached values."""
+        ...
+
+
+@runtime_checkable
 class CacheProtectionStrategyProtocol(Protocol):
     """Protocol for cache stampede protection strategies."""
 
@@ -258,6 +279,7 @@ class CacheProviderProtocol(ProviderProtocol, Protocol):
 
 
 __all__ = [
+    "CacheAdminProtocol",
     "CacheBackendProtocol",
     "CacheHealthCheckerProtocol",
     "CacheKeyBuilderProtocol",

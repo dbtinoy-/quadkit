@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8" />
+  <title>Log in · Auth RBAC</title>
+  <link rel="stylesheet" href="/static/style.css" />
+</head>
+<body data-page="login">
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Auth RBAC</span>
+  <div class="nav-links">
+    <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <h1>Pick a persona</h1>
+  <p class="muted">Select a role to explore permission-based access control</p>
+</header>
+<main class="auth-shell">
+<div class="auth-content">
+
+  <div class="card">
+    <p id="error" class="error"></p>
+    <div class="persona-list" id="personas"></div>
+    <p class="muted">All personas share the password <code>Demo-Password-1</code></p>
+  </div>
+
+  <script src="/static/app.js"></script>
+  <div class="demo-footer">Powered by <a href="https://dbtinoy-.github.io/quadkit" target="_blank" rel="noopener">Quadkit</a></div>
+</div>
+  <script>
+    async function loadPersonas() {
+      const me = await api("/api/me");
+      if (me.ok) {
+        window.location.href = "/matrix";
+        return;
+      }
+      const roles = ["viewer", "editor", "admin"];
+      const box = document.getElementById("personas");
+      for (const role of roles) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.textContent = `Log in as ${role}`;
+        button.addEventListener("click", async () => {
+          showError("");
+          button.disabled = true;
+          try {
+            const result = await api("/api/login", {
+              method: "POST",
+              body: JSON.stringify({ persona: role }),
+            });
+            if (result.ok) {
+              window.location.href = "/matrix";
+            } else {
+              showError(result.body.error || result.body.detail || "Login failed");
+            }
+          } catch (error) {
+            showError(error.message);
+          } finally {
+            button.disabled = false;
+          }
+        });
+        box.appendChild(button);
+        box.appendChild(document.createElement("p"));
+      }
+    }
+    loadPersonas().catch((error) => showError(error.message));
+  </script>
+</div>
+</main>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>
