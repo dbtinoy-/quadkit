@@ -162,14 +162,14 @@ runtime dependencies. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.43` in the `0.x` series, released in lockstep with the
+Version `0.0.44` in the `0.x` series, released in lockstep with the
 other four distributions. **These protocols carry no compatibility
 guarantee yet**: minor releases may add, rename, or remove members
 while the framework is pre-1.0. Because this package is published
 whole, protocols for not-yet-released areas are the most likely to
 change; the settled ones are those exercised by `quadkit`,
 `quadkit-web`, `quadkit-testing`, and `quadkit-cli`. Pin an exact
-version (`quadkit-contracts==0.0.43`) when you depend on these types
+version (`quadkit-contracts==0.0.44`) when you depend on these types
 directly. Full policy:
 [stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
 

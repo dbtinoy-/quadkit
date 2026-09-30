@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-auth"
-version = "0.0.43"
+version = "0.0.44"
 description = "Authentication and authorization for Quadkit Framework - JWT, OAuth2, SAML, LDAP, RBAC, and multi-tenancy"
 readme = "README.md"
 requires-python = ">=3.11"

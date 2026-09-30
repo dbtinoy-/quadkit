@@ -11,13 +11,13 @@ for everything published from this repository.
   `quadkit-sql`, `quadkit-auth`, `quadkit-cache`, `quadkit-storage`,
   `quadkit-events`, `quadkit-tasks`, `quadkit-http`, and `quadkit-monitor` —
   are released **in
-  lockstep with a single version** (currently `0.0.43`). Cross-package
+  lockstep with a single version** (currently `0.0.44`). Cross-package
   compatibility is only guaranteed within one released version; do not
-  mix `quadkit-web 0.0.2` with a hypothetical `quadkit 0.0.43`.
+  mix `quadkit-web 0.0.2` with a hypothetical `quadkit 0.0.44`.
 - **Minor releases** (`0.x → 0.y`) may change or remove public APIs.
   There are no breaking-change-free guarantees before `1.0`.
 - **Pin your versions.** In `pyproject.toml` prefer exact pins
-  (`quadkit-web==0.0.43`) or tight ranges (`>=0.0.43,<0.1.0`) until `1.0`,
+  (`quadkit-web==0.0.44`) or tight ranges (`>=0.0.44,<0.1.0`) until `1.0`,
   and read the release notes on every upgrade.
 
 ## Deprecation and breaking changes

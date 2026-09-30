@@ -53,8 +53,8 @@ extensions. See [error handling](../guides/error-handling.md).
 
 ## Supply chain
 
-- **Pin the 0.x line.** Exact pins (`quadkit-web==0.0.43`) or tight
-  ranges (`>=0.0.43,<0.1.0`) until `1.0`; review release notes on each
+- **Pin the 0.x line.** Exact pins (`quadkit-web==0.0.44`) or tight
+  ranges (`>=0.0.44,<0.1.0`) until `1.0`; review release notes on each
   upgrade. See [stability](../reference/stability.md).
 - The thirteen public distributions are the whole public surface; optional
   extras pull only generic ecosystem dependencies (Starlette, pydantic,

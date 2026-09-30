@@ -1,4 +1,4 @@
-"""Tests for staged TOTP enrollment used by Gatewai's new-api parity routes."""
+"""Tests for staged TOTP enrollment used by new-api parity routes."""
 
 from __future__ import annotations
 

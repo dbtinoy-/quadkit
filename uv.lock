@@ -3947,7 +3947,7 @@ wheels = [
 
 [[package]]
 name = "quadkit"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "core/quadkit" }
 dependencies = [
     { name = "orjson" },
@@ -4007,7 +4007,7 @@ provides-extras = ["dev", "codegen", "test", "docs", "security", "web"]
 
 [[package]]
 name = "quadkit-auth"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-auth" }
 dependencies = [
     { name = "argon2-cffi" },
@@ -4129,7 +4129,7 @@ test = [
 
 [[package]]
 name = "quadkit-cache"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-cache" }
 dependencies = [
     { name = "jinja2" },
@@ -4243,7 +4243,7 @@ test = [
 
 [[package]]
 name = "quadkit-cli"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-cli" }
 dependencies = [
     { name = "aiofiles" },
@@ -4339,7 +4339,7 @@ test = [
 
 [[package]]
 name = "quadkit-contracts"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "core/quadkit-contracts" }
 dependencies = [
     { name = "typing-extensions" },
@@ -4397,7 +4397,7 @@ test = [
 
 [[package]]
 name = "quadkit-events"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-events" }
 dependencies = [
     { name = "jinja2" },
@@ -4525,7 +4525,7 @@ test = [
 
 [[package]]
 name = "quadkit-http"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-http" }
 dependencies = [
     { name = "aiohttp" },
@@ -4597,7 +4597,7 @@ test = [
 
 [[package]]
 name = "quadkit-monitor"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-monitor" }
 dependencies = [
     { name = "quadkit" },
@@ -4713,7 +4713,7 @@ test = [
 
 [[package]]
 name = "quadkit-sql"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-sql" }
 dependencies = [
     { name = "aiosqlite" },
@@ -4823,7 +4823,7 @@ test = [
 
 [[package]]
 name = "quadkit-storage"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-storage" }
 dependencies = [
     { name = "aiofiles" },
@@ -4929,7 +4929,7 @@ test = [
 
 [[package]]
 name = "quadkit-tasks"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-tasks" }
 dependencies = [
     { name = "croniter" },
@@ -5045,7 +5045,7 @@ test = [
 
 [[package]]
 name = "quadkit-testing"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-testing" }
 dependencies = [
     { name = "pytest" },
@@ -5161,7 +5161,7 @@ test = [
 
 [[package]]
 name = "quadkit-web"
-version = "0.0.43"
+version = "0.0.44"
 source = { editable = "packages/quadkit-web" }
 dependencies = [
     { name = "aiofiles" },

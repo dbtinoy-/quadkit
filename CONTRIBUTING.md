@@ -21,10 +21,12 @@ uv run ruff check .
 uv run ruff format --check .
 ```
 
-The supported public distributions are `quadkit`, `quadkit-contracts`,
-`quadkit-web`, `quadkit-testing`, and `quadkit-cli`. Changes should use their
-published public APIs and should not rely on unpublished implementation
-packages.
+The published distributions are `quadkit`, `quadkit-contracts`,
+`quadkit-web`, `quadkit-testing`, `quadkit-cli`, `quadkit-sql`,
+`quadkit-auth`, `quadkit-cache`, `quadkit-storage`, `quadkit-events`,
+`quadkit-tasks`, `quadkit-http` and `quadkit-monitor`. Changes should use
+their published public APIs and should not rely on unpublished
+implementation packages.
 
 ## Pull requests
 

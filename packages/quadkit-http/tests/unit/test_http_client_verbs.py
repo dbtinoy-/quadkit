@@ -278,9 +278,9 @@ class TestTimeoutNormalization:
     async def test_get_normalises_aiohttp_connection_error(self):
         """aiohttp.ClientError (connect refused/DNS/reset) → Err(HTTPConnectionError).
 
-        Regression (QK-USE-3, gatewai probe adoption): raw aiohttp errors used
+        Detail (QK-USE-3, probe adoption): raw aiohttp errors used
         to escape `get()` instead of mapping to the documented connection-error
-        Result — unreachable hosts crashed callers that expected `Err`.
+        Result — unreachable hosts reach callers that expected `Err`.
         """
         client = HTTPClientImpl(
             config=HTTPClientConfig(enforce_url_safety=False),

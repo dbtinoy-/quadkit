@@ -376,7 +376,7 @@ class PasskeyService:
         """Delete one passkey, or all passkeys when no id is supplied.
 
         The operation is deliberately part of the framework service so
-        Gatewai does not mutate security profile documents outside the
+        callers do not mutate security profile documents outside the
         QuadKit Auth boundary.
         """
         user = await self.user_store.get_user_by_id(user_id)

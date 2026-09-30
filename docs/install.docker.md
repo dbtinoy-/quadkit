@@ -17,7 +17,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 WORKDIR /app
 
 # Dependencies first: this layer caches until the pin changes.
-RUN pip install "quadkit[web]==0.0.43" granian
+RUN pip install "quadkit[web]==0.0.44" granian
 
 # Application code and config.
 COPY src/ src/

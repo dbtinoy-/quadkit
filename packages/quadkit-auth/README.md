@@ -183,5 +183,5 @@ config = AuthConfig(
 )
 ```
 
-This prevents the Piccolina-style mistake of silently trusting unverified tokens
+This prevents the common mistake of silently trusting unverified tokens
 in production when a secret env-var is missing.

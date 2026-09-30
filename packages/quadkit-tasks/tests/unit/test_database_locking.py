@@ -52,7 +52,7 @@ class _Result:
 
 
 class _SessionProvider:
-    """Provider shaped like ``gatewai``/SQLAlchemy: ``session().exec_driver_sql``."""
+    """Provider shaped like SQLAlchemy: ``session().exec_driver_sql``."""
 
     surface = "session"
 

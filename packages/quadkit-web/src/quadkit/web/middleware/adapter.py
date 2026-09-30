@@ -93,7 +93,8 @@ class _QuadkitMiddlewareAdapter:
 
             # Post-processing usually happens via Response object in Quadkit
             # For pure ASGI, we'd need to capture the body if we want to modify it.
-            # Piccolina doesn't currently use body-modifying middleware via this adapter.
+            # No application relies on body-modifying middleware through
+            # this adapter.
         else:
             await self.app(scope, receive, send)
 

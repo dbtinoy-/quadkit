@@ -127,10 +127,10 @@ def register_error_status(error_type: type[Exception], status_code: int) -> None
 def get_retry_after_header(exc: Exception) -> dict[str, str] | None:
     """Extract Retry-After header from a RateLimitError if present.
 
-    Supports both ``details.retry_after`` (framework) and direct
-    ``retry_after`` attribute (gatewai-style).
+    Supports both ``details.retry_after`` (framework) and a direct
+    ``retry_after`` attribute (direct-attribute style).
     """
-    # Gatewai-style direct attribute
+    # Direct attribute style
     retry_after = getattr(exc, "retry_after", None)
     if retry_after is not None:
         return {"Retry-After": str(retry_after)}

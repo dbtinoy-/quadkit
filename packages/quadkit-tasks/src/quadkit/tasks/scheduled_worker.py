@@ -1,7 +1,7 @@
 """ScheduledWorker — QK-005.
 
 A base class for services that need to run a cycle of work on a fixed interval.
-Replaces the hand-rolled scheduling loops found across Piccolina modules with a
+Replaces the hand-rolled scheduling loops found across application modules with a
 single, tested, framework-aware abstraction.
 
 Usage::
