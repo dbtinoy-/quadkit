@@ -71,22 +71,9 @@ Quadkit is a kit of **13 published packages**, installed à la carte: eleven
 to build with, one optional to test, one for the command line.
 
 ```mermaid
-graph TD
-    QC[quadkit-contracts<br/>protocols & types] --> Q[quadkit<br/>DI container, modules, config]
-    Q --> W[quadkit-web<br/>ASGI, controllers, routing]
-    Q --> CLI[quadkit-cli<br/>scaffolding & generators]
-    Q --> SQL[quadkit-sql<br/>repositories & UoW]
-    Q --> CACHE[quadkit-cache<br/>cache protocols & backends]
-    Q --> AUTH[quadkit-auth<br/>JWT, users & permissions]
-    Q --> EVENTS[quadkit-events<br/>event bus & handlers]
-    Q --> TASKS[quadkit-tasks<br/>background jobs]
-    Q --> STORAGE[quadkit-storage<br/>object storage]
-    Q --> HTTP[quadkit-http<br/>typed API clients]
-    Q --> MON[quadkit-monitor<br/>metrics & health]
-    W --> APP[Your Application]
-    SQL --> W
-    AUTH --> W
-    MON --> W
+graph LR
+    QC[quadkit-contracts] --> Q[quadkit] --> W[quadkit-web] --> APP[Your&nbsp;Application]
+    Q --> CLI[quadkit-cli]
 
     style QC fill:#166534,stroke:#22c55e,color:#fff
     style Q fill:#166534,stroke:#22c55e,color:#fff
