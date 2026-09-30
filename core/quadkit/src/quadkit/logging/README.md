@@ -43,15 +43,15 @@ Each log line is a single JSON object emitted by
 {
   "timestamp": "2026-08-19 10:15:30",
   "level": "INFO",
-  "logger": "quadkit.web.controller",
   "event": "user_created",
   "service": "my-app",
   "trace_id": "4bf92f3577b34da6a3ce929d0e0e4736",
   "span_id": "00f067aa0ba902b7",
-  "filename": "controller.py",
-  "lineno": 42,
-  "module": "controller",
-  "func_name": "create_user",
+  "_logger_name": "quadkit.web.controller",
+  "_filename": "controller.py",
+  "_lineno": 42,
+  "_module": "controller",
+  "_func_name": "create_user",
   "user_id": "usr_123"
 }
 ```
@@ -60,15 +60,43 @@ Each log line is a single JSON object emitted by
 |-------------|---------------------------------------------------------------|
 | `timestamp` | `TimeStamper(fmt="%Y-%m-%d %H:%M:%S")`                       |
 | `level`     | `structlog.stdlib.add_log_level`                             |
-| `logger`    | `_add_logger_name` — auto-prefixed with `quadkit.`          |
 | `event`     | Message passed to `logger.info("...")`                       |
 | `service`   | Injected by `configure_logging(service_name=...)` / `Application.name`; overridable via `bind(service=...)` |
 | `trace_id` / `span_id` | `_otel_processor` — only when an OTEL trace context is active |
-| `filename` / `lineno` / `module` / `func_name` | `CallsiteParameterAdder` |
+| `_logger_name` | `get_logger()` / `_add_logger_name` — auto-prefixed with `quadkit.` |
+| `_filename` / `_lineno` / `_module` / `_func_name` | `CallsiteParameterAdder`, wrapped by `_NamespacedCallsiteAdder` |
 | `exception` | Formatted traceback, present on `logger.exception(...)` / `exc_info=True` |
 
 Key-value arguments passed to a log call are appended verbatim as top-level
 fields (`logger.info("user_created", user_id=usr.id)` → `"user_id"`).
+
+## Field names: what the envelope owns, and what you own
+
+Two namespaces, so a caller's field and the pipeline's metadata can never
+be the same key:
+
+- **`_`-prefixed keys belong to the framework** — `_logger_name`,
+  `_filename`, `_lineno`, `_module`, `_func_name`. Do not pass them.
+- **Every other plain name belongs to the caller.** `module=`, `filename=`,
+  `name=`, `msg=` are ordinary fields; `logger.info("module_booted",
+  module=self.name)` renders the value you passed.
+- **Five envelope names are reserved**: `event`, `level`, `timestamp`,
+  `service` and `exception`. `service` is deliberately overridable via
+  `bind(service=...)`; the other four are not yours to set.
+  `dev/checks/reserved_log_fields.py` fails the build on a call site that
+  passes one.
+
+`event` is the sharp one: it is structlog's parameter for the *message*, so
+`logger.warning("emit_failed", event=type(evt).__name__)` raises
+`TypeError` — inside the `except` block that was reporting the failure.
+Because a diagnostic must never raise, `_NamedLogger` moves such a field to
+`event_field` rather than letting the call blow up; the gate is what makes
+you rename it properly (`event_type`, `webhook_event`).
+
+Callsite metadata reports *your* frame, not the framework's: the adder is
+configured with `additional_ignores=["quadkit.logging"]`, without which
+`_NamedLogger.info` in `logging/factory.py` is the nearest non-structlog
+frame and every line in the process is stamped with it.
 
 ## Behavior guarantees
 
@@ -94,5 +122,5 @@ fields (`logger.info("user_created", user_id=usr.id)` → `"user_id"`).
 - Never `print()`; never log secret material (redaction is a safety net,
   not a substitute for not logging secrets).
 - For error tracking, forward `level >= ERROR` events with `event`,
-  `exception`, `logger`, and `trace_id` fields — correlation IDs make
+  `exception`, `_logger_name`, and `trace_id` fields — correlation IDs make
   distributed debugging possible.

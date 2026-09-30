@@ -10,6 +10,7 @@ from __future__ import annotations
 import uuid
 {% for line in import_lines %}{{ line }}
 {% endfor %}
+from quadkit import clock
 
 class {{ entity_name }}(BaseModel):
     """{{ entity_name }} entity."""
@@ -17,12 +18,8 @@ class {{ entity_name }}(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     id: str = Field(default_factory=lambda: uuid.uuid4().hex)
-    created_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
-    updated_at: datetime = Field(
-        default_factory=lambda: datetime.now(timezone.utc)
-    )
+    created_at: datetime = Field(default_factory=clock.now)
+    updated_at: datetime = Field(default_factory=clock.now)
 {%- for field in fields %}
     {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
 {%- endfor %}

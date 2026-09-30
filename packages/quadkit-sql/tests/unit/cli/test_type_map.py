@@ -44,7 +44,7 @@ def test_render_imports_merges_base_and_annotation_imports() -> None:
     """Base imports are always present and each module appears once."""
     lines = render_imports(["date", "time", "dict[str, Any]", "EmailStr"])
 
-    assert "from datetime import date, datetime, time, timezone" in lines
+    assert "from datetime import date, datetime, time" in lines
     assert "from pydantic import AnyHttpUrl" not in lines
     assert "from pydantic import BaseModel, ConfigDict, EmailStr, Field" in lines
     assert "from typing import Any" in lines
@@ -54,7 +54,7 @@ def test_render_imports_merges_base_and_annotation_imports() -> None:
 def test_render_imports_without_annotations() -> None:
     """A plain entity needs only the base imports."""
     assert render_imports([]) == [
-        "from datetime import datetime, timezone",
+        "from datetime import datetime",
         "from pydantic import BaseModel, ConfigDict, Field",
     ]
 

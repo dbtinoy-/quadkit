@@ -6,7 +6,7 @@ Runtime dependencies: Starlette, orjson, Jinja2, aiofiles — plus
 `quadkit` and `quadkit-contracts`.
 
 - **Install**: `pip install "quadkit-web[granian]"` · Python `>= 3.11`
-- **Version** (lockstep with all thirteen distributions): `0.0.42`
+- **Version** (lockstep with all thirteen distributions): `0.0.43`
   → [stability policy](./stability.md)
 - **Issues**: <https://github.com/dbtinoy-/quadkit/issues>
 

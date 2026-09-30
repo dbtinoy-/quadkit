@@ -27,7 +27,8 @@ class {{ metric_name }}Metric:
         """
         merged = {**self.labels, **labels}
 
-        # TODO: forward to the metrics backend resolved from the container.
+        # @INTENT: Record this measurement to the metrics backend resolved from the container.
+        # @TODO: forward to the metrics backend resolved from the container.
         # Example:
         #   metrics = await container.resolve(MetricsProtocol)
         #   metrics.record(self.name, value, labels=merged)

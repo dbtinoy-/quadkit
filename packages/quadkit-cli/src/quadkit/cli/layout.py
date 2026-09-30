@@ -64,7 +64,11 @@ class ComponentDir:
 COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("admin/actions", "admin/actions", False, ("admin_action",)),
     ComponentDir("admin/resources", "admin/resources", False, ("admin_resource",)),
-    ComponentDir("audit", "audit", True, ("audited",)),
+    # Per-entity attachment: an audit log is written for one entity's table,
+    # so it belongs wherever that entity does (the rule `validators` states
+    # below). Cross-cutting `shared/` put it where every context could see a
+    # file only one of them owns.
+    ComponentDir("audit", "audit", False, ("audited",)),
     # ``auth``, ``contracts`` and ``validators`` carry no generators on
     # purpose: no registered generator writes there yet (the CLI ships
     # ``provider`` and ``test``; subsystems contribute the rest), and a
@@ -125,14 +129,18 @@ COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("sagas", "sagas", False, ("saga", "saga_step")),
     ComponentDir("schema", "schema", True, ("graphql",)),
     ComponentDir("schema/dataloaders", "schema/dataloaders", True, ("dataloader",)),
-    ComponentDir("search", "search", True, ("search_index",)),
+    # Per-entity attachment: a search index indexes one entity's fields.
+    ComponentDir("search", "search", False, ("search_index",)),
     # Generated seeders live inside the application package so they are
     # importable: a project boots them from its persistence provider, and
     # `quadkit db seed` imports the same modules. ``seeds`` (project root)
     # stays resolvable in ROOT_DIRS below, because that is where every
     # project generated before 2026-09-23 kept them and where the command
     # still looks second.
-    ComponentDir("seeders", "seeders", True, ("seeder",)),
+    # Per-entity attachment: a seeder seeds exactly one entity, so it follows
+    # that entity into its module. `quadkit db seed` discovers seeders through
+    # the layout rather than a fixed path, so it finds them either way.
+    ComponentDir("seeders", "seeders", False, ("seeder",)),
     ComponentDir("services", "services", False, ("service",)),
     ComponentDir("storage/backends", "storage/backends", True, ("storage_driver",)),
     ComponentDir("tasks", "tasks", False, ("task",)),

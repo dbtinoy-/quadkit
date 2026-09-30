@@ -3,6 +3,14 @@
 Provides ``get_logger()`` for obtaining structlog bound-loggers with a
 ``.name`` attribute, and ``LoggerFactoryImpl`` which implements the
 ``LoggerFactoryProtocol`` protocol.
+
+A logging call must never raise.  structlog names the message parameter
+``event``, so ``logger.info("task_finished", event=evt.name)`` is a
+``TypeError`` — raised from inside the ``except`` block that was trying to
+report a failure.  ``_deconflict()`` moves such a field to ``event_field``
+instead of letting the diagnostic take down the path it was diagnosing;
+``dev/checks/reserved_log_fields.py`` fails the build on the call site so
+the remap stays a safety net rather than an interface.
 """
 
 from __future__ import annotations
@@ -14,6 +22,25 @@ import structlog
 if TYPE_CHECKING:
     from quadkit.contracts.core.logging import LoggerProtocol
     from quadkit.logging.config.models import LoggingConfig
+
+
+def _deconflict(kwargs: dict[str, Any]) -> dict[str, Any]:
+    """Move a caller field named ``event`` out of structlog's way.
+
+    ``event`` is structlog's parameter for the log message, so passing it as
+    a field raises ``TypeError``.  The field is preserved under
+    ``event_field`` (``event_field_``, ``event_field__``, … if the caller
+    already used that name) rather than dropped: a log call is a diagnostic
+    and must not raise.
+    """
+    if "event" not in kwargs:
+        return kwargs
+    safe = dict(kwargs)
+    key = "event_field"
+    while key in safe:
+        key += "_"
+    safe[key] = safe.pop("event")
+    return safe
 
 
 class _NamedLogger:
@@ -34,26 +61,31 @@ class _NamedLogger:
     # These exist so ``hasattr(_NamedLogger, 'debug')`` etc. return True for
     # the DI validator.  At runtime the call is forwarded via __getattr__.
 
-    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.debug(msg, *args, **kwargs)
+    # ``msg`` is positional-only: without the ``/`` this wrapper would add a
+    # reserved word of its own making, and ``logger.info("x", msg=body)``
+    # would fail with "got multiple values for argument 'msg'" even though
+    # the underlying structlog logger has no such parameter.
 
-    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.info(msg, *args, **kwargs)
+    def debug(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.debug(msg, *args, **_deconflict(kwargs))
 
-    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.warning(msg, *args, **kwargs)
+    def info(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.info(msg, *args, **_deconflict(kwargs))
 
-    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.error(msg, *args, **kwargs)
+    def warning(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.warning(msg, *args, **_deconflict(kwargs))
 
-    def critical(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.critical(msg, *args, **kwargs)
+    def error(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.error(msg, *args, **_deconflict(kwargs))
 
-    def exception(self, msg: str, *args: Any, **kwargs: Any) -> None:
-        self._inner.exception(msg, *args, **kwargs)
+    def critical(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.critical(msg, *args, **_deconflict(kwargs))
+
+    def exception(self, msg: str, /, *args: Any, **kwargs: Any) -> None:
+        self._inner.exception(msg, *args, **_deconflict(kwargs))
 
     def bind(self, **kwargs: Any) -> _NamedLogger:
-        result = self._inner.bind(**kwargs)
+        result = self._inner.bind(**_deconflict(kwargs))
         return self if result is self._inner else _NamedLogger(result, self.name)
 
     def unbind(self, *keys: str) -> _NamedLogger:
@@ -122,18 +154,21 @@ class LoggerFactoryImpl:
         self._config = config
 
     def get_logger(self, name: str | None = None) -> LoggerProtocol:
-        """Get or create a logger, optionally binding the service name."""
-        logger = get_logger(name)
-        if name:
-            try:
-                return cast("LoggerProtocol", logger.bind(service=name))
-            except (AttributeError, TypeError):
-                return cast("LoggerProtocol", logger)
-        return cast("LoggerProtocol", logger)
+        """Get or create a logger.
+
+        This used to ``bind(service=name)``.  ``service`` is the envelope
+        field identifying the *application* (set by ``configure_logging()``
+        and used for log routing), and ``_service_processor`` yields to a
+        bound value — so every DI-resolved logger relabelled the service as
+        whichever component had asked for it.  The logger name already
+        travels in ``_logger_name``.
+        """
+        return cast("LoggerProtocol", get_logger(name))
 
 
 __all__ = [
     "LoggerFactoryImpl",
     "_NamedLogger",
+    "_deconflict",
     "get_logger",
 ]

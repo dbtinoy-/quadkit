@@ -120,6 +120,7 @@ class TestOAuth2Manager:
         self, mocker, providers,
     ):
         """Style 0 retries the token exchange with HTTP Basic when form auth is rejected."""
+        pytest.importorskip("authlib")
         from quadkit.auth.authn.oauth2 import OAuthError
 
         providers["google"].auth_style = 0
@@ -149,6 +150,7 @@ class TestOAuth2Manager:
         self, mocker, providers,
     ):
         """Style 0 does not submit a one-time authorization code twice."""
+        pytest.importorskip("authlib")
         from quadkit.auth.authn.oauth2 import OAuthError
 
         providers["google"].auth_style = 0

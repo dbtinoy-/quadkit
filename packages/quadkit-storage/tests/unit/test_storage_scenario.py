@@ -16,10 +16,13 @@ from __future__ import annotations
 from datetime import timedelta
 from typing import Any
 
+import pytest
+
+pytest.importorskip("botocore")
+
 import botocore
 import botocore.exceptions
 from botocore.exceptions import ClientError
-import pytest
 
 from quadkit.storage.backends import _s3_upload_mixin
 from quadkit.storage.backends import s3 as s3_module

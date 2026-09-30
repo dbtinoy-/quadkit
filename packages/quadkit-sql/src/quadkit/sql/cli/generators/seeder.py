@@ -120,7 +120,7 @@ class SeederGenerator(GeneratorBase):
         if lowered_type in {"bool", "boolean"}:
             return "True"
         if lowered_type in {"date", "datetime"}:
-            return "datetime.now(timezone.utc)"
+            return "clock.now()"
         if lowered_type == "uuid":
             return '"550e8400-e29b-41d4-a716-446655440000"'
         if "json" in lowered_type:

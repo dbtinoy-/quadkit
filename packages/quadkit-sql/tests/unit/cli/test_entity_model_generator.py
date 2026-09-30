@@ -82,7 +82,7 @@ def test_unknown_type_falls_back_to_str(tmp_path: Path) -> None:
 def test_required_imports_are_emitted_and_merged(tmp_path: Path) -> None:
     """Constrained annotations bring their imports, each module once."""
     source = _render(tmp_path, "day:date,at:time,meta:json,email:email,site:url")
-    assert "from datetime import date, datetime, time, timezone" in source
+    assert "from datetime import date, datetime, time" in source
     assert "from typing import Any" in source
     assert "from pydantic import AnyHttpUrl, BaseModel, ConfigDict, EmailStr, Field" in (
         source

@@ -15,6 +15,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from quadkit.contracts.core.health import HealthStatus
+from quadkit.monitor.backends.exporters import HAS_PROMETHEUS
 from quadkit.monitor.backends.exporters.prometheus import PrometheusMetricsExporter
 from quadkit.monitor.health.checker import HealthChecker
 
@@ -40,6 +41,7 @@ class TestHealthCheckerContract:
         assert results["probe"].status is HealthStatus.UNHEALTHY
 
 
+@pytest.mark.skipif(not HAS_PROMETHEUS, reason="prometheus-client not installed")
 class TestPrometheusExporterSwallows:
     @pytest.mark.asyncio
     async def test_counter_driver_error_does_not_raise(self) -> None:

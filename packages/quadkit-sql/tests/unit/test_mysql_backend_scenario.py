@@ -1,9 +1,9 @@
 """Scenario coverage for the MySQL backend with an injected fake driver.
 
-The real ``aiomysql`` package is installed in this environment, but the
-pool/connection logic is exercised against an in-memory fake client
-(injected into the module-level ``aiomysql`` references) so no database
-server is required.  Covers pool creation (success, failure, retry
+The optional ``aiomysql`` driver is imported when present (the module skips
+otherwise), and the pool/connection logic is exercised against an in-memory
+fake client (injected into the module-level ``aiomysql`` references) so no
+database server is required.  Covers pool creation (success, failure, retry
 exhaustion), connection acquisition (plain + circuit breaker), health
 checks (healthy/cached/unhealthy paths), statistics, shutdown, and the
 ``MySQLConnection`` query surface with error mapping and monitoring.
@@ -15,8 +15,11 @@ import asyncio
 from contextlib import asynccontextmanager
 from typing import Any, Self
 
-import aiomysql
 import pytest
+
+pytest.importorskip("aiomysql")
+
+import aiomysql
 
 from quadkit.contracts.core import HealthStatus
 from quadkit.contracts.exceptions.resilience import RetryExhaustedError

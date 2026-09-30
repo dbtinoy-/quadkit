@@ -18,6 +18,8 @@ from typing import Any
 
 import pytest
 
+from quadkit.testing._lazy_exports import module_shipped
+
 
 def get_public_members(module: Any) -> set[str]:
     """Get all public member names from a module (not starting with _)."""
@@ -43,6 +45,29 @@ def get_public_defined_members(module: Any) -> set[str]:
             # This handles protocol subclasses and other objects
             defined.add(name)
     return defined
+
+
+def optional_module_absent(subpackage: Any, export_name: str) -> bool:
+    """Whether an export belongs to an optional module this installation omits.
+
+    A facade keeps the names of an absent optional module in ``__all__`` so the
+    declared surface stays truthful, and ``resolve_export`` answers an access
+    with ``AttributeError``. That is the designed outcome for a name whose
+    module is not part of the installation, so it is not an export failure.
+
+    Args:
+        subpackage: Facade module holding ``_LAZY_IMPORTS`` and ``__all__``.
+        export_name: One name from that facade's ``__all__``.
+
+    Returns:
+        Whether the name's module is an optional one that is not shipped here.
+    """
+    table = getattr(subpackage, "_LAZY_IMPORTS", None)
+    entry = table.get(export_name) if table is not None else None
+    if entry is None:
+        return False
+    optional = getattr(subpackage, "_OPTIONAL_MODULES", frozenset())
+    return entry[0] in optional and not module_shipped(entry[0])
 
 
 class TestComplianceSubpackageExports:
@@ -185,6 +210,8 @@ class TestFixturesSubpackageExports:
         from quadkit.testing import fixtures
 
         for export_name in fixtures.__all__:
+            if optional_module_absent(fixtures, export_name):
+                continue
             assert hasattr(fixtures, export_name), (
                 f"fixtures.{export_name} not accessible but listed in __all__"
             )
@@ -196,6 +223,8 @@ class TestFixturesSubpackageExports:
         from quadkit.testing import fixtures
 
         for export_name in fixtures.__all__:
+            if optional_module_absent(fixtures, export_name):
+                continue
             obj = getattr(fixtures, export_name)
             # Fixtures are callables, some might be test utilities
             assert callable(obj) or inspect.isclass(obj), (
@@ -250,6 +279,8 @@ class TestAllSubpackagesConsistency:
 
         for subpackage in [compliance, fixtures, memory]:
             for export_name in subpackage.__all__:
+                if optional_module_absent(subpackage, export_name):
+                    continue
                 try:
                     obj = getattr(subpackage, export_name)
                     assert obj is not None, (

@@ -21,6 +21,7 @@ from quadkit.logging.processors import (
     _add_logger_name,
     _context_processor,
     _level_filter_processor,
+    _NamespacedCallsiteAdder,
     _otel_processor,
     _redact_processor,
     _sampling_processor,
@@ -101,13 +102,16 @@ def configure_logging(
         _service_processor,
         _otel_processor,
         _redact_processor,
-        structlog.processors.CallsiteParameterAdder(
-            {
-                structlog.processors.CallsiteParameter.FILENAME,
-                structlog.processors.CallsiteParameter.LINENO,
-                structlog.processors.CallsiteParameter.MODULE,
-                structlog.processors.CallsiteParameter.FUNC_NAME,
-            },
+        _NamespacedCallsiteAdder(
+            structlog.processors.CallsiteParameterAdder(
+                {
+                    structlog.processors.CallsiteParameter.FILENAME,
+                    structlog.processors.CallsiteParameter.LINENO,
+                    structlog.processors.CallsiteParameter.MODULE,
+                    structlog.processors.CallsiteParameter.FUNC_NAME,
+                },
+                additional_ignores=["quadkit.logging"],
+            ),
         ),
         structlog.processors.StackInfoRenderer(),
     ]

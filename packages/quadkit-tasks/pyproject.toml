@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-tasks"
-version = "0.0.42"
+version = "0.0.43"
 description = "Background task processing for Quadkit Framework - Scheduling, workers, and job queues"
 readme = "README.md"
 requires-python = ">=3.11"

@@ -24,8 +24,11 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import Any
 
-import pyotp
 import pytest
+
+pytest.importorskip("pyotp")
+
+import pyotp
 
 from quadkit.auth.config import MFAConfig
 from quadkit.auth.di.bundle_provider import AuthBundleProvider

@@ -67,15 +67,26 @@ Also available by default:
 
 ## why quadkit?
 
-**Start with 4 packages.** That is the whole starter kit — the protocol
-layer, the container, an ASGI stack, and a generator for whatever you
-build next. You install only what you use, and it all fits in your head:
-contracts → core → web, with the CLI scaffolding the next project.
+Quadkit is a kit of **13 published packages**, installed à la carte: eleven
+to build with, one optional to test, one for the command line.
 
 ```mermaid
-graph LR
-    QC[quadkit-contracts] --> Q[quadkit] --> W[quadkit-web] --> APP[Your&nbsp;Application]
-    Q --> CLI[quadkit-cli]
+graph TD
+    QC[quadkit-contracts<br/>protocols & types] --> Q[quadkit<br/>DI container, modules, config]
+    Q --> W[quadkit-web<br/>ASGI, controllers, routing]
+    Q --> CLI[quadkit-cli<br/>scaffolding & generators]
+    Q --> SQL[quadkit-sql<br/>repositories & UoW]
+    Q --> CACHE[quadkit-cache<br/>cache protocols & backends]
+    Q --> AUTH[quadkit-auth<br/>JWT, users & permissions]
+    Q --> EVENTS[quadkit-events<br/>event bus & handlers]
+    Q --> TASKS[quadkit-tasks<br/>background jobs]
+    Q --> STORAGE[quadkit-storage<br/>object storage]
+    Q --> HTTP[quadkit-http<br/>typed API clients]
+    Q --> MON[quadkit-monitor<br/>metrics & health]
+    W --> APP[Your Application]
+    SQL --> W
+    AUTH --> W
+    MON --> W
 
     style QC fill:#166534,stroke:#22c55e,color:#fff
     style Q fill:#166534,stroke:#22c55e,color:#fff
@@ -89,14 +100,20 @@ graph LR
 | [`quadkit-contracts`](https://pypi.org/project/quadkit-contracts/) | protocol definitions every package binds against — and the `Result` error model, with zero runtime dependencies |
 | [`quadkit`](https://pypi.org/project/quadkit/) | the framework core — DI container, modules, typed config, logging, domain primitives |
 | [`quadkit-web`](https://pypi.org/project/quadkit-web/) | ASGI layer — controllers, routing, middleware, OpenAPI docs, websockets |
+| [`quadkit-sql`](https://pypi.org/project/quadkit-sql/) | repositories, units of work and migrations, declared as protocols so the backend stays yours |
+| [`quadkit-cache`](https://pypi.org/project/quadkit-cache/) | cache protocols and the memory/Redis backends behind them |
+| [`quadkit-auth`](https://pypi.org/project/quadkit-auth/) | JWT issuance, user storage and permission evaluation |
+| [`quadkit-events`](https://pypi.org/project/quadkit-events/) | an in-process event bus with typed handlers |
+| [`quadkit-tasks`](https://pypi.org/project/quadkit-tasks/) | background jobs and scheduled work |
+| [`quadkit-storage`](https://pypi.org/project/quadkit-storage/) | object storage behind a filesystem/S3 protocol |
+| [`quadkit-http`](https://pypi.org/project/quadkit-http/) | typed HTTP clients for talking to other services |
+| [`quadkit-monitor`](https://pypi.org/project/quadkit-monitor/) | metrics, tracing and health endpoints |
 | [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
 
-When your service grows — data, auth, background jobs, observability —
-the rest of the ecosystem speaks these same contracts and slots in
-without a migration, staying out of your dependency tree until you ask
-for it. The contracts already define interfaces for SQL, cache, auth,
-events, tasks, queues, LLM, RAG, and more — all against the same
-protocol layer.
+Every one of them binds against the same protocol layer, so the contracts
+define interfaces for SQL, cache, auth, events, tasks, queues, LLM, RAG, and
+more. You can install a package and swap its implementation without touching
+the call sites — that is the point of the protocol split.
 
 ## testing
 

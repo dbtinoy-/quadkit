@@ -176,7 +176,7 @@ def test_db_seed_finds_package_seeders_and_imports_them(
 ) -> None:
     """Seeders inside the application package are imported, not path-loaded.
 
-    A generated project keeps its seeders under ``src/<app>/shared/seeders/``
+    A generated project keeps its seeders under ``src/<app>/seeders/``
     (the canonical ``seeders`` component) so that its persistence provider can
     import them at boot. ``quadkit db seed`` has to run the same modules --
     the path-loading it did before cannot import a seeder that itself imports
@@ -190,7 +190,7 @@ def test_db_seed_finds_package_seeders_and_imports_them(
     (tmp_path / "pyproject.toml").write_text(
         '[tool.quadkit]\nmodule = "shop_api.app:app"\n'
     )
-    seeders = tmp_path / "src" / "shop_api" / "shared" / "seeders"
+    seeders = tmp_path / "src" / "shop_api" / "seeders"
     seeders.mkdir(parents=True)
     (seeders / "__init__.py").write_text("")
     (seeders / "users.py").write_text(
@@ -198,7 +198,7 @@ def test_db_seed_finds_package_seeders_and_imports_them(
         "\n"
         "\n"
         "async def run(provider) -> None:\n"
-        "    import shop_api.shared.seeders as package\n"
+        "    import shop_api.seeders as package\n"
         "\n"
         '    package.RUNS.append("users")\n'
     )
@@ -207,11 +207,55 @@ def test_db_seed_finds_package_seeders_and_imports_them(
     result = CliRunner().invoke(app, ["seed"])
 
     assert result.exit_code == 0, result.output
-    assert "Running seeder: src/shop_api/shared/seeders/users.py" in result.output
+    assert "Running seeder: src/shop_api/seeders/users.py" in result.output
 
     # The same module object the command imported: proof the body ran, which a
     # text-only assertion on the output cannot give (the import could have
     # failed silently and left the file unexecuted).
-    from shop_api.shared.seeders import RUNS
+    from shop_api.seeders import RUNS
 
     assert RUNS == ["users"]
+@patch(
+    "quadkit.cli.commands.db_bootstrap.get_migration_manager",
+    new_callable=AsyncMock,
+)
+def test_db_seed_finds_seeders_inside_every_module(
+    mock_get_manager, monkeypatch, tmp_path
+) -> None:
+    """A modular project keeps one seeder directory per bounded context.
+
+    OQ-L1 moved a seeder next to the entity it seeds, so a modular project no
+    longer has a single `shared/seeders` for the command to read -- it has
+    `modules/<slug>/seeders`, one per context. A lookup that resolved only the
+    canonical directory would find nothing here and report success, seeding an
+    empty database in exactly the projects most likely to need it.
+    """
+    mock_manager = AsyncMock()
+    mock_manager.provider = AsyncMock()
+    mock_get_manager.return_value = mock_manager
+
+    monkeypatch.chdir(tmp_path)
+    (tmp_path / "pyproject.toml").write_text(
+        '[tool.quadkit]\nmodule = "shop_api.app:app"\n'
+    )
+    app_root = tmp_path / "src" / "shop_api"
+    for slug, entity in (("billing", "invoices"), ("catalog", "items")):
+        seeders = app_root / "modules" / slug / "seeders"
+        seeders.mkdir(parents=True)
+        (seeders / "__init__.py").write_text("")
+        (seeders / f"{entity}.py").write_text(
+            "from __future__ import annotations\n"
+            "\n"
+            "\n"
+            "async def run(provider) -> None:\n"
+            "    return None\n"
+        )
+
+    result = CliRunner().invoke(app, ["seed"])
+
+    assert result.exit_code == 0, result.output
+    # Both contexts, not just the first one found.
+    assert "src/shop_api/modules/billing/seeders/invoices.py" in result.output
+    assert "src/shop_api/modules/catalog/seeders/items.py" in result.output
+
+

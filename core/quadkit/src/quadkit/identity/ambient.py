@@ -7,7 +7,8 @@ Example:
     from quadkit import identity
 
     id = identity.generate_for("user")      # ULID/UUID based on config
-    uuid = identity.new_uuid()             # Random UUID4
+    opaque = identity.new_uuid()            # the configured strategy, not
+                                            # necessarily a UUID — see below
 
 For tests:
     from quadkit import identity
@@ -78,10 +79,26 @@ def generate_for(entity_type: str) -> str:
 
 
 def new_uuid() -> str:
-    """Generate a random UUID4.
+    """Generate an id with the ambient generator, whatever it is.
+
+    **The name is narrower than the behaviour.** This delegates to the
+    installed ``IdGeneratorProtocol``, so the result follows
+    ``IdentityConfig.strategy``: UUID4 by default, but a 36-char UUID7, a
+    26-char Crockford base32 ULID, or a prefixed ULID (``usr_01H…``) when
+    the application configures one — and whatever a test installs through
+    ``use()``.
+
+    Two consequences worth stating, because the name hides both:
+
+    - **Shape is not guaranteed.** Do not feed the result to a ``UUID``
+      column or ``uuid.UUID()`` unless the strategy is pinned to UUID4/7.
+    - **Randomness is not guaranteed.** UUID7 and ULID are time-ordered:
+      the leading bits are a millisecond timestamp. For a value that must
+      be unguessable — a reset token, a session id, a webhook secret — use
+      ``secrets.token_urlsafe()``, not this.
 
     Returns:
-        A random UUID4 string.
+        An id string from the ambient generator.
     """
     return _ambient.get().generate()
 

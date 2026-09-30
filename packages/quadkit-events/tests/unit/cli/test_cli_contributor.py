@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from quadkit.contracts.cli.protocols import CliContributorProtocol
 from quadkit.events.cli.contributor import EventsCliContributor
 from quadkit.events.cli.generators.projection import ProjectionGenerator
@@ -42,8 +44,8 @@ def test_events_contributor_paths_are_package_local() -> None:
     }
 
 
-def test_projection_generator_defaults() -> None:
-    generator = ProjectionGenerator()
+def test_projection_generator_defaults(tmp_path: Path) -> None:
+    generator = ProjectionGenerator(output_dir=tmp_path / "src" / "projections")
 
     assert generator.name == "projection"
     assert generator.default_output_dir == "src/projections"

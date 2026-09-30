@@ -23,30 +23,58 @@ from quadkit.contracts.cli.contributions import (
 from quadkit.contracts.data.sql.database import DatabaseProviderProtocol
 
 
-def _seeder_source() -> tuple[Path, str | None]:
-    """Where this project's seeders are, and how to import them.
+def _seeder_sources() -> list[tuple[Path, str | None]]:
+    """Every directory this project keeps seeders in, and how to import each.
 
     Resolution order:
 
-    1. the canonical ``seeders`` component — ``src/<app>/shared/seeders``,
-       where ``quadkit gen seeder`` writes and where a generated application
-       keeps the seeders its persistence provider boots;
-    2. the project-root ``seeds/`` directory — what a project generated before
-       the ``seeders`` row landed has, and what a hand-written collection of
-       seeders looks like. Those files sit outside any package, so they stay
-       path-loaded, exactly as this command always loaded them.
+    1. the canonical ``seeders`` component — where ``quadkit gen seeder``
+       writes and where a generated application keeps the seeders its
+       persistence provider boots;
+    2. **one per bounded context** — ``src/<app>/modules/<slug>/seeders``.
+       A seeder seeds one entity, so it follows that entity into its module
+       (OQ-L1). Before that, every seeder in a modular project shared one
+       ``shared/seeders`` directory and a single lookup found them all;
+       scanning the modules is what keeps ``db seed`` complete now that they
+       are spread out. Missing this is how the command would silently seed
+       nothing in exactly the projects that need it most;
+    3. the project-root ``seeds/`` directory — what a project generated
+       before the ``seeders`` row landed has, and what a hand-written
+       collection looks like. Those files sit outside any package, so they
+       stay path-loaded, exactly as this command always loaded them.
 
     Returns:
-        ``(directory, module_prefix)``: the directory to read, and the dotted
-        package its modules belong to (``my_app.shared.seeders``) when the
-        directory lives inside ``src/`` — ``None`` when it does not, which is
-        the signal to load files by path instead.
+        ``(directory, module_prefix)`` pairs: the directory to read, and the
+        dotted package its modules belong to when it lives inside ``src/`` —
+        ``None`` when it does not, which is the signal to load by path.
     """
     layout = read_project_layout()
+    found: list[tuple[Path, str | None]] = []
+
     canonical = Path(resolve_output_dir("src/seeders", app_package=layout.app_package))
     if canonical.is_dir():
-        return canonical, _module_prefix(canonical)
-    return Path("seeds"), None
+        found.append((canonical, _module_prefix(canonical)))
+
+    # The app package's `modules/` tree, if this project has bounded contexts.
+    app_root = canonical.parent if canonical.name == "seeders" else None
+    modules_root = (app_root / "modules") if app_root else None
+    if modules_root and modules_root.is_dir():
+        for module_dir in sorted(modules_root.iterdir()):
+            seeders = module_dir / "seeders"
+            if seeders.is_dir():
+                found.append((seeders, _module_prefix(seeders)))
+
+    if found:
+        return found
+    # The legacy root directory is returned whether or not it exists: the
+    # callers report "no seeds directory found" from it, so handing back an
+    # absent path is how that message still gets made.
+    return [(Path("seeds"), None)]
+
+
+def _seeder_source() -> tuple[Path, str | None]:
+    """The first seeder directory, for callers that only report existence."""
+    return _seeder_sources()[0]
 
 
 def _module_prefix(directory: Path) -> str | None:
@@ -135,8 +163,9 @@ def seed(
         manager = await db_bootstrap.get_migration_manager()
         await manager.provider.boot()
         try:
-            seeds_dir, module_prefix = _seeder_source()
-            if not seeds_dir.exists() and not file:
+            sources = _seeder_sources()
+            seeds_dir = sources[0][0]
+            if not any(d.exists() for d, _ in sources) and not file:
                 out.warning("No seeds directory found.")
                 return
 
@@ -150,7 +179,9 @@ def seed(
                 files_to_run.append((Path(file), None))
             else:
                 files_to_run = [
-                    (seed_file, module_prefix) for seed_file in _seed_files(seeds_dir)
+                    (seed_file, prefix)
+                    for directory, prefix in _seeder_sources()
+                    for seed_file in _seed_files(directory)
                 ]
 
             for seed_file, prefix in files_to_run:
@@ -216,12 +247,11 @@ def reset(
                 out.info("No pending migrations.")
 
             if seed:
-                seeds_dir, module_prefix = _seeder_source()
-                if seeds_dir.exists():
-                    for seed_file in _seed_files(seeds_dir):
-                        await _run_seeder(
-                            out, manager.provider, seed_file, module_prefix
-                        )
+                sources = _seeder_sources()
+                if any(d.exists() for d, _ in sources):
+                    for directory, prefix in sources:
+                        for seed_file in _seed_files(directory):
+                            await _run_seeder(out, manager.provider, seed_file, prefix)
                 else:
                     out.warning("No seeds directory found, skipping seed step.")
 

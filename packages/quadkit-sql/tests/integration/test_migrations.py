@@ -230,6 +230,20 @@ class TestAlembicManager:
         assert "issues" in result
         assert isinstance(result["issues"], list)
 
+    def test_config_names_the_migrations_dir_without_a_packaged_ini(
+        self, connection_string, temp_dir, monkeypatch
+    ):
+        """An installed wheel ships no `alembic.ini`, so the config names the
+        directory the manager owns instead of leaving the name unset."""
+        from quadkit.sql.migrations.manager import _alembic
+
+        monkeypatch.setattr(
+            _alembic, "_packaged_alembic_ini", lambda: temp_dir / "alembic.ini"
+        )
+        manager = AlembicManager(connection_string, temp_dir)
+
+        assert manager.config.config_file_name == str(temp_dir / "alembic.ini")
+
 
 @pytest.mark.skipif(not ALEMBIC_AVAILABLE, reason="Alembic is not installed")
 class TestMigrationUtilities:

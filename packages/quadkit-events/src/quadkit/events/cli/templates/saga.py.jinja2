@@ -61,7 +61,7 @@ class {{ saga_name }}Saga:
                 logger.info("saga_step_started", saga="{{ saga_name_snake }}", step=step.name)
                 await step.action(context)
                 self.completed.append(step)
-            except Exception as exc:
+            except Exception:
                 logger.error(
                     "saga_step_failed", saga="{{ saga_name_snake }}", step=step.name
                 )

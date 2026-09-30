@@ -8,6 +8,30 @@ from pathlib import Path
 from typing import Any
 
 
+def _assert_marker_convention(py_path: Path, text: str) -> None:
+    """Enforce the generated-stub marker convention on one rendered ``.py``.
+
+    Generated stubs pair ``# @INTENT: <goal>`` directly above ``# @TODO:
+    <action>`` and never ship a bare ``# TODO:`` (the ``@`` prefix keeps both
+    greppable). See ``docs/09-27-2026/GENERATED_CODE_MARKERS.md``.
+    """
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith("# TODO"):
+            raise AssertionError(
+                f"{py_path}: bare '# TODO' in generated code must be '# @TODO' "
+                f"-> {line!r}"
+            )
+        if stripped.startswith("# @TODO:"):
+            prev = lines[i - 1].strip() if i > 0 else ""
+            if not prev.startswith("# @INTENT:"):
+                raise AssertionError(
+                    f"{py_path}: '# @TODO' at line {i + 1} is not preceded by "
+                    f"a '# @INTENT:' line (found {prev!r})"
+                )
+
+
 def assert_contributor_generators_render(
     contributor: Any,
     *,
@@ -77,6 +101,15 @@ def assert_contributor_generators_render(
             f"(created={len(created)}, overwritten={len(overwritten)}, "
             f"staged={len(staged)})"
         )
+
+        # Every rendered Python stub must follow the @INTENT/@TODO marker
+        # convention — a single gate so a new generator (or a template at a
+        # deeper package nesting) cannot reintroduce a bare ``# TODO``.
+        for py_file in out.rglob("*.py"):
+            if "__pycache__" in py_file.parts:
+                continue
+            _assert_marker_convention(py_file, py_file.read_text(encoding="utf-8"))
+
         exercised += 1
     return exercised
 

@@ -9,7 +9,8 @@ import pytest
 from quadkit.contracts.security import HasherProtocol, KeyDerivationProtocol
 from quadkit.di.container import Container
 from quadkit.security.config import HashingConfig, SecurityConfig
-from quadkit.security.hashing import Blake2bHasher, PBKDF2KDF, Sha256Hasher
+from quadkit.security.hashing import PBKDF2KDF, Blake2bHasher, Sha256Hasher
+from quadkit.security.hashing import ambient as hashing
 from quadkit.security.provider import SecurityProvider
 
 
@@ -95,3 +96,36 @@ class TestSecurityProviderHashingDefaults:
 
         assert isinstance(hasher, Sha256Hasher)
         assert isinstance(kdf, PBKDF2KDF)
+
+
+class TestAmbientHasherIsNotAPersistenceFormat:
+    """The ambient digest is a process-wide config value, not a stable format."""
+
+    def test_swapping_the_hasher_invalidates_every_stored_digest(self) -> None:
+        """A persisted `hash_hex` value is coupled to `default_hasher`.
+
+        Nothing at the call site says so, and the digest carries no
+        algorithm marker, so the coupling is invisible until someone flips
+        `HashingConfig.default_hasher` — at which point a stored lookup key
+        (a hashed API token, say) stops matching for every row at once. The
+        docstring now says this; the test keeps it true.
+        """
+        token = "sk-live-abc123"
+
+        stored = hashing.hash_hex(token)
+
+        with hashing.use(Blake2bHasher()):
+            assert hashing.hash_hex(token) != stored
+            assert hashing.verify_hex(token, stored) is False
+
+        assert hashing.verify_hex(token, stored) is True
+
+    def test_an_explicit_hasher_is_immune_to_the_ambient_swap(self) -> None:
+        """The documented escape hatch for values that outlive the process."""
+        pinned = Sha256Hasher()
+        token = "sk-live-abc123"
+
+        stored = pinned.digest(token)
+
+        with hashing.use(Blake2bHasher()):
+            assert pinned.digest(token) == stored

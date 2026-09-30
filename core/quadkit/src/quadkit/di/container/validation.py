@@ -70,7 +70,7 @@ class ContainerValidator:
                         # not something the user can fix with annotations.
                         logger.warning(
                             "validate.scope_check_unhashable_hint",
-                            service=service_name,
+                            service_type=service_name,
                             error=str(e),
                         )
                     else:
@@ -85,13 +85,13 @@ class ContainerValidator:
                 except AttributeError as e:
                     logger.warning(
                         "validate.scope_check_attribute_error",
-                        service=service_name,
+                        service_type=service_name,
                         error=str(e),
                     )
                 except (KeyError, ValueError) as e:
                     logger.warning(
                         "validate.scope_check_resolution_error",
-                        service=service_name,
+                        service_type=service_name,
                         error=str(e),
                     )
 
@@ -123,7 +123,7 @@ class ContainerValidator:
             except (AttributeError, TypeError, KeyError, ValueError) as e:
                 logger.debug(
                     "validate_no_orphans.dep_resolution_error",
-                    service=getattr(service_type, "__name__", str(service_type)),
+                    service_type=getattr(service_type, "__name__", str(service_type)),
                     error=str(e),
                 )
                 continue

@@ -7,6 +7,7 @@ from enum import StrEnum
 import json
 from pathlib import Path
 import re
+import tomllib
 from typing import Any, Protocol, runtime_checkable
 
 
@@ -228,9 +229,10 @@ def find_project_anchor(start: Path) -> Path | None:
             continue
         try:
             manifest = pyproject.read_text(encoding="utf-8", errors="ignore")
-        except OSError:
+            parsed = tomllib.loads(manifest)
+        except (OSError, tomllib.TOMLDecodeError):
             continue
-        if "[project]" in manifest:
+        if "project" in parsed:
             return candidate
     return None
 

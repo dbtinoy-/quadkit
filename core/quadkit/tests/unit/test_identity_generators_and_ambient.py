@@ -6,6 +6,8 @@ from __future__ import annotations
 import time
 from uuid import UUID
 
+import pytest
+
 from quadkit.contracts.core.identity import IdStrategy
 from quadkit.identity import ambient
 from quadkit.identity.constants import DEFAULT_PREFIX_SEPARATOR, DEFAULT_ULID_LENGTH
@@ -135,3 +137,47 @@ def test_ambient_use_context_stacks() -> None:
 
     # Restored to the original after the outer block exits.
     assert not ambient.generate_for("X").startswith(("outer-", "inner-"))
+
+
+# ── What the name promises vs what the call returns ───────────────────────
+
+
+def test_new_uuid_is_whatever_the_ambient_generator_is() -> None:
+    """``new_uuid()`` is not a UUID unless the configured strategy is one.
+
+    The name says UUID4 and the docstring used to agree with it, but the
+    call delegates to the installed ``IdGeneratorProtocol``. An application
+    that configures ULID for database locality gets a 26-character Crockford
+    base32 string out of a function named ``new_uuid`` — so a ``UUID``
+    column or a ``uuid.UUID()`` parse on the far end fails at runtime, not
+    at boot.
+    """
+    with ambient.use(UlidGenerator()):
+        value = ambient.new_uuid()
+
+    assert len(value) == DEFAULT_ULID_LENGTH
+    with pytest.raises(ValueError, match=r"badly formed|invalid"):
+        UUID(value)
+
+
+def test_new_uuid_is_not_guaranteed_unpredictable() -> None:
+    """Time-ordered strategies leak their timestamp into the leading bits.
+
+    ``SECURITY.md`` used to describe this call as "uuid4() (random)" under
+    the heading *UUID predictability*, which is exactly the claim a reader
+    checks before using an id as a secret. Two ULIDs minted a moment apart
+    share their timestamp prefix and sort in creation order.
+    """
+    with ambient.use(UlidGenerator()):
+        first = ambient.new_uuid()
+        second = ambient.new_uuid()
+        time.sleep(0.002)
+        later = ambient.new_uuid()
+
+    # Same millisecond: identical timestamp prefix, only the random tail
+    # differs (the tail is not monotonic within a tick, so no ordering is
+    # asserted there).
+    assert first[:6] == second[:6]
+    # Across a tick: the value sorts by creation time, which is the property
+    # that makes it guessable.
+    assert later > first

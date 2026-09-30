@@ -108,6 +108,52 @@ def _otel_processor(
     return event_dict
 
 
+class _NamespacedCallsiteAdder:
+    """Run structlog's ``CallsiteParameterAdder`` in the ``_`` namespace.
+
+    Two problems with using the adder directly:
+
+    1. It writes ``filename``, ``lineno``, ``module`` and ``func_name`` —
+       ordinary domain words.  ``logger.info("module_booted",
+       module=self.name)`` is a natural call (this repo had 111 of them) and
+       the adder silently overwrote every one with the emitting *source*
+       file's module.  Framework metadata therefore lives under ``_``-
+       prefixed keys, the convention ``_logger_name`` already follows, and
+       the plain names belong to the caller.
+    2. Left to itself the adder reports ``_NamedLogger.info`` in
+       ``logging/factory.py`` as the callsite of every log line in the
+       process, because that wrapper is the nearest non-structlog frame.
+       ``additional_ignores`` skips the framework's own logging package so
+       the real caller is reported.
+
+    The inner adder is run against a scratch dict so it cannot clobber a
+    caller field on its way past.
+    """
+
+    __slots__ = ("_inner",)
+
+    #: Keys structlog's adder may consult on the stdlib-bridge path.
+    _PASSTHROUGH = ("_record", "_from_structlog")
+
+    def __init__(self, inner: Any) -> None:
+        self._inner = inner
+
+    def __call__(
+        self,
+        logger: Any,
+        method_name: str,
+        event_dict: dict[str, Any],
+    ) -> dict[str, Any]:
+        scratch: dict[str, Any] = {
+            key: event_dict[key] for key in self._PASSTHROUGH if key in event_dict
+        }
+        for key, value in self._inner(logger, method_name, scratch).items():
+            if key in self._PASSTHROUGH:
+                continue
+            event_dict.setdefault(f"_{key}", value)
+        return event_dict
+
+
 def _add_logger_name(
     logger: Any,
     method_name: str,
@@ -116,12 +162,14 @@ def _add_logger_name(
     """Safe replacement for structlog.stdlib.add_logger_name.
 
     Handles loggers that don't have a ``.name`` attribute (like
-    ``PrintLogger``).
+    ``PrintLogger``).  Writes ``_logger_name`` — the key ``get_logger()``
+    already binds, and the framework namespace — not ``logger``, which a
+    caller may legitimately want as a field of their own.
     """
-    if "logger" not in event_dict:
+    if "_logger_name" not in event_dict:
         name = getattr(logger, "name", None)
         if name:
-            event_dict["logger"] = name
+            event_dict["_logger_name"] = name
     return event_dict
 
 
@@ -232,6 +280,7 @@ def _sampling_processor(
 __all__ = [
     "LEVEL_NAME_TO_INT",
     "_LoggingState",
+    "_NamespacedCallsiteAdder",
     "_add_logger_name",
     "_context_processor",
     "_level_filter_processor",

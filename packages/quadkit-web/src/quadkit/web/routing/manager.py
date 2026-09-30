@@ -87,8 +87,34 @@ class WebRouterManager:
                 logger.debug("Running route discovery for %s", handler_name)
                 await handler.register(self, app)
 
+        # Static routes must beat param routes *across* controllers too.
+        #
+        # The per-controller sort below (`_register_controller`) fixes the
+        # collision only when both paths come from one controller. A generated
+        # project splits them: `/catalogs/{item_id}` is emitted by the CRUD
+        # controller and `/catalogs/search` by the search controller, so
+        # whichever controller registered first won — and the CRUD one does,
+        # making the search endpoint unreachable while still appearing in the
+        # OpenAPI document. It answered "Catalog not found: search", having
+        # read the literal word as an id.
+        #
+        # Starlette matches first-registered-first, so one stable pass over
+        # the finished table is the whole fix: static paths keep their order,
+        # param paths keep theirs, and every static path now precedes every
+        # param path. Mounts carry no `{`, so they stay where they are.
+        self._reorder_static_before_params(app)
+
         route_count = len(self._registered_routes)
         logger.info("Route registration complete. Total routes: %s", route_count)
+
+    @staticmethod
+    def _reorder_static_before_params(app: Any) -> None:
+        """Stable-sort the app's routes so static paths match first."""
+        router = getattr(app, "router", None)
+        routes = getattr(router, "routes", None)
+        if routes is None:
+            return
+        routes.sort(key=lambda r: "{" in str(getattr(r, "path", "")))
 
     def should_enable_debug_routes(self) -> bool:
         cfg = self.provider.web_config

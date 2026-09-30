@@ -2,8 +2,6 @@
 
 from unittest.mock import Mock
 
-import pytest
-
 from quadkit.logging.factory import (
     LoggerFactoryImpl,
     _NamedLogger,
@@ -151,11 +149,21 @@ class TestLoggerFactoryImpl:
         assert logger is not None
         assert hasattr(logger, "name")
 
-    def test_get_logger_binds_service(self) -> None:
-        """Test get_logger with name binds service."""
+    def test_get_logger_does_not_hijack_the_service_field(self) -> None:
+        """The DI factory must not relabel the envelope's ``service``.
+
+        It used to ``bind(service=name)``, and ``_service_processor`` yields
+        to a bound value — so a logger resolved by the wellness module
+        rendered ``service=wellness`` instead of the application name every
+        log pipeline routes on.  The logger name travels in
+        ``_logger_name``.
+        """
         factory = LoggerFactoryImpl()
         logger = factory.get_logger("test")
         assert logger.name == "quadkit.test"
+        context = getattr(logger._inner, "_context", {})
+        assert "service" not in context
+        assert context.get("_logger_name") == "quadkit.test"
 
 
 class TestNamedLoggerChaining:
@@ -226,32 +234,52 @@ class TestLoggerFactoryImplEdgeCases:
         logger = factory.get_logger(None)
         assert logger.name == "quadkit"
 
-    def test_get_logger_bind_type_error_returns_unchanged_logger(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test get_logger returns the raw logger when bind raises TypeError."""
-        factory = LoggerFactoryImpl()
-        mock_logger = Mock()
-        mock_logger.bind.side_effect = TypeError("Cannot bind")
-        monkeypatch.setattr(
-            "quadkit.logging.factory.get_logger",
-            Mock(return_value=mock_logger),
-        )
-        logger = factory.get_logger("test")
-        assert logger is mock_logger
+    def test_reserved_event_field_is_preserved_not_raised(self) -> None:
+        """``event=`` is structlog's message parameter, not a free field.
 
-    def test_get_logger_bind_attribute_error_returns_unchanged_logger(
-        self,
-        monkeypatch: pytest.MonkeyPatch,
-    ) -> None:
-        """Test get_logger returns the raw logger when bind raises AttributeError."""
-        factory = LoggerFactoryImpl()
-        mock_logger = Mock()
-        mock_logger.bind.side_effect = AttributeError("No bind")
-        monkeypatch.setattr(
-            "quadkit.logging.factory.get_logger",
-            Mock(return_value=mock_logger),
-        )
-        logger = factory.get_logger("test")
-        assert logger is mock_logger
+        ``logger.warning("event_emit_failed", event=cls.__name__)`` raised
+        ``TypeError`` from inside the ``except`` block that was reporting a
+        failure — shipped twice in this workspace.  The field is moved to
+        ``event_field`` instead; the gate
+        (``dev/checks/reserved_log_fields.py``) fails the call site.
+        """
+        inner = Mock()
+        logger = _NamedLogger(inner, "quadkit.test")
+
+        # reserved-log-field: the behaviour under test is the remap itself
+        logger.info("task_finished", event="TaskCompleted")
+
+        inner.info.assert_called_once_with("task_finished", event_field="TaskCompleted")
+
+    def test_reserved_event_field_never_overwrites_an_existing_key(self) -> None:
+        """A caller who already uses ``event_field`` keeps both values."""
+        inner = Mock()
+        logger = _NamedLogger(inner, "quadkit.test")
+
+        # reserved-log-field: the behaviour under test is the remap itself
+        logger.error("failed", event="A", event_field="B")
+
+        inner.error.assert_called_once_with("failed", event_field="B", event_field_="A")
+
+    def test_message_parameter_is_positional_only(self) -> None:
+        """``msg`` is a field name like any other.
+
+        The wrapper names its first parameter ``msg``; without ``/`` it
+        would invent a reserved word structlog itself does not have.
+        """
+        inner = Mock()
+        logger = _NamedLogger(inner, "quadkit.test")
+
+        logger.info("mail_sent", msg="body")
+
+        inner.info.assert_called_once_with("mail_sent", msg="body")
+
+    def test_bind_deconflicts_too(self) -> None:
+        """``bind(event=...)`` silently lost the value to the message key."""
+        inner = Mock()
+        inner.bind.return_value = Mock()
+        logger = _NamedLogger(inner, "quadkit.test")
+
+        logger.bind(event="Created")
+
+        inner.bind.assert_called_once_with(event_field="Created")

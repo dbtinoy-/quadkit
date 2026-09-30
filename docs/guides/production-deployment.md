@@ -97,7 +97,7 @@ The full hardening checklist is in
 
 ## Before you deploy: the checklist
 
-1. **Pin the 0.x line** — `quadkit-web==0.0.42` (or `>=0.0.42,<0.1.0`);
+1. **Pin the 0.x line** — `quadkit-web==0.0.43` (or `>=0.0.43,<0.1.0`);
    minor releases can move APIs until 1.0. See
    [stability](../reference/stability.md).
 2. **Serve with workers, not reload** — `web.server.workers` for

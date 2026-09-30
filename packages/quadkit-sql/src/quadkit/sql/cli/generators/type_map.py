@@ -156,7 +156,7 @@ def sa_type(field_type: str) -> str:
 #: Imports every generated model needs, merged with annotation-driven ones so
 #: the rendered module never repeats a module on two lines.
 BASE_IMPORTS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("datetime", ("datetime", "timezone")),
+    ("datetime", ("datetime",)),
     ("pydantic", ("BaseModel", "ConfigDict", "Field")),
 )
 

@@ -214,12 +214,14 @@ class TestMultipart:
         assert [p[1]["Body"] for p in parts] == [b"abcd", b"efgh", b"ij"]
 
     async def test_unsupported_type_aborts(self) -> None:
+        pytest.importorskip("botocore")
         host, client = _host(threshold=10, chunk_size=4)
         with pytest.raises(StorageError, match="Multipart upload failed"):
             await host._upload_large_file("big", 42)
         assert "abort_multipart_upload" in client.names()
 
     async def test_error_mid_upload_aborts_and_raises(self) -> None:
+        pytest.importorskip("botocore")
         client = _FakeS3()
 
         def bad_upload_part(**params) -> dict:
@@ -234,6 +236,7 @@ class TestMultipart:
         assert "complete_multipart_upload" not in client.names()
 
     async def test_create_failure_no_abort(self) -> None:
+        pytest.importorskip("botocore")
         client = _FakeS3()
 
         def bad_create(**params) -> dict:

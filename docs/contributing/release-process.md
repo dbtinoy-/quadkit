@@ -6,7 +6,7 @@ view; this page describes the observable contract.
 ## Versioning
 
 All thirteen distributions release **in lockstep** under a single version
-(currently `0.0.42`, in the `0.x` series). Cross-package compatibility
+(currently `0.0.43`, in the `0.x` series). Cross-package compatibility
 is defined within one released version — never mix versions across the
 thirteen. The full policy, including deprecation and Python-support rules,
 lives in [stability](../reference/stability.md).

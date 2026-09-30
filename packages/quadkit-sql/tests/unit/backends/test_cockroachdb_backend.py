@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import importlib.util
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.sql.backends.cockroachdb import (
@@ -11,7 +14,12 @@ from quadkit.sql.backends.cockroachdb import (
 )
 from quadkit.sql.backends.postgres import PostgresConnectionPool
 
+requires_asyncpg = pytest.mark.skipif(
+    importlib.util.find_spec("asyncpg") is None, reason="asyncpg is not installed"
+)
 
+
+@requires_asyncpg
 class TestDefaults:
     def test_constructor_defaults(self) -> None:
         conn = CockroachDBConnection()
@@ -45,6 +53,7 @@ class TestDsnNormalisation:
         assert CockroachDBConnection._normalize_dsn(dsn) == dsn  # noqa: SLF001
 
 
+@requires_asyncpg
 class TestCreatePool:
     async def test_server_settings_injected(self) -> None:
         captured: dict[str, object] = {}
@@ -91,6 +100,7 @@ class TestCreatePool:
         assert captured["server_settings"]["application_name"] == "quadkit-cockroachdb"
 
 
+@requires_asyncpg
 class TestHealthCheckComponent:
     async def test_component_replaced(self) -> None:
         conn = CockroachDBConnection()
@@ -115,6 +125,7 @@ class TestHealthCheckComponent:
         assert fake_result.component == "database"
 
 
+@requires_asyncpg
 class TestFactory:
     def test_defaults_without_dsn(self) -> None:
         pool = create_cockroachdb_pool()

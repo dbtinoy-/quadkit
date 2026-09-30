@@ -56,6 +56,20 @@ except ImportError:  # pragma: no cover - availability checked at runtime
     ALEMBIC_AVAILABLE = False
 
 
+def _packaged_alembic_ini() -> Path:
+    """Return the ``alembic.ini`` that sits beside the package source.
+
+    An installed wheel carries no such file, so callers fall back to a path
+    they own when this is absent.
+
+    Returns:
+        Path to the workspace ``alembic.ini`` (which need not exist).
+    """
+    # parents[4] lands in src/, where `command.init()` writes a template ini;
+    # parents[5] is the package root that ships the real file.
+    return Path(__file__).resolve().parents[5] / "alembic.ini"
+
+
 class AlembicManager:
     """Alembic migration manager facade for Quadkit DB.
 
@@ -129,14 +143,17 @@ class AlembicManager:
 
     def _create_alembic_config(self) -> Config:
         """Create and configure Alembic Config object."""
-        # Package root (packages/quadkit-sql/) — parents[4] would land in
-        # src/, where `command.init()` then writes a template alembic.ini.
-        package_root = Path(__file__).resolve().parents[5]
         config = Config()
-        if (package_root / "alembic.ini").exists():
-            config.config_file_name = str(package_root / "alembic.ini")
-        # else: installed (non-workspace) layout with no packaged ini — leave
-        # config_file_name unset so Alembic uses programmatic options only.
+        packaged_ini = _packaged_alembic_ini()
+        if packaged_ini.exists():
+            config.config_file_name = str(packaged_ini)
+        else:
+            # Installed wheel: `alembic.ini` lives at the package root, which
+            # sits outside the wheel, so there is no packaged ini to reference.
+            # `command.init()` asserts on `config_file_name`, so point it at
+            # the directory this manager already owns; `init()` writes the
+            # generated ini there, and only while that directory is empty.
+            config.config_file_name = str(self.migrations_path / "alembic.ini")
         config.set_main_option("script_location", str(self.migrations_path))
         # Strip +aiosqlite/+asyncpg for Alembic which is sync
         self.connection_string = self.database_url
@@ -147,6 +164,18 @@ class AlembicManager:
 
         config.set_main_option("sqlalchemy.url", self.connection_string)
         config.set_main_option("version_locations", str(self.script_location))
+        # `path_separator` must be set in the same breath as
+        # `version_locations`: alembic >= 1.16 deprecates splitting the value
+        # without it, and this manager sets `version_locations`
+        # programmatically. The packaged `alembic.ini` carries
+        # `path_separator = os`, so a *workspace* checkout never saw the
+        # warning -- but an *installed* layout resolves without that file and
+        # hit the legacy fallback on every boot. Setting it here makes the
+        # two layouts behave identically instead of leaving the guarantee to a
+        # file that ships only in the repo.
+        config.set_main_option("path_separator", "os")
+        # User overrides last, so `alembic_config={"path_separator": ":"}`
+        # still wins for a project that needs the legacy character.
         for key, value in self.alembic_config.items():
             config.set_main_option(key, str(value))
         return config

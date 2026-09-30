@@ -38,7 +38,8 @@ class {{ guard_name }}AuthGuard:
         if not credentials:
             return None
 
-        # TODO: verify credentials against your identity provider.
+        # @INTENT: Authenticate the request — turn a presented credential into a principal the app can authorize.
+        # @TODO: verify credentials against your identity provider.
         # Example:
         #   principal = await identity_provider.verify(credentials)
         #   return principal

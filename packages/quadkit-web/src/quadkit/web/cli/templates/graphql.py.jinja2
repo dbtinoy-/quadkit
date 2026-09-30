@@ -44,7 +44,8 @@ class {{ class_name }}Type:
         Returns:
             The {{ resource_name }} or None if not found.
         """
-        # TODO: Implement resolver using service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement resolver using service
         # Example:
         # service = info.context["service"]
         # return await service.get(self.id)
@@ -135,7 +136,8 @@ class Query:
         Returns:
             List of {{ resource_name }}.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
         # items = await service.list(limit=first or 20, offset=0)
@@ -157,7 +159,8 @@ class Query:
         Returns:
             The {{ resource_name }} or None if not found.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
         # item = await service.get(id)
@@ -185,7 +188,8 @@ class Query:
         Yields:
             {{ resource_name }} items.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
         # async for item in service.list_all():
@@ -219,7 +223,8 @@ class Mutation:
         Returns:
             The created {{ resource_name }}.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
         # data = input.__dict__
@@ -249,7 +254,8 @@ class Mutation:
         Returns:
             The updated {{ resource_name }} or None if not found.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         return None
 
     @strawberry.mutation(description="Delete {{ singular_name }} by ID")
@@ -267,7 +273,8 @@ class Mutation:
         Returns:
             True if deleted successfully.
         """
-        # TODO: Implement with service
+        # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
+        # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
         # return await service.delete(id)

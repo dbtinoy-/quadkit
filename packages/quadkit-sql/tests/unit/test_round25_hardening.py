@@ -286,6 +286,7 @@ class TestHealthCheckerNeverRaises:
 class TestPostgresAutoCreate:
     @pytest.mark.asyncio
     async def test_autocreate_driver_error_wrapped(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        pytest.importorskip("asyncpg")
         import asyncpg
 
         from quadkit.sql.providers.postgres_provider import PostgresProvider

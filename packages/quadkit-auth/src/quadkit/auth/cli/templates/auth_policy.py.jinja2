@@ -36,7 +36,8 @@ class {{ policy_name }}Policy:
         Returns:
             A :class:`PolicyDecision` with ``allowed`` and a ``reason``.
         """
-        # TODO: implement your authorization rules.
+        # @INTENT: Decide whether this principal may act on this resource; fail closed until real rules exist.
+        # @TODO: implement your authorization rules.
         # Example:
         #   if getattr(principal, "is_admin", False):
         #       return PolicyDecision(True, "admin bypass")

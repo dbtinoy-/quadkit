@@ -78,7 +78,8 @@ class {{ command_name }}Handler(
         Returns:
             The success/failure outcome.
         """
-        # TODO: validate preconditions and mutate the aggregate here.
+        # @INTENT: Apply this command — check invariants, then mutate the aggregate and record the outcome.
+        # @TODO: validate preconditions and mutate the aggregate here.
         return {{ command_name }}Result(
             success=True,
             aggregate_id=command.target_aggregate_id,

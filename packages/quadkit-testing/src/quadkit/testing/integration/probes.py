@@ -51,7 +51,7 @@ class ServiceProbe:
             await client.close()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="redis", url=url, error=str(e))
+            logger.debug("probe_failed", dependency="redis", url=url, error=str(e))
             return False
 
     @staticmethod
@@ -66,7 +66,7 @@ class ServiceProbe:
             await conn.close()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="postgres", dsn=dsn, error=str(e))
+            logger.debug("probe_failed", dependency="postgres", dsn=dsn, error=str(e))
             return False
 
     @staticmethod
@@ -79,7 +79,9 @@ class ServiceProbe:
                 response = await client.get(url)
                 return response.status_code == 200
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="elasticsearch", url=url, error=str(e))
+            logger.debug(
+                "probe_failed", dependency="elasticsearch", url=url, error=str(e)
+            )
             return False
 
     @staticmethod
@@ -94,7 +96,7 @@ class ServiceProbe:
             await connection.close()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="rabbitmq", url=url, error=str(e))
+            logger.debug("probe_failed", dependency="rabbitmq", url=url, error=str(e))
             return False
 
     @staticmethod
@@ -107,7 +109,9 @@ class ServiceProbe:
                 response = await client.get(f"{url}/health")
                 return response.status_code == 200
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="meilisearch", url=url, error=str(e))
+            logger.debug(
+                "probe_failed", dependency="meilisearch", url=url, error=str(e)
+            )
             return False
 
     @staticmethod
@@ -125,7 +129,7 @@ class ServiceProbe:
             return True
         except Exception as e:  # noqa: BLE001
             logger.debug(
-                "probe_failed", service="smtp", host=host, port=port, error=str(e)
+                "probe_failed", dependency="smtp", host=host, port=port, error=str(e)
             )
             return False
 
@@ -152,7 +156,7 @@ class ServiceProbe:
             return True
         except Exception as e:  # noqa: BLE001
             logger.debug(
-                "probe_failed", service="kafka", bootstrap=bootstrap, error=str(e)
+                "probe_failed", dependency="kafka", bootstrap=bootstrap, error=str(e)
             )
             return False
 
@@ -179,7 +183,7 @@ class ServiceProbe:
             return True
         except Exception as e:  # noqa: BLE001
             logger.debug(
-                "probe_failed", service="minio", endpoint=endpoint, error=str(e)
+                "probe_failed", dependency="minio", endpoint=endpoint, error=str(e)
             )
             return False
 
@@ -207,7 +211,7 @@ class ServiceProbe:
             await writer.wait_closed()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="mongodb", dsn=dsn, error=str(e))
+            logger.debug("probe_failed", dependency="mongodb", dsn=dsn, error=str(e))
             return False
 
     @staticmethod
@@ -234,7 +238,7 @@ class ServiceProbe:
             await writer.wait_closed()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="qdrant", url=url, error=str(e))
+            logger.debug("probe_failed", dependency="qdrant", url=url, error=str(e))
             return False
 
     @staticmethod
@@ -261,5 +265,5 @@ class ServiceProbe:
             await writer.wait_closed()
             return True
         except Exception as e:  # noqa: BLE001
-            logger.debug("probe_failed", service="neo4j", url=url, error=str(e))
+            logger.debug("probe_failed", dependency="neo4j", url=url, error=str(e))
             return False

@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from typing import Any
 import uuid as _uuid
-from datetime import datetime as _datetime, timezone as _timezone
-
+{% if needs_datetime %}from datetime import datetime
+{% endif %}
+from quadkit import clock
 from quadkit.contracts import DatabaseProviderProtocol
 
 from quadkit.sql.repositories.generic_repository import GenericRepository
@@ -53,7 +54,7 @@ class {{ repo_name }}Repository:
     def _prepare(self, data: dict[str, Any]) -> dict[str, Any]:
         row = dict(data)
         row.setdefault("{{ key_field }}", _uuid.uuid4().hex)
-        now = _datetime.now(_timezone.utc).isoformat()
+        now = clock.now().isoformat()
         row.setdefault("created_at", now)
         row["updated_at"] = now
         return row
@@ -84,7 +85,7 @@ class {{ repo_name }}Repository:
             row = {
                 **data,
                 "{{ key_field }}": key,
-                "updated_at": _datetime.now(_timezone.utc).isoformat(),
+                "updated_at": clock.now().isoformat(),
             }
             await self._provider.execute_update(
                 "{{ table_name }}", row, '"{{ key_field }}" = ?', [key]

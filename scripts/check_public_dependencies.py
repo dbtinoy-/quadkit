@@ -14,6 +14,11 @@ import re
 import sys
 import tomllib
 
+#: Names this copy of the gate is allowed to see. It must stay equal to
+#: ``export_public.PUBLIC_PACKAGES``' project names — a set that only ever
+#: grows — so ``tests/dev/test_export_public.py`` pins the two together. The
+#: literal has to stay a literal: this file ships to the public repository,
+#: which has no access to the monorepo's catalogue.
 PUBLISHED_DISTRIBUTIONS = frozenset(
     {
         "quadkit",
@@ -21,6 +26,14 @@ PUBLISHED_DISTRIBUTIONS = frozenset(
         "quadkit-web",
         "quadkit-testing",
         "quadkit-cli",
+        "quadkit-sql",
+        "quadkit-auth",
+        "quadkit-cache",
+        "quadkit-storage",
+        "quadkit-events",
+        "quadkit-tasks",
+        "quadkit-http",
+        "quadkit-monitor",
     }
 )
 DISTRIBUTION_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")
@@ -88,7 +101,9 @@ def main() -> int:
         except (OSError, UnicodeDecodeError):
             continue
         for match in INSTALL_COMMAND.finditer(text):
-            if (name := _quadkit_name(match.group(1))) and name not in PUBLISHED_DISTRIBUTIONS:
+            if (
+                name := _quadkit_name(match.group(1))
+            ) and name not in PUBLISHED_DISTRIBUTIONS:
                 references.append(f"{path.relative_to(root)}: {name}")
 
     if references:

@@ -17,9 +17,10 @@ Register it as a storage backend in ``application.yaml``::
 from __future__ import annotations
 
 from collections.abc import AsyncGenerator, AsyncIterator
-from datetime import UTC, datetime, timedelta
+from datetime import timedelta
 from typing import Any, BinaryIO, cast
 
+from quadkit import clock
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.contracts.infra.storage import (
     FileInfo,
@@ -64,7 +65,7 @@ class {{ driver_name }}Driver(BaseDriver):
         if isinstance(content_type, UploadOptions):
             content_type = content_type.content_type
         content = await self._coerce_uploadable(data)
-        now = datetime.now(UTC)
+        now = clock.now()
         resolved_type = content_type or "application/octet-stream"
         metadata = options.get("metadata") or {}
 

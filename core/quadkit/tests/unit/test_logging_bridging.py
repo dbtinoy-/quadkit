@@ -5,8 +5,8 @@ from __future__ import annotations
 import pytest
 import structlog
 
-from quadkit.logging import apply_config, configure_logging, get_logger, reset_logging
-from quadkit.logging.config import LoggingConfig, RedactionConfig, SamplingConfig
+from quadkit.logging import configure_logging, get_logger, reset_logging
+from quadkit.serialization import loads_str
 
 # ---------------------------------------------------------------------------
 # Stdlib bridge
@@ -223,3 +223,75 @@ class TestPerLoggerLevels:
 # ---------------------------------------------------------------------------
 
 
+# ---------------------------------------------------------------------------
+# Envelope / caller field collisions
+# ---------------------------------------------------------------------------
+
+
+class TestFieldCollisions:
+    """The envelope and the caller must not fight over the same key."""
+
+    @staticmethod
+    def _emit_one(capsys: pytest.CaptureFixture[str], **fields: object) -> dict:
+        configure_logging(level="DEBUG", json_format=True, service_name="my-app")
+        logger = get_logger("collisions")
+        logger.info("thing_happened", **fields)
+        captured = capsys.readouterr()
+        line = (captured.out + captured.err).strip().splitlines()[-1]
+        return loads_str(line)
+
+    def test_caller_keeps_module_filename_and_friends(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """``module=`` is a domain word, not framework metadata.
+
+        ``CallsiteParameterAdder`` wrote ``module``/``filename``/``lineno``/
+        ``func_name`` directly, silently overwriting the caller's value —
+        111 call sites in this workspace passed ``module=`` and none of them
+        rendered it.  Framework metadata now lives in the ``_`` namespace
+        that ``_logger_name`` already used.
+        """
+        event = self._emit_one(capsys, module="wellness", filename="upload.csv")
+
+        assert event["module"] == "wellness"
+        assert event["filename"] == "upload.csv"
+        assert event["_module"] == "test_logging_bridging"
+        assert event["_filename"] == "test_logging_bridging.py"
+
+    def test_callsite_points_at_the_caller_not_the_wrapper(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """Every line used to be stamped ``factory.py`` / ``func_name=info``.
+
+        ``_NamedLogger`` is the nearest non-structlog frame, so the adder
+        reported the framework wrapper as the callsite of every log line in
+        the process.  ``additional_ignores`` skips quadkit's own logging
+        package.
+        """
+        event = self._emit_one(capsys)
+
+        assert event["_filename"] == "test_logging_bridging.py"
+        assert event["_func_name"] == "_emit_one"
+
+    def test_event_field_does_not_raise(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A field named ``event`` is structlog's message parameter."""
+        event = self._emit_one(capsys, event="TaskCompleted")
+
+        assert event["event"] == "thing_happened"
+        assert event["event_field"] == "TaskCompleted"
+
+    def test_service_stays_the_application_identity(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """A DI-resolved logger no longer relabels the service."""
+        from quadkit.logging.factory import LoggerFactoryImpl
+
+        configure_logging(level="DEBUG", json_format=True, service_name="my-app")
+        LoggerFactoryImpl().get_logger("wellness").info("thing_happened")
+        captured = capsys.readouterr()
+        event = loads_str((captured.out + captured.err).strip().splitlines()[-1])
+
+        assert event["service"] == "my-app"
+        assert event["_logger_name"] == "quadkit.wellness"

@@ -64,7 +64,7 @@ class AuthIntegration:
                 else:
                     logger.warning(
                         "skipped_incompatible_authenticator",
-                        service=type(candidate).__name__,
+                        authenticator=type(candidate).__name__,
                     )
             logger.info("resolved_authenticators", count=len(authenticators))
         except (LookupError, RuntimeError, ContainerError) as e:

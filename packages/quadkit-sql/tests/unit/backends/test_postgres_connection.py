@@ -97,11 +97,13 @@ class TestExecute:
             await pc.execute("BROKEN")
 
     async def test_generic_error_becomes_connection_error(self) -> None:
+        pytest.importorskip("asyncpg")
         pc, _ = _conn_results({("execute", "X"): OSError("socket gone")})
         with pytest.raises(DatabaseConnectionError, match="Connection error"):
             await pc.execute("X")
 
     async def test_timeout_maps_to_connection_error(self) -> None:
+        pytest.importorskip("asyncpg")
         pc, _ = _conn_results({("execute", "X"): DatabaseTimeoutError("slow")})
         with pytest.raises(DatabaseConnectionError, match="Connection error"):
             await pc.execute("X")
@@ -127,6 +129,7 @@ class TestFetchOne:
             await pc.fetch_one("B")
 
     async def test_generic_error_becomes_query_error(self) -> None:
+        pytest.importorskip("asyncpg")
         pc, _ = _conn_results({("fetchrow", "B"): OSError("down")})
         with pytest.raises(QueryError, match="Unexpected Postgres error"):
             await pc.fetch_one("B")

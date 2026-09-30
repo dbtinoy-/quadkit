@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
 from typing import Any
 
+from quadkit import clock
 from quadkit.contracts import DatabaseProviderProtocol
 from quadkit.sql import SimpleUnitOfWork
 
@@ -14,8 +14,8 @@ SEED_DATA: list[dict[str, Any]] = [
         {%- for field in fields %}
         "{{ field.name }}": {{ field.sample_value }},
         {%- endfor %}
-        "created_at": datetime.now(timezone.utc),
-        "updated_at": datetime.now(timezone.utc),
+        "created_at": clock.now(),
+        "updated_at": clock.now(),
     },
 ]
 

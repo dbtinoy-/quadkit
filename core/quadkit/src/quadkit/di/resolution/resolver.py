@@ -79,7 +79,7 @@ class ServiceResolver:
         if self._debug_resolution:
             logger.debug(
                 "di.resolution.resolved",
-                service=getattr(service_type, "__name__", repr(service_type)),
+                service_type=getattr(service_type, "__name__", repr(service_type)),
             )
         return instance
 

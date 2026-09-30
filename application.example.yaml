@@ -1,0 +1,27 @@
+# ==============================================================================
+# application.example.yaml
+# Quadkit Framework — example configuration reference.
+#
+# All values shown are exact defaults taken from each package's config class.
+# Secrets:  prefer environment variables or a vault over plaintext.
+#           Syntax: "${ENV_VAR_NAME}" lets the loader substitute at runtime.
+# Env-var overrides use double-underscore nesting, e.g.:
+#   QK_WEB__SERVER__PORT=9000  →  web.server.port = 9000
+# ==============================================================================
+
+# ── Core Framework (quadkit) ──────────────────────────────────────────────────
+# config_section: root (folded by QuadkitConfig._fold_quadkit_env_section)
+# Core config fields live at the root level of the YAML.
+app_name: "quadkit-app"
+debug: false
+env: development
+logging:
+  level: info
+  format: json
+modules: []
+discovery:
+  auto_discover: false
+health:
+  enabled: true
+  path: /health
+  detailed: false
