@@ -70,6 +70,18 @@ class DatabaseRepositoryGenerator(GeneratorBase):
             ),
             key_field=str(options.get("key_field") or "id"),
             needs_datetime=any(f["import_datetime"] for f in fields),
+            # The not-found error the repository returns. The built-in
+            # default is the contracts family member, so a standalone CLI
+            # render behaves exactly as before; an app whose exceptions live
+            # in its own module (the generated modular layout) passes the
+            # class name and import root — the class is the one named type
+            # for the outcome, and R6's one lineage keeps the Result
+            # bridge's status mapping uniform.
+            not_found_error=str(options.get("not_found_error") or "NotFoundError"),
+            exceptions_module=str(
+                options.get("exceptions_module") or "quadkit.contracts.exceptions"
+            ),
+            exceptions_first_party=bool(options.get("exceptions_first_party") or False),
         )
 
         self.stage(file_path, content)

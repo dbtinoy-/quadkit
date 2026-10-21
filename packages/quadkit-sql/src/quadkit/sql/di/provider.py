@@ -94,6 +94,8 @@ class DatabaseProvider(_DatabaseRegistrationMixin, Provider):
         self._db_provider: Any = None
         # Multi-backend: list of (name, db_service)
         self._db_services: list[tuple[str, Any]] = []
+        #: ORM session factories by backend name (Improve-QuadKit #1).
+        self._session_factories: dict[str, Any] = {}
         self._clock: Any = None
         self._id_generator: Any = None
         self._tracer: Any = None
@@ -200,33 +202,33 @@ class DatabaseProvider(_DatabaseRegistrationMixin, Provider):
     ) -> None:
         """Register admin widget services (handlers, contributor).
 
-        Called after database backend registration.
+        Called after database backend registration. The handler set is owned
+        by :func:`quadkit.sql.admin.registration.register_admin_widget_handlers`
+        so applications with their own database provider register exactly the
+        same services — the pool widgets report this provider's own pool
+        rather than degrading to "Unavailable" for a healthy database.
         """
         from quadkit.sql.admin.contributor import SqlAdminContributor
-        from quadkit.sql.admin.handlers.migration_status import (
-            MigrationStatusWidgetHandler,
-        )
-        from quadkit.sql.admin.handlers.pool_utilization import (
-            PoolUtilizationWidgetHandler,
-        )
-        from quadkit.sql.admin.handlers.query_stats import QueryStatsWidgetHandler
+        from quadkit.sql.admin.registration import register_admin_widget_handlers
         from quadkit.sql.migrations.runner import MigrationRunnerAdapter
 
-        container.singleton(
-            PoolUtilizationWidgetHandler,
-            lambda: PoolUtilizationWidgetHandler(db=None),  # type: ignore[arg-type]
+        # ``_db_provider`` is absent in registrations that never reach a
+        # backend (degraded boots, tests); the widgets then render
+        # "Unavailable" instead of the registration failing.
+        provider = self._db_provider
+        migration_manager = (
+            getattr(provider, "migration_manager", None)
+            if provider is not None
+            else None
         )
-        container.singleton(
-            QueryStatsWidgetHandler,
-            lambda: QueryStatsWidgetHandler(db=None),  # type: ignore[arg-type]
-        )
-        container.singleton(
-            MigrationStatusWidgetHandler,
-            lambda: MigrationStatusWidgetHandler(
-                migration_manager=self._db_provider.migration_manager,
-                migration_runner=MigrationRunnerAdapter(
-                    self._db_provider.migration_manager
-                ),
+        register_admin_widget_handlers(
+            container,
+            db=provider,
+            migration_manager=migration_manager,
+            migration_runner=(
+                MigrationRunnerAdapter(migration_manager)
+                if migration_manager is not None
+                else None
             ),
         )
         container.singleton(SqlAdminContributor, SqlAdminContributor)
@@ -270,6 +272,11 @@ class DatabaseProvider(_DatabaseRegistrationMixin, Provider):
 
     async def shutdown(self) -> None:
         """Disconnect all database backends in reverse registration order."""
+        # Close ORM pools first: they hold their own connections, separate
+        # from the raw provider pools below.
+        for factory in self._session_factories.values():
+            await factory.dispose()
+        self._session_factories.clear()
         if self._db_services:
             for name, svc in reversed(self._db_services):
                 await svc.shutdown()

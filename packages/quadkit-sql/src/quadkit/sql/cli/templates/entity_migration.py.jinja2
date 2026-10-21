@@ -3,6 +3,9 @@
 Revision ID: {{ rev_id }}
 Revises: {{ prev_rev if prev_rev else "" }}
 Create Date: auto
+
+Every table carries ``id`` + ``created_at``/``updated_at``; the entity
+columns follow. Downgrade drops the table.
 """
 
 from __future__ import annotations

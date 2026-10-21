@@ -9,8 +9,11 @@ Supports two patterns:
 
 Also issues (or rotates when stale) the CSRF cookie on safe methods
 (GET/HEAD/OPTIONS). Paths in ``CSRFConfig.excluded_paths`` are skipped for
-cookie-less requests; cookie-bearing requests on those paths are still
-validated.
+requests that do not carry the CSRF cookie; requests carrying it (i.e. a
+client that has already been issued a double-submit token) are still
+validated, so a cookie-holding caller cannot use the exemption to bypass
+the check. Unrelated cookies (session, affinity, …) do not disable the
+exemption.
 
 Fail-closed behavior: when ``CSRFConfig.secret_key`` is ``None`` in cookie
 (double-submit) mode, unsafe requests are always rejected — the token cannot
@@ -60,9 +63,12 @@ class CSRFProtectionMiddleware:
     Cookie issuance happens automatically on safe methods (GET/HEAD/OPTIONS)
     so that clients receive a token before submitting state-changing requests.
     Stale cookies (older than ``token_ttl``) are rotated on safe methods.
-    Paths listed in ``CSRFConfig.excluded_paths`` are skipped entirely for
-    cookie-less requests; cookie-bearing requests on those paths are still
-    validated, so cookie-authenticated form posts cannot bypass CSRF.
+    Paths listed in ``CSRFConfig.excluded_paths`` are skipped for requests
+    that do not carry the CSRF cookie; requests that do carry it are still
+    validated, so cookie-authenticated form posts cannot bypass CSRF. The
+    exemption is keyed on that cookie alone — an unrelated cookie (a
+    session cookie set by the exempt endpoint itself, a proxy affinity
+    cookie, …) does not re-enable validation.
 
     Example::
 
@@ -207,7 +213,18 @@ class CSRFProtectionMiddleware:
         method = scope.get("method", "").upper()
 
         if self._is_excluded(path):
-            if method in _SAFE_METHODS or not self._parse_cookies(scope):
+            # The exemption is keyed on the double-submit cookie, not on
+            # "any cookie". A client that has received the CSRF token can
+            # satisfy the check, so it must; a client that never received
+            # one cannot be made to leak it, and an unrelated cookie (a
+            # session cookie the exempt endpoint itself just issued, a
+            # load-balancer affinity cookie, …) must not turn a
+            # signature/token/credential-exchange endpoint into a 403.
+            # Testing for *any* cookie did exactly that: the second call
+            # to an exempt credential-exchange path 403'd as soon as the
+            # first response set a session cookie.
+            has_token_cookie = self._config.cookie_name in self._parse_cookies(scope)
+            if method in _SAFE_METHODS or not has_token_cookie:
                 await self._app(scope, receive, send)
                 return
 

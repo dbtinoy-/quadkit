@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from typing import Any
 
-from quadkit.contracts.web import WebRateLimiterProtocol
 from quadkit.di.module import DynamicModule, Module, module
 from quadkit.web.config import ServerConfig, WebConfig  # ServerConfig used in stub()
 from quadkit.web.di.provider import WebProvider
@@ -88,7 +87,6 @@ class WebModule(Module):
             is_global=True,
             exports=[
                 WebProvider,
-                WebRateLimiterProtocol,
                 WebAdminContributor,
                 ServerStatusWidgetHandler,
                 ActiveConnectionsWidgetHandler,
@@ -115,7 +113,7 @@ class WebModule(Module):
             module=cls,
             providers=[WebProvider(web_config=web_config, controllers=[])],
             is_global=True,
-            exports=[WebProvider, WebRateLimiterProtocol],
+            exports=[WebProvider],
         )
 
 

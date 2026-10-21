@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
     from quadkit.di.module.dynamic import DynamicModule
+    from quadkit.di.module.graph import CompiledModuleGraph
     from quadkit.di.provider import Provider
     from quadkit.logging import LoggerProtocol
 
@@ -73,7 +74,7 @@ class Application(SecretsMixin, HealthProbeMixin):
         self._state = AppState.CREATED
         self._container = Container()
         self._container.singleton(type(self), self)
-        self._orchestrator = ProviderOrchestrator(self._container)
+        self._orchestrator: ProviderOrchestrator = ProviderOrchestrator(self._container)
 
         self._config = config or QuadkitConfig.from_env_profile()
         self._container.singleton(QuadkitConfig, self._config)
@@ -135,6 +136,23 @@ class Application(SecretsMixin, HealthProbeMixin):
     def container(self) -> Container:
         """DI container."""
         return self._container
+
+    @property
+    def module_graph(self) -> CompiledModuleGraph | None:
+        """The compiled module graph, or ``None`` before compilation.
+
+        Read-only view of what the boot sequence compiled: every module with
+        its providers, imports, and fully expanded exports. It exists so
+        boot-time guards can assert that what a module *declares* it exports is
+        what the container can actually resolve — the failure this graph is
+        otherwise blind to, because an export that nothing resolves during
+        boot only fails later, at ``QK_ERR_DI_004`` on first use, or never.
+
+        Returns:
+            The compiled graph, or ``None`` when the application has not been
+            compiled yet.
+        """
+        return self._orchestrator.compiled_graph
 
     @property
     def providers(self) -> list[Provider]:

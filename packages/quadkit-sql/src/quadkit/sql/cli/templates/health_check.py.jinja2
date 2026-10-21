@@ -1,4 +1,9 @@
-"""Health Check for {{ name }}."""
+"""Health check for {{ snake_name }}.
+
+Reports HEALTHY/UNHEALTHY through the result object — failures are
+captured, never raised, so one sick component cannot take down the
+readiness endpoint.
+"""
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.monitor.health import HealthCheck

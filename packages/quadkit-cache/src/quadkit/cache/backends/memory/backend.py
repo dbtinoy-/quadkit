@@ -54,7 +54,8 @@ class MemoryCacheBackend(CacheBackendProtocol):
             hooks: Optional hook registry for lifecycle emission.
         """
         self.config = config or default_cache_config()
-        self._store = MemoryStateStore(max_size=max_size)  # type: ignore[abstract]
+        self.max_size = max_size
+        self._store = MemoryStateStore(max_size=max_size)
         self._metrics = CacheMetrics()
         self._evictions = 0
         self._hooks = hooks
@@ -317,17 +318,29 @@ class MemoryCacheBackend(CacheBackendProtocol):
             Dict with ``hits``, ``misses``, ``evictions``, and ``entries``
             counts, or None when statistics are unavailable.
         """
+        store_stats = getattr(self._store, "get_stats", None)
+        store_evictions = 0
+        store_entries = len(self._store._data)
+        if callable(store_stats):
+            reported = store_stats() or {}
+            store_evictions = int(reported.get("evictions", 0) or 0)
+            store_entries = int(reported.get("entries", store_entries) or 0)
         return {
             "hits": self._metrics.hits,
             "misses": self._metrics.misses,
-            "evictions": self._evictions,
-            "entries": len(self._store._data),
+            # Both the backend's own eviction paths (tag/LRU maintenance) and
+            # the store's capacity evictions.
+            "evictions": self._evictions + store_evictions,
+            "entries": store_entries,
         }
 
     def reset_stats(self) -> None:
         """Reset counters without evicting cached entries."""
         self._metrics.reset()
         self._evictions = 0
+        store = self._store
+        if hasattr(store, "eviction_count"):
+            store.eviction_count = 0
 
     async def health_check(self, timeout: float = 5.0) -> HealthCheckResult:
         """

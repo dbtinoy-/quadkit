@@ -1,6 +1,14 @@
 """{{ client_name }} API client.
 
-This module provides a client for interacting with the {{ client_name }} API.
+Outbound boundary for the {{ client_name }} API: base URL, auth,
+pooling and retries stay inside; callers see framework-owned
+``HttpResponse`` objects, never the transport library.
+
+Convention: **Result + ProblemDetail** — ``_request`` answers
+``Result[HttpResponse, {{ client_name }}APIError]`` so a failing outbound
+call is a VALUE the caller maps (.map_sync / .map_err), not an exception it
+must catch. A request that cannot complete once becomes one ``Err`` —
+the caller's own Err arm (R6: absence is a value).
 """
 
 from __future__ import annotations
@@ -10,6 +18,7 @@ from typing import Any
 from quadkit.contracts.web import HttpResponse
 from quadkit.http import BaseURLHTTPClient
 from quadkit.logging import get_logger
+from quadkit.result import Err, Ok, Result
 
 logger = get_logger(__name__)
 
@@ -70,10 +79,10 @@ class {{ client_name }}Client:
     # =========================================================================
     # Add your API methods here. Examples:
     #
-    # async def get_user(self, user_id: str) -> dict[str, Any]:
+    # async def get_user(self, user_id: str) -> Result[dict[str, Any], {{ client_name }}APIError]:
     #     """Get a user by ID."""
-    #     response = await self._request("GET", f"/users/{user_id}")
-    #     return response.json or {}
+    #     result = await self._request("GET", f"/users/{user_id}")
+    #     return result.map_sync(lambda response: response.json or {})
     #
     # async def list_users(self, limit: int = 20, offset: int = 0) -> list[dict[str, Any]]:
     #     """List users with pagination."""
@@ -82,10 +91,10 @@ class {{ client_name }}Client:
     #     )
     #     return response.json or []
     #
-    # async def create_user(self, data: dict[str, Any]) -> dict[str, Any]:
+    # async def create_user(self, data: dict[str, Any]) -> Result[dict[str, Any], {{ client_name }}APIError]:
     #     """Create a new user."""
-    #     response = await self._request("POST", "/users", json=data)
-    #     return response.json or {}
+    #     result = await self._request("POST", "/users", json=data)
+    #     return result.map_sync(lambda response: response.json or {})
     #
     # async def update_user(self, user_id: str, data: dict[str, Any]) -> dict[str, Any]:
     #     """Update an existing user."""
@@ -105,8 +114,8 @@ class {{ client_name }}Client:
         method: str,
         endpoint: str,
         **kwargs: Any,
-    ) -> HttpResponse:
-        """Make an HTTP request with error handling.
+    ) -> Result[HttpResponse, {{ client_name }}APIError]:
+        """Make an HTTP request, answering the outcome as one Result.
 
         Args:
             method: HTTP method (GET, POST, PUT, PATCH, DELETE).
@@ -114,33 +123,39 @@ class {{ client_name }}Client:
             **kwargs: Additional arguments forwarded to the HTTP client.
 
         Returns:
-            The framework HTTP response.
-
-        Raises:
-            {{ client_name }}APIError: If the API returns an error status.
+            ``Ok(response)`` on a passing status, ``Err(APIError)`` on a
+            client/server failure or a transport exception — never raised,
+            so consumers compose with .map_sync / .map_err instead of try/except.
         """
         try:
             response = await self._client.request(method, endpoint, **kwargs)
-            if response.status >= 400:
-                raise {{ client_name }}APIError(
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("{{ client_name_snake }}_request_error", method=method)
+            return Err(
+                {{ client_name }}APIError(
+                    message=f"Request failed: {exc}",
+                    status_code=None,
+                    response=None,
+                )
+            )
+        if response.status >= 400:
+            return Err(
+                {{ client_name }}APIError(
                     message=f"API request failed: {response.status}",
                     status_code=response.status,
                     response=response,
                 )
-            return response
-        except {{ client_name }}APIError:
-            raise
-        except Exception as exc:  # noqa: BLE001
-            logger.exception("{{ client_name_snake }}_request_error", method=method)
-            raise {{ client_name }}APIError(
-                message=f"Request failed: {exc}",
-                status_code=None,
-                response=None,
-            ) from exc
+            )
+        return Ok(response)
 
 
 class {{ client_name }}APIError(Exception):
-    """Exception raised when the {{ client_name }} API returns an error."""
+    """The {{ client_name }} API failure outcome as a value.
+
+    Carried in ``Err`` (R6) — callers compose instead of try/except. It
+    subclasses ``Exception`` only so a consumer MAY escalate it across an
+    outer infrastructure boundary unchanged.
+    """
 
     def __init__(
         self,

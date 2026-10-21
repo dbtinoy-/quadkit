@@ -5,14 +5,16 @@ from __future__ import annotations
 from typing import Any, cast
 
 from starlette.requests import Request as StarletteRequest
-from starlette.responses import (
-    HTMLResponse as StarletteHTMLResponse,
-)
+
+# keep the starlette base for the isinstance short-circuit + return annotation:
+# caller-supplied values may be raw starlette responses; quadkit's family
+# subclasses it, so both shapes pass the same guard.
 from starlette.responses import (
     Response as StarletteResponse,
 )
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from quadkit.web.transport.responses import HTMLResponse as WebHTMLResponse
 from quadkit.web.transport.responses import Response as WebResponse
 
 
@@ -121,14 +123,14 @@ class _QuadkitMiddlewareAdapter:
 
         # If content is already bytes, use raw StarletteResponse
         if isinstance(content, bytes):
-            return StarletteResponse(
+            return WebResponse(
                 content=content,
                 status_code=quadkit_response.status_code,
                 headers=headers,
             )
 
         if "text/html" in ct:
-            return StarletteHTMLResponse(
+            return WebHTMLResponse(
                 content=content,
                 status_code=quadkit_response.status_code,
                 headers=headers,
@@ -144,7 +146,7 @@ class _QuadkitMiddlewareAdapter:
                     headers=headers,
                 ),
             )
-        return StarletteResponse(
+        return WebResponse(
             content=content,
             status_code=quadkit_response.status_code,
             headers=headers,

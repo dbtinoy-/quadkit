@@ -68,8 +68,16 @@ class ValidationErrorFilter:
             detail="Request validation failed",
             errors=errors,
         )
+        content = pd.to_dict()
+        # The same correlation id the request's logs carry, when a trace is
+        # bound — so a support ticket quoting the 422 can be found.
+        from quadkit.contracts.core.trace_context import trace_id_var
+
+        trace_id = trace_id_var.get()
+        if trace_id:
+            content["trace_id"] = trace_id
         return JSONResponse(
-            content=pd.to_dict(),
+            content=content,
             status_code=422,
             media_type="application/problem+json",
         )

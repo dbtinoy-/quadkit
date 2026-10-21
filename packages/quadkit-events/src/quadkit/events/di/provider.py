@@ -109,6 +109,12 @@ class EventsProvider(Provider):
         # (via ``config_key``) after construction — sub-providers are then
         # composed in ``_ensure_composed()`` during ``register()``.
         self._config: EventsConfig | None = config
+        # Explicit config is authoritative. Without this marker the
+        # orchestrator's ``_inject_provider_config`` replaces it with the
+        # ``events:`` yaml section — or, when there is no such section, with
+        # ``EventsConfig()`` defaults — and ``EventsModule.configure(cfg)``
+        # silently configures nothing.
+        self._config_from_factory = config is not None
         self._handler_modules = handler_modules or []
 
         self._stores: StoreSubProvider | None = None
@@ -277,8 +283,15 @@ class EventsProvider(Provider):
         )
 
     async def shutdown(self) -> None:
-        """Shutdown all components."""
-        stores, _, _ = self._ensure_composed()
+        """Shutdown all components.
+
+        Buses first: an event accepted by ``publish()`` is a promise, and
+        the drain tasks that keep it are stopped only after the queued
+        events have been handed to their handlers. Stores and managers
+        follow, so a handler that still needs them finds them up.
+        """
+        stores, buses, _ = self._ensure_composed()
+        await buses.teardown()
         await stores.teardown()
         if self._managers:
             await self._managers.teardown()

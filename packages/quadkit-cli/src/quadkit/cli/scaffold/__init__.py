@@ -4,9 +4,12 @@ Single source of truth for project bootstrapping — the catalogue lives in
 :mod:`quadkit.cli.scaffold.specs`, the rendered files in
 :mod:`quadkit.cli.scaffold.app_files`, :mod:`quadkit.cli.scaffold.module_files`
 and :mod:`quadkit.cli.scaffold.support_files`, and the writers in
-:mod:`quadkit.cli.scaffold.render`:
+:mod:`quadkit.cli.scaffold.render`. Project metadata is rendered by
+:func:`render_project_metadata` from an explicit :class:`ProjectMetadataContext`;
+downstream builders can use this side-effect-free API without depending on
+private template functions:
 
-- ``quadkit new project --template <name>`` (``commands/new.py``)
+- ``quadkit new project`` (``commands/new.py``)
 - ``ProjectBuilder.create_project`` (``registry/template.py``)
 - scaffold alignment tests (``tests/unit/test_scaffold_alignment.py``)
 
@@ -15,7 +18,7 @@ Every generated file targets the **real** quadkit APIs (``Application``,
 generator map** in :mod:`quadkit.cli.layout`, so a scaffolded project and
 its generators stay aligned:
 
-    quadkit new project myapp --template web-api
+    quadkit new project myapp
     cd myapp && pip install -e .
     quadkit gen controller users  # src/myapp/controllers/users_controller.py
     quadkit dev                   # WebModule auto-discovers it
@@ -36,10 +39,13 @@ and directly in pytest fixtures.
 
 from __future__ import annotations
 
+from quadkit.cli.scaffold.metadata import (
+    ProjectMetadataContext,
+    render_project_metadata,
+)
 from quadkit.cli.scaffold.render import render_module, render_project
 from quadkit.cli.scaffold.specs import (
     _TEMPLATE_SPECS,
-    TEMPLATE_ALIASES,
     TEMPLATES,
     ProjectTemplateSpec,
     component_packages,
@@ -50,9 +56,11 @@ from quadkit.cli.scaffold.specs import (
 
 __all__ = [
     "TEMPLATES",
+    "ProjectMetadataContext",
     "component_packages",
     "render_module",
     "render_project",
+    "render_project_metadata",
     "resolve_template",
     "root_output_dirs",
     "template_names",

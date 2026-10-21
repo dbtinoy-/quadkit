@@ -66,6 +66,23 @@ def install(implementation: IdGeneratorProtocol) -> None:
     _ambient.set(implementation)
 
 
+def current() -> IdGeneratorProtocol:
+    """Return the active identity generator.
+
+    The counterpart of ``quadkit.primitives.clock.current()``: an application
+    that publishes the ambient capability on its DI container binds *this*
+    resolver, not a captured instance, so ``install()`` and ``use()`` stay
+    visible to every consumer. Binding a snapshot would make a test's
+    ``use(...)`` override reach the code that calls ``new_uuid()`` directly
+    while missing the code that resolves the protocol — one process, two
+    generators.
+
+    Returns:
+        The ``IdGeneratorProtocol`` implementation currently installed.
+    """
+    return _ambient.get()
+
+
 def generate_for(entity_type: str) -> str:
     """Generate a time-ordered ID for the given entity type.
 
@@ -120,6 +137,7 @@ def use(implementation: IdGeneratorProtocol) -> Iterator[None]:
 
 
 __all__ = [
+    "current",
     "generate_for",
     "install",
     "new_uuid",

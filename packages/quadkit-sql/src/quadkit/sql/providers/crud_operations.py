@@ -11,9 +11,9 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
 from quadkit.contracts.data.identifiers import Column, Table
+from quadkit.contracts.data.sql.database import encode_bind_value
 from quadkit.logging import get_logger
 from quadkit.primitives import clock as ambient_clock
-from quadkit.serialization import dumps
 from quadkit.sql import DeleteResult, InsertResult, QueryResult, UpdateResult
 from quadkit.sql.exceptions import (
     DatabaseConnectionError,
@@ -29,13 +29,14 @@ if TYPE_CHECKING:
 
 
 def _serialize_param(value: Any) -> Any:
-    """Encode JSON-shaped values for driver binding.
+    """Encode a JSON-shaped value for driver binding.
 
-    Generic CRUD payloads routinely carry JSON-shaped values — scope
-    lists, metadata dicts, message payloads — which relational drivers
-    cannot bind as Python ``dict``/``list`` objects.  They are encoded
-    to JSON text (matching the JSONB/TEXT columns the framework stores
-    declare).  All other value types pass through unchanged.
+    Thin alias over the contract's
+    :func:`~quadkit.contracts.data.sql.database.encode_bind_value`: the rule
+    ("encode ``dict``/``list`` to JSON text before binding") belongs to
+    ``DatabaseProviderProtocol``, not to this package, so every provider —
+    including implementations outside ``quadkit-sql`` — shares one definition.
+    Kept under its historical private name for the call sites below.
 
     Args:
         value: Value about to be bound to a driver parameter.
@@ -44,10 +45,7 @@ def _serialize_param(value: Any) -> Any:
         The value unchanged, or its JSON text encoding when it is a
         ``dict`` or ``list``.
     """
-    if isinstance(value, (dict, list)):
-        encoded = dumps(value)
-        return encoded.decode("utf-8") if isinstance(encoded, bytes) else encoded
-    return value
+    return encode_bind_value(value)
 
 
 @dataclass

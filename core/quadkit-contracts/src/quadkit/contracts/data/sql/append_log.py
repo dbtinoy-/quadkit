@@ -126,17 +126,16 @@ class AppendLogProtocol(Protocol[T]):
         ...
 
 
-from quadkit.contracts.events.protocols import SnapshotStoreProtocol
-
-
 @runtime_checkable
-class AppendLogSnapshotStore(SnapshotStoreProtocol, Protocol):
+class AppendLogSnapshotStore(Protocol):
     """Protocol for aggregate snapshot storage used by append-log.
 
-    Unlike the event-sourcing snapshot store, this interface includes
-    explicit aggregate type and state serialization helpers.  The name has
-    been changed to avoid collision with the generic ``SnapshotStoreProtocol`` used
-    by the events package.
+    A standalone protocol, not a refinement of the event-sourcing
+    ``SnapshotStoreProtocol``: this one takes the aggregate type and an already
+    serialized state dict and returns them, while the event-sourcing store
+    round-trips snapshot objects. Inheriting from it forced two unrelated
+    interfaces to share one method set, and every inherited member had to be
+    overridden — which is not sharing, only a coupling no consumer wanted.
     """
 
     async def save_snapshot(

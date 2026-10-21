@@ -3,18 +3,17 @@
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock, patch
+from urllib.parse import parse_qs
 
 import pytest
 
 from quadkit.auth.authn.oauth2 import (
-    QuadkitConnectResponse,
-    QuadkitConnectSession,
     OAuth2AuthProvider,
-    OAuth2Manager,
     OAuth2IdentityProvider,
+    OAuth2Manager,
     OAuth2UserInfo,
 )
-
+from quadkit.contracts.web import HttpResponse
 
 
 class TestOAuth2Manager:
@@ -49,9 +48,12 @@ class TestOAuth2Manager:
         mock_client_class.return_value = mock_client
 
         manager = OAuth2Manager(providers)
-        url, code_verifier, state = await manager.get_authorization_url("google", "test_state")
+        url, code_verifier, state = await manager.get_authorization_url(
+            "google", "test_state"
+        )
         assert url == "https://example.com/auth"
-        assert isinstance(code_verifier, str) and len(code_verifier) > 0
+        assert isinstance(code_verifier, str)
+        assert len(code_verifier) > 0
         assert state == "test_state"
         mock_client.create_authorization_url.assert_called_once()
 
@@ -61,7 +63,8 @@ class TestOAuth2Manager:
         with patch("quadkit.auth.authn.oauth2.HAS_AUTHLIB", True):
             manager = OAuth2Manager(providers)
             with pytest.raises(
-                ValueError, match="OAuth2 provider 'unknown' not configured",
+                ValueError,
+                match="OAuth2 provider 'unknown' not configured",
             ):
                 await manager.get_authorization_url("unknown")
 
@@ -80,12 +83,16 @@ class TestOAuth2Manager:
 
         manager = OAuth2Manager(providers)
         # PKCE is required by default; always pass code_verifier
-        token = await manager.exchange_code_for_token("google", "auth_code", code_verifier="verifier123")
+        token = await manager.exchange_code_for_token(
+            "google", "auth_code", code_verifier="verifier123"
+        )
         assert token == {"access_token": "token123", "token_type": "Bearer"}
 
         # Test PKCE verifier is forwarded
         _ = await manager.exchange_code_for_token(
-            "google", "auth_code", code_verifier="verifier123",
+            "google",
+            "auth_code",
+            code_verifier="verifier123",
         )
         mock_client.fetch_token.assert_called_with(
             providers["google"].access_token_url,
@@ -96,10 +103,18 @@ class TestOAuth2Manager:
     @pytest.mark.asyncio
     @pytest.mark.parametrize(
         ("auth_style", "auth_method"),
-        [(0, "client_secret_post"), (1, "client_secret_post"), (2, "client_secret_basic")],
+        [
+            (0, "client_secret_post"),
+            (1, "client_secret_post"),
+            (2, "client_secret_basic"),
+        ],
     )
     async def test_exchange_auth_style_maps_to_authlib(
-        self, mocker, providers, auth_style, auth_method,
+        self,
+        mocker,
+        providers,
+        auth_style,
+        auth_method,
     ):
         """Generic-provider auth styles use the matching token endpoint method."""
         providers["google"].auth_style = auth_style
@@ -111,13 +126,20 @@ class TestOAuth2Manager:
         mock_client_class.return_value = mock_client
 
         await OAuth2Manager(providers).exchange_code_for_token(
-            "google", "auth_code", code_verifier="verifier123",
+            "google",
+            "auth_code",
+            code_verifier="verifier123",
         )
-        assert mock_client_class.call_args.kwargs["token_endpoint_auth_method"] == auth_method
+        assert (
+            mock_client_class.call_args.kwargs["token_endpoint_auth_method"]
+            == auth_method
+        )
 
     @pytest.mark.asyncio
     async def test_exchange_auto_auth_style_retries_basic_after_invalid_client(
-        self, mocker, providers,
+        self,
+        mocker,
+        providers,
     ):
         """Style 0 retries the token exchange with HTTP Basic when form auth is rejected."""
         pytest.importorskip("authlib")
@@ -129,25 +151,39 @@ class TestOAuth2Manager:
         mocker.patch("quadkit.auth.authn.oauth2.AsyncOAuth2Client", mock_client_class)
 
         form_client = MagicMock()
-        form_client.fetch_token = AsyncMock(side_effect=OAuthError(error="invalid_client"))
+        form_client.fetch_token = AsyncMock(
+            side_effect=OAuthError(error="invalid_client")
+        )
         basic_client = MagicMock()
-        basic_client.fetch_token = AsyncMock(return_value={"access_token": "basic-token"})
+        basic_client.fetch_token = AsyncMock(
+            return_value={"access_token": "basic-token"}
+        )
         mock_client_class.side_effect = [form_client, basic_client]
 
         token = await OAuth2Manager(providers).exchange_code_for_token(
-            "google", "auth_code", code_verifier="verifier123",
+            "google",
+            "auth_code",
+            code_verifier="verifier123",
         )
 
         assert token == {"access_token": "basic-token"}
         assert mock_client_class.call_count == 2
-        assert mock_client_class.call_args_list[0].kwargs["token_endpoint_auth_method"] == "client_secret_post"
-        assert mock_client_class.call_args_list[1].kwargs["token_endpoint_auth_method"] == "client_secret_basic"
+        assert (
+            mock_client_class.call_args_list[0].kwargs["token_endpoint_auth_method"]
+            == "client_secret_post"
+        )
+        assert (
+            mock_client_class.call_args_list[1].kwargs["token_endpoint_auth_method"]
+            == "client_secret_basic"
+        )
         form_client.fetch_token.assert_awaited_once()
         basic_client.fetch_token.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_exchange_auto_auth_style_does_not_retry_invalid_grant(
-        self, mocker, providers,
+        self,
+        mocker,
+        providers,
     ):
         """Style 0 does not submit a one-time authorization code twice."""
         pytest.importorskip("authlib")
@@ -158,12 +194,16 @@ class TestOAuth2Manager:
         mock_client_class = mocker.MagicMock()
         mocker.patch("quadkit.auth.authn.oauth2.AsyncOAuth2Client", mock_client_class)
         mock_client = MagicMock()
-        mock_client.fetch_token = AsyncMock(side_effect=OAuthError(error="invalid_grant"))
+        mock_client.fetch_token = AsyncMock(
+            side_effect=OAuthError(error="invalid_grant")
+        )
         mock_client_class.return_value = mock_client
 
         with pytest.raises(ValueError, match="OAuth2 token exchange failed"):
             await OAuth2Manager(providers).exchange_code_for_token(
-                "google", "auth_code", code_verifier="verifier123",
+                "google",
+                "auth_code",
+                code_verifier="verifier123",
             )
 
         mock_client_class.assert_called_once()
@@ -194,7 +234,9 @@ class TestOAuth2Manager:
         manager = OAuth2Manager(providers)
         with pytest.raises(ValueError, match="OAuth2 token exchange failed"):
             # PKCE is required; pass code_verifier to reach the exchange logic
-            await manager.exchange_code_for_token("google", "invalid_code", code_verifier="verifier123")
+            await manager.exchange_code_for_token(
+                "google", "invalid_code", code_verifier="verifier123"
+            )
 
     @pytest.mark.asyncio
     async def test_get_user_info(self, mocker, providers):
@@ -237,7 +279,7 @@ class TestOAuth2Manager:
             # Constructing the manager should not raise; it will be created in a
             # test-friendly no-op mode where network ops raise at call-time.
             manager = OAuth2Manager({})
-            assert hasattr(manager, "_available") and manager._available is False
+            assert manager._available is False
 
     @patch("quadkit.auth.authn.oauth2.HAS_AUTHLIB", True)
     @pytest.mark.asyncio
@@ -248,6 +290,80 @@ class TestOAuth2Manager:
 
         # Test that http_client is stored
         assert manager._http_client == mock_http_client
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("auth_style", [0, 2])
+    async def test_oauth_network_io_uses_quadkit_http_client(
+        self, providers, auth_style
+    ):
+        """Token exchange and profile lookup both use the injected raw transport."""
+        pytest.importorskip("authlib")
+
+        class RecordingHttpClient:
+            def __init__(self) -> None:
+                self.calls: list[tuple[str, str, dict[str, object]]] = []
+                self.responses = [
+                    HttpResponse(
+                        status=200,
+                        headers={"content-type": "application/json"},
+                        json={"access_token": "access-token", "token_type": "Bearer"},
+                    ),
+                    HttpResponse(
+                        status=200,
+                        headers={"content-type": "application/json"},
+                        json={"sub": "provider-user", "email": "user@example.com"},
+                    ),
+                ]
+
+            async def request(
+                self, method: str, url: str, **kwargs: object
+            ) -> HttpResponse:
+                self.calls.append((method, url, kwargs))
+                return self.responses.pop(0)
+
+        providers["google"].auth_style = auth_style
+        http_client = RecordingHttpClient()
+        manager = OAuth2Manager(providers, http_client=http_client)
+
+        token = await manager.exchange_code_for_token(
+            "google",
+            "authorization-code",
+            code_verifier="pkce-verifier",
+        )
+        profile = await manager.get_user_info("google", token)
+
+        assert token["access_token"] == "access-token"
+        assert profile["sub"] == "provider-user"
+        token_method, token_url, token_kwargs = http_client.calls[0]
+        assert token_method == "POST"
+        assert token_url == providers["google"].access_token_url
+        token_headers = {
+            key.lower(): value for key, value in token_kwargs["headers"].items()
+        }
+        assert token_headers["content-type"].startswith(
+            "application/x-www-form-urlencoded"
+        )
+        raw_token_body = token_kwargs["data"]
+        token_body = parse_qs(
+            raw_token_body.decode()
+            if isinstance(raw_token_body, bytes)
+            else str(raw_token_body),
+        )
+        assert token_body["code"] == ["authorization-code"]
+        assert token_body["code_verifier"] == ["pkce-verifier"]
+        if auth_style == 0:
+            assert token_body["client_id"] == [providers["google"].client_id]
+            assert token_body["client_secret"] == [providers["google"].client_secret]
+        else:
+            assert token_headers["authorization"].startswith("Basic ")
+
+        profile_method, profile_url, profile_kwargs = http_client.calls[1]
+        assert profile_method == "GET"
+        assert profile_url == providers["google"].userinfo_url
+        profile_headers = {
+            key.lower(): value for key, value in profile_kwargs["headers"].items()
+        }
+        assert profile_headers["authorization"] == "Bearer access-token"
 
 
 class TestOAuth2UserInfo:
@@ -336,16 +452,21 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_authenticate_with_oauth2_new_user(
-        self, oauth2_auth_provider, mock_oauth2_manager, mock_user_store,
+        self,
+        oauth2_auth_provider,
+        mock_oauth2_manager,
+        mock_user_store,
     ):
         """Test OAuth2 authentication with new user provisioning"""
         user = await oauth2_auth_provider.authenticate_with_oauth2(
-            "google", "auth_code",
+            "google",
+            "auth_code",
         )
 
         # Verify token exchange was called
         mock_oauth2_manager.exchange_code_for_token.assert_called_once_with(
-            "google", "auth_code",
+            "google",
+            "auth_code",
         )
 
         # Verify user info was retrieved
@@ -375,7 +496,9 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_authenticate_with_oauth2_existing_user(
-        self, oauth2_auth_provider, mock_user_store,
+        self,
+        oauth2_auth_provider,
+        mock_user_store,
     ):
         """Test OAuth2 authentication with existing user"""
         # Mock existing user
@@ -383,7 +506,8 @@ class TestOAuth2AuthProvider:
         mock_user_store.get_user_by_email.return_value = existing_user
 
         user = await oauth2_auth_provider.authenticate_with_oauth2(
-            "google", "auth_code",
+            "google",
+            "auth_code",
         )
 
         # Should return existing user without creating new one
@@ -393,7 +517,9 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_authenticate_with_oauth2_with_identity_store(
-        self, mock_oauth2_manager, mock_user_store,
+        self,
+        mock_oauth2_manager,
+        mock_user_store,
     ):
         """Test OAuth2 authentication with identity store"""
         # Mock identity store
@@ -418,7 +544,9 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_authenticate_with_oauth2_existing_identity(
-        self, mock_oauth2_manager, mock_user_store,
+        self,
+        mock_oauth2_manager,
+        mock_user_store,
     ):
         """Test OAuth2 authentication with existing identity"""
         # Mock existing identity and user
@@ -462,7 +590,9 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_unverified_claim_never_binds_by_email(
-        self, mock_oauth2_manager_unverified, mock_user_store,
+        self,
+        mock_oauth2_manager_unverified,
+        mock_user_store,
     ):
         """Unverified email never takes over the existing-email account"""
         existing_user = MagicMock()
@@ -493,7 +623,9 @@ class TestOAuth2AuthProvider:
 
     @pytest.mark.asyncio
     async def test_unverified_email_still_binds_by_identity(
-        self, mock_oauth2_manager_unverified, mock_user_store,
+        self,
+        mock_oauth2_manager_unverified,
+        mock_user_store,
     ):
         """Unverified email falls through to the identity match"""
         existing_user = MagicMock()

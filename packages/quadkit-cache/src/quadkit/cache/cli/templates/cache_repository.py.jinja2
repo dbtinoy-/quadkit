@@ -1,4 +1,8 @@
-"""{{ entity_name }} repository with caching.
+"""Convention followed: **Repository pattern** — a cache-aside
+decorator: reads check the cache first, writes invalidate; the
+wrapped repository stays the source of truth.
+
+{{ entity_name }} repository with caching.
 
 This module provides a cached repository that wraps an underlying data
 repository and applies the cache-aside pattern:

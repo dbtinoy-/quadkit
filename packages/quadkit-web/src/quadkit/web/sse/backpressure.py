@@ -8,7 +8,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from starlette.responses import StreamingResponse
+from quadkit.web.transport.responses import StreamingResponse
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator, Callable

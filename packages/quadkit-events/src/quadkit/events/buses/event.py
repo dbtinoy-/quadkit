@@ -156,6 +156,7 @@ class EventBusImpl(HandlerDispatchMixin, Bus[Event, None], EventBusProtocol):  #
         self._background_tasks: set[asyncio.Task[None]] = set()
         self._in_flight: int = 0
         self._dispatch_errors: list[Exception] = []
+        self._closed: bool = False
 
     @property
     def dispatch_errors(self) -> tuple[Exception, ...]:
@@ -286,8 +287,17 @@ class EventBusImpl(HandlerDispatchMixin, Bus[Event, None], EventBusProtocol):  #
         Returns:
             Ok(None) on successful enqueue. Err(EventHandlerError) when
             no handlers are registered and allow_no_handlers is False.
+            Err(EventError) once the bus has been closed: a publish after
+            shutdown must not quietly start a new drain task.
         """
         event_type = type(event)
+        if self._closed:
+            return Err(
+                EventError(
+                    f"Event bus is closed; {event_type.__name__} was not published",
+                    details={"event_type": event_type.__name__},
+                )
+            )
 
         span = (
             self._tracer.start_span(
@@ -345,6 +355,57 @@ class EventBusImpl(HandlerDispatchMixin, Bus[Event, None], EventBusProtocol):  #
                 "dispatch_errors": [str(error) for error in errors],
             },
         )
+
+    async def close(self, timeout: float = 30.0) -> None:
+        """Drain what was accepted, then stop the background drain tasks.
+
+        ``publish()`` returns as soon as the event is queued, so at shutdown
+        the queue may still hold events the caller believes are delivered.
+        Closing each channel lets its drain task finish the queued events
+        and exit; tasks that are still running after ``timeout`` seconds
+        are cancelled. Idempotent: a second call is a no-op.
+
+        Only drain tasks owned by the running loop are waited on; a task
+        started on another loop is left to settle there, because its
+        completion can never be observed from here.
+
+        Args:
+            timeout: Seconds to wait for queued events to be handled before
+                the remaining drain tasks are cancelled.
+        """
+        if self._closed:
+            return
+        self._closed = True
+        for channel in self._event_channels.values():
+            await channel.close()
+        pending = [task for task in self._background_tasks if not task.done()]
+        if not pending:
+            return
+
+        loop = asyncio.get_running_loop()
+        # A drain task is started lazily by the first ``publish()`` for an event
+        # type, so it belongs to whichever loop published — which is not
+        # necessarily the loop now closing the bus. ``asyncio.wait`` learns that
+        # a task finished through a done-callback, and that callback is
+        # scheduled on the *task's* loop, so waiting on a foreign task stays
+        # blocked for the whole ``timeout`` however long ago the task finished.
+        # During application shutdown that timeout is the caller's entire
+        # shutdown budget, so a foreign drain task would fail the shutdown
+        # outright. Those tasks are left to settle on their own loop.
+        local = [task for task in pending if task.get_loop() is loop]
+        foreign = [task for task in pending if task.get_loop() is not loop]
+        if foreign:
+            logger.warning(
+                "event_bus.close_foreign_drain_tasks",
+                count=len(foreign),
+            )
+
+        if local:
+            _, still_running = await asyncio.wait(local, timeout=timeout)
+            for task in still_running:
+                task.cancel()
+            if still_running:
+                await asyncio.gather(*still_running, return_exceptions=True)
 
     async def flush(self) -> None:
         """Wait until all pending events in every channel have been dispatched.

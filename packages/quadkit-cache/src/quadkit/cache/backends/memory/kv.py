@@ -43,7 +43,7 @@ class InMemoryStorage(StorageBackendProtocol):
     def _get_store(self, namespace: str) -> MemoryStateStore:
         """Return (or create) the MemoryStateStore for *namespace*."""
         if namespace not in self._stores:
-            self._stores[namespace] = MemoryStateStore(  # type: ignore[abstract]
+            self._stores[namespace] = MemoryStateStore(
                 max_size=self.max_size,
             )
         return self._stores[namespace]

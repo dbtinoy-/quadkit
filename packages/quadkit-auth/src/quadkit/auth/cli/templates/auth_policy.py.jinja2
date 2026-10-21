@@ -1,6 +1,8 @@
 """{{ policy_name }} authorization policy.
 
-Generated scaffold — implement the rule evaluation below.
+Answers 'may they': evaluates the principal against the resource
+into a :class:`PolicyDecision`. Fails closed until real rules
+exist — implement :meth:`evaluate` to open it up.
 """
 
 from __future__ import annotations

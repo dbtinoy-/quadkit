@@ -11,8 +11,7 @@ from quadkit.contracts.infra.tasks import (
 )
 from quadkit.logging import get_logger
 from quadkit.tasks.admin.contributor import TasksAdminContributor
-from quadkit.tasks.admin.handlers.avg_duration import AvgDurationWidgetHandler
-from quadkit.tasks.admin.handlers.tasks_summary import TasksSummaryWidgetHandler
+from quadkit.tasks.admin.registration import register_admin_widget_handlers
 from quadkit.tasks.backends.registry import TaskBackendRegistry
 from quadkit.tasks.config import TaskConfig
 from quadkit.tasks.di._attrs import _TaskAttrsMixin
@@ -177,16 +176,10 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
         Args:
             container: The DI container registrar.
         """
-        # Register handlers as transient
-        container.transient(
-            TasksSummaryWidgetHandler,
-            factory=lambda: TasksSummaryWidgetHandler(
-                queue_provider=self.queue, pool_provider=self.worker_pool
-            ),
-        )
-        container.transient(
-            AvgDurationWidgetHandler,
-            factory=lambda: AvgDurationWidgetHandler(pool_provider=self.worker_pool),
+        # Handlers as transient, from the shared public registration path so
+        # applications that wire their own queue register the same services.
+        register_admin_widget_handlers(
+            container, queue=self.queue, worker_pool=self.worker_pool
         )
 
         # Register the contributor as singleton

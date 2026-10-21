@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-testing"
-version = "0.0.44"
+version = "0.0.45"
 description = "Centralized testing infrastructure for Quadkit Framework - Fixtures, factories, and utilities"
 readme = "README.md"
 requires-python = ">=3.11"

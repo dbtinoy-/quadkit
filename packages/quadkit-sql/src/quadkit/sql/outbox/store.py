@@ -40,6 +40,17 @@ class SQLOutboxStore:
         self._table = table
         self._id_generator = id_generator
 
+    def bound(self, db: Any) -> SQLOutboxStore:
+        """The same outbox over a different executor — the caller's transaction.
+
+        A store is built once, at boot, over the application's database.
+        The write that makes an outbox *transactional* has to happen on the
+        connection that holds the business row, which is only known inside
+        the transaction. ``store.bound(SessionExecutor(session))`` is how a
+        service says "this table, this id generator, *that* transaction".
+        """
+        return SQLOutboxStore(db, table=self._table, id_generator=self._id_generator)
+
     async def create_table(self) -> None:
         """Create the outbox table if it does not already exist.
 
@@ -58,7 +69,12 @@ class SQLOutboxStore:
         if not events:
             return
         for event in events:
-            payload = json_dumps(event.__dict__)
+            # The event's public representation, which ``from_dict`` can
+            # rebuild on the other side; ``__dict__`` is whatever the
+            # instance happens to hold.
+            payload = json_dumps(
+                event.to_dict() if hasattr(event, "to_dict") else event.__dict__
+            )
             event_id = (
                 str(self._id_generator.generate())
                 if self._id_generator

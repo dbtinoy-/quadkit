@@ -11,11 +11,11 @@ from pathlib import Path
 from typing import Any, cast
 
 from markupsafe import Markup
-from starlette.responses import HTMLResponse
 
 from quadkit import serialization as json
 from quadkit.logging import get_logger
 from quadkit.primitives.trusted_html import TrustedHTML, json_for_html
+from quadkit.web.transport.responses import HTMLResponse
 
 logger = get_logger(__name__)
 
@@ -170,7 +170,7 @@ class Jinja2Templates:
         headers: dict[str, str] | None = None,
         **kwargs: Any,
     ) -> HTMLResponse:
-        """Render a template and return an :class:`~starlette.responses.HTMLResponse`.
+        """Render a template and return an :class:`~quadkit.web.transport.responses.HTMLResponse`.
 
         Args:
             name: Template file name relative to the templates directory.
@@ -180,7 +180,7 @@ class Jinja2Templates:
             **kwargs: Additional context variables merged over *context*.
 
         Returns:
-            An :class:`~starlette.responses.HTMLResponse` with the rendered content.
+            An :class:`~quadkit.web.transport.responses.HTMLResponse` with the rendered content.
         """
         content = self.render_template(name, context, **kwargs)
         return HTMLResponse(content=content, status_code=status_code, headers=headers)

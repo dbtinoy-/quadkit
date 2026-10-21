@@ -39,6 +39,16 @@ class SystemClock:
         """Return the current Unix timestamp."""
         return time.time()
 
+    def timestamp(self) -> float:
+        """Return the current Unix timestamp.
+
+        Present so :class:`SystemClock` satisfies
+        :class:`~quadkit.contracts.core.clock.ClockProtocol`, which requires
+        ``timestamp()`` alongside ``time()`` and so can back
+        :func:`quadkit.primitives.clock.use` and ``install()``.
+        """
+        return time.time()
+
 
 class FakeClock:
     """Controllable clock for deterministic time-based testing.
@@ -68,6 +78,23 @@ class FakeClock:
 
     def time(self) -> float:
         """Return Unix timestamp of the current fake time."""
+        return self.now().timestamp()
+
+    def timestamp(self) -> float:
+        """Return Unix timestamp of the current fake time.
+
+        Present so :class:`FakeClock` satisfies
+        :class:`~quadkit.contracts.core.clock.ClockProtocol`, which requires
+        ``timestamp()`` alongside ``time()``. Without it a ``FakeClock`` cannot
+        back the ambient seam: :func:`quadkit.primitives.clock.use` accepts it,
+        but any caller reaching ``clock.timestamp()`` then fails with
+        ``AttributeError``.
+
+        Like :meth:`time`, this derives from :meth:`now`, so constructing a
+        ``FakeClock`` from a *naive* datetime makes both interpret it as local
+        time rather than UTC. Pass an aware datetime — or lift a stored naive-UTC
+        value first — for deterministic results.
+        """
         return self.now().timestamp()
 
     def advance(self, seconds: float) -> None:

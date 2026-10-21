@@ -45,6 +45,7 @@ import time
 from typing import Any, Protocol, Self
 import uuid
 
+from quadkit.contracts.data.sql.database import provider_dialect
 from quadkit.logging import get_logger
 from quadkit.tasks.dialect import translate_placeholders
 from quadkit.tasks.exceptions import TaskLockHeldError
@@ -190,32 +191,20 @@ class _StatementRunner:
         return self._surface
 
     async def dialect(self) -> str:
-        """Best-effort dialect name for placeholder translation.
+        """Dialect name for placeholder translation, from the contract's rule.
 
-        Tries the provider's ``name`` first (the convention used elsewhere in
-        this package), then the driver's dialect through ``engine`` /
-        ``connection``, and falls back to SQLite — whose ``?`` style is what
-        the statements are written in, so an unknown dialect degrades to the
-        authoring style rather than corrupting it.
+        The lookup itself lives in
+        :func:`~quadkit.contracts.data.sql.database.provider_dialect` so every
+        store in the workspace answers the question the same way: the
+        provider's declared ``database_type``, then the historical ``name``,
+        then the driver's own ``dialect.name``, and SQLite last — whose ``?``
+        style is what the statements are written in, so an unknown dialect
+        degrades to the authoring style rather than corrupting it.
 
         Returns:
             A dialect name such as ``"sqlite"`` or ``"postgres"``.
         """
-        name = getattr(self._db, "name", None)
-        if isinstance(name, str) and name:
-            return name
-
-        engine = getattr(self._db, "engine", None)
-        sync_engine = getattr(engine, "sync_engine", engine)
-        dialect = getattr(getattr(sync_engine, "dialect", None), "name", None)
-        if isinstance(dialect, str) and dialect:
-            return dialect
-
-        connection = getattr(self._db, "connection", None)
-        dialect = getattr(getattr(connection, "dialect", None), "name", None)
-        if isinstance(dialect, str) and dialect:
-            return dialect
-        return "sqlite"
+        return provider_dialect(self._db)
 
     async def run(self, sql: str, params: list[Any]) -> list[dict[str, Any]] | int:
         """Execute one statement and return rows, or an affected-row count.

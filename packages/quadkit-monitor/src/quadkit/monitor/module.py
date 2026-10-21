@@ -45,13 +45,23 @@ class MonitorModule(Module):
     """
 
     @classmethod
-    def configure(cls, backend: Any = None, config: Any | None = None) -> DynamicModule:
+    def configure(
+        cls,
+        backend: Any = None,
+        config: Any | None = None,
+        exporter: Any | None = None,
+    ) -> DynamicModule:
         """Create a MonitorModule with explicit configuration.
 
         Args:
             backend: ``MetricsBackendProtocol`` implementation.
                 Defaults to ``NoOpMetricsBackend`` when omitted.
             config: ``MonitorConfig`` for advanced tracing and profiling settings.
+            exporter: Optional ``MetricsExporter``. A
+                :class:`~quadkit.monitor.backends.exporters.prometheus.PrometheusMetricsExporter`
+                here is what registers the ``prometheus_metrics_app`` container
+                key the web layer mounts at ``/metrics`` — without it the
+                documented mount has nothing to mount.
 
         Returns:
             A :class:`~quadkit.di.module.DynamicModule` descriptor.
@@ -66,7 +76,9 @@ class MonitorModule(Module):
 
         return DynamicModule(
             module=cls,
-            providers=[MonitorProvider(backend=backend, config=config)],
+            providers=[
+                MonitorProvider(backend=backend, exporter=exporter, config=config)
+            ],
             exports=[
                 MetricsCollectorProtocol,
                 MetricsRecorderProtocol,
@@ -80,12 +92,18 @@ class MonitorModule(Module):
         )
 
     @classmethod
-    def with_slo(cls, backend: Any = None, config: Any | None = None) -> DynamicModule:
+    def with_slo(
+        cls,
+        backend: Any = None,
+        config: Any | None = None,
+        exporter: Any | None = None,
+    ) -> DynamicModule:
         """Return a MonitorModule that also exports SLO types.
 
         Args:
             backend: ``MetricsBackendProtocol`` implementation.
             config: ``MonitorConfig`` for advanced settings.
+            exporter: Optional ``MetricsExporter`` (see :meth:`configure`).
         """
         from quadkit.monitor.di.provider import MonitorProvider
         from quadkit.monitor.health import HealthCheckerRegistry, HealthCheckRegistry
@@ -99,7 +117,9 @@ class MonitorModule(Module):
 
         return DynamicModule(
             module=cls,
-            providers=[MonitorProvider(backend=backend, config=config)],
+            providers=[
+                MonitorProvider(backend=backend, exporter=exporter, config=config)
+            ],
             exports=[
                 MetricsCollectorProtocol,
                 MetricsRecorderProtocol,

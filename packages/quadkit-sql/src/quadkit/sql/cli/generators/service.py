@@ -64,6 +64,34 @@ class ServiceGenerator(GeneratorBase):
                 for field in fields
             ],
         }
+        context.update(
+            {
+                # One named error type per outcome, declared once: the
+                # class, its import root, and the service's declared union.
+                # The standalone-CLI defaults keep the contracts family;
+                # a modular app passes its per-context exceptions module so
+                # the lineage runs one entity-named type end to end.
+                "not_found_error": str(
+                    options.get("not_found_error") or "NotFoundError"
+                ),
+                "exceptions_module": str(
+                    options.get("exceptions_module") or "quadkit.contracts.exceptions"
+                ),
+                "service_error_union": str(
+                    options.get("service_error_union")
+                    or options.get("not_found_error")
+                    or "NotFoundError"
+                ),
+                # Isort groups change with first-party membership: the
+                # framework's contracts module sorts inside the third-party
+                # block; a generated app's own exceptions module ships
+                # ``[tool.ruff] src = ["src"]``, so it is first-party and
+                # earns the trailing group. One template, one profile each.
+                "exceptions_first_party": bool(
+                    options.get("exceptions_first_party") or False
+                ),
+            }
+        )
         content = self.render_template("service.py.jinja2", context)
         file_path = self.output_dir / f"{snake_name}_service.py"
         self.stage(file_path, content)

@@ -14,10 +14,9 @@ import time
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
+    from cache_side.config import CacheSideConfig
     from quadkit.cache.service.stampede import StampedeProtectedCache
     from quadkit.contracts.infra.cache import CacheBackendProtocol
-
-    from cache_side.config import CacheSideConfig
 
 _CACHE_KEY = "cache_side:report"
 

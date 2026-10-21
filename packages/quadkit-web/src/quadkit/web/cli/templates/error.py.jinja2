@@ -1,4 +1,8 @@
-"""{{ class_name }} error.
+"""Convention followed: **Exception hierarchy** — leaf errors live in
+the app package and extend the framework's ``HTTPError``; raise one
+and the exception pipeline renders the RFC 7807 response.
+
+{{ class_name }} error.
 
 {% if doc %}
 {{ doc }}

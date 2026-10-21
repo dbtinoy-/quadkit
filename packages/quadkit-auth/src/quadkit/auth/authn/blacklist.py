@@ -11,6 +11,7 @@ Key schema:
 from __future__ import annotations
 
 import hashlib
+import inspect
 from typing import TYPE_CHECKING, Any
 
 import jwt
@@ -63,6 +64,7 @@ class JWTBlacklist:
         self._refresh_expiration_days = refresh_expiration_days
         self._audit_logger = audit_logger
         self._fallback: set[str] = set()
+        self._fallback_users: dict[str, int] = {}
         # Optional late-binding source for the cache when none was supplied
         # at construction (DI ordering: auth boots before cache providers).
         self._cache_resolver: Any = cache_resolver
@@ -105,14 +107,44 @@ class JWTBlacklist:
         if self._cache_resolver is None:
             return None
         try:
-            from quadkit.contracts.infra.cache import CacheBackendProtocol
-
-            resolved = await self._cache_resolver(CacheBackendProtocol)
+            resolved = self._call_resolver()
+            if inspect.isawaitable(resolved):
+                resolved = await resolved
         except Exception as exc:  # noqa: BLE001 — fail closed below
             logger.warning("blacklist_cache_resolve_failed", error=str(exc))
             return None
+        if resolved is None:
+            # Not registered yet (DI ordering). Ask again next time rather
+            # than pinning ``None`` for the life of the process.
+            return None
         self._cache = resolved
         return self._cache
+
+    def _call_resolver(self) -> Any:
+        """Invoke the attached resolver with the signature it was given.
+
+        :meth:`attach_cache_resolver` documents a **zero-argument**
+        callable; an earlier revision of this method called it with
+        ``CacheBackendProtocol`` as a positional argument, so the
+        provider-supplied lambda raised ``TypeError`` on every request and
+        revocation silently stayed in the per-process fallback set. Both
+        shapes are accepted so an application that already passed a
+        one-argument resolver keeps working.
+        """
+        resolver = self._cache_resolver
+        try:
+            params = inspect.signature(resolver).parameters
+        except (TypeError, ValueError):
+            return resolver()
+        if any(
+            p.default is inspect.Parameter.empty
+            and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            for p in params.values()
+        ):
+            from quadkit.contracts.infra.cache import CacheBackendProtocol
+
+            return resolver(CacheBackendProtocol)
+        return resolver()
 
     @staticmethod
     def _flag(result: Any) -> bool:
@@ -131,6 +163,25 @@ class JWTBlacklist:
                 return bool(result.unwrap())
             except Exception:  # noqa: BLE001 — Err branch
                 return False
+        return bool(result)
+
+    @staticmethod
+    def _written(result: Any) -> bool:
+        """Normalise a cache **write** to a plain boolean.
+
+        ``CacheBackendProtocol.set`` returns ``Ok(None)`` on success —
+        there is no payload to unwrap — so :meth:`_flag` (which exists for
+        ``exists``/``get`` and reads the *inner* value) reported every
+        successful write as a failure the moment a real backend was
+        attached: the key was set, the token was revoked, and the caller
+        still got ``Err("Token revocation failed")``. Found by qk-erp:
+        ``POST /logout`` answered 401 for a logout that had worked.
+        """
+        if result is None:
+            return False
+        is_ok = getattr(result, "is_ok", None)
+        if callable(is_ok):
+            return bool(is_ok())
         return bool(result)
 
     # ── Public API ────────────────────────────────────────────────────────
@@ -170,7 +221,9 @@ class JWTBlacklist:
                 return Ok(None)
 
             blacklist_key = f"jwt:blacklist:{token_hash}"
-            success = self._flag(await cache.set(key=blacklist_key, value="1", ttl=ttl))
+            success = self._written(
+                await cache.set(key=blacklist_key, value="1", ttl=ttl)
+            )
 
             if success and self._audit_logger is not None:
                 from quadkit.contracts.audit import AuditEntry
@@ -211,26 +264,26 @@ class JWTBlacklist:
         Returns:
             ``Ok(None)`` on success. ``Err(TokenError)`` if the write fails.
 
-        Raises:
-            RuntimeError: If no cache backend is configured.
+        Without a cache backend, writes an in-process user-level sentinel
+        that lasts for the maximum configured token lifetime.
         """
         from quadkit.contracts.auth.exceptions import TokenError as ContractsTokenError
         from quadkit.result import Err, Ok
 
         cache = await self._effective_cache()
+        max_token_ttl = max(
+            self._access_expiration_hours * 3600,
+            self._refresh_expiration_days * 86400,
+        )
         if not cache:
-            raise RuntimeError(
-                "Cannot blacklist token: no cache backend configured. "
-                "Configure Redis via AuthConfig.cache",
+            self._fallback_users[str(user_id)] = (
+                int(ambient_clock.timestamp()) + max_token_ttl
             )
+            return Ok(None)
 
         try:
             blacklist_key = f"jwt:blacklist:user:{user_id}"
-            max_token_ttl = max(
-                self._access_expiration_hours * 3600,
-                self._refresh_expiration_days * 86400,
-            )
-            success = bool(
+            success = self._written(
                 await cache.set(
                     key=blacklist_key,
                     value=int(ambient_clock.timestamp()),
@@ -262,7 +315,24 @@ class JWTBlacklist:
         cache = await self._effective_cache()
 
         if not cache:
-            return token_hash in self._fallback
+            if token_hash in self._fallback:
+                return True
+            try:
+                unverified_payload = jwt.decode(
+                    token, options={"verify_signature": False}
+                )
+            except Exception:  # noqa: BLE001 - invalid tokens are rejected by verification proper
+                return False
+            user_id = unverified_payload.get("sub")
+            if not user_id:
+                return False
+            expires_at = self._fallback_users.get(str(user_id))
+            if expires_at is None:
+                return False
+            if expires_at <= int(ambient_clock.timestamp()):
+                self._fallback_users.pop(str(user_id), None)
+                return False
+            return True
 
         try:
             if self._flag(await cache.exists(f"jwt:blacklist:{token_hash}")):

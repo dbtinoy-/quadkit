@@ -27,57 +27,68 @@ from quadkit.testing.memory.uow import InMemoryUnitOfWork
 
 
 class TestInMemoryCacheBackend:
+    """The fake answers with `Result`, like every other `CacheBackendProtocol`."""
+
     @pytest.mark.asyncio
     async def test_set_get_delete(self) -> None:
         cache = InMemoryCacheBackend()
-        assert await cache.set("k", "v") is True
-        assert await cache.get("k") == "v"
-        assert await cache.delete("k") is True
-        assert await cache.get("k") is None
-        assert await cache.delete("k") is False
+        assert (await cache.set("k", "v")).is_ok()
+        assert (await cache.get("k")).unwrap() == "v"
+        assert (await cache.delete("k")).unwrap() is True
+        assert (await cache.get("k")).unwrap() is None
+        assert (await cache.delete("k")).unwrap() is False
 
     @pytest.mark.asyncio
     async def test_missing_key_returns_none(self) -> None:
         cache = InMemoryCacheBackend()
-        assert await cache.get("nope") is None
+        assert (await cache.get("nope")).unwrap() is None
 
     @pytest.mark.asyncio
     async def test_ttl_expires_entries(self) -> None:
         cache = InMemoryCacheBackend()
         await cache.set("short", "v", ttl=0.02)
-        assert await cache.get("short") == "v"
+        assert (await cache.get("short")).unwrap() == "v"
         await asyncio.sleep(0.04)
-        assert await cache.get("short") is None
-        assert await cache.exists("short") is False
+        assert (await cache.get("short")).unwrap() is None
+        assert (await cache.exists("short")).unwrap() is False
 
     @pytest.mark.asyncio
     async def test_no_ttl_entries_never_expire(self) -> None:
         cache = InMemoryCacheBackend()
         await cache.set("k", "v")
-        assert await cache.get("k") == "v"
+        assert (await cache.get("k")).unwrap() == "v"
 
     @pytest.mark.asyncio
     async def test_delete_many(self) -> None:
         cache = InMemoryCacheBackend()
         await cache.set("a", 1)
         await cache.set("b", 2)
-        assert await cache.delete_many(["a", "missing"]) is True
-        assert await cache.get("a") is None
-        assert await cache.get("b") == 2
+        assert (await cache.delete_many(["a", "missing"])).unwrap() == 1
+        assert (await cache.get("a")).unwrap() is None
+        assert (await cache.get("b")).unwrap() == 2
+
+    @pytest.mark.asyncio
+    async def test_delete_pattern_removes_matching_keys(self) -> None:
+        cache = InMemoryCacheBackend()
+        await cache.set("pet:1", 1)
+        await cache.set("pet:2", 2)
+        await cache.set("owner:1", 3)
+        assert (await cache.delete_pattern("pet:*")).unwrap() == 2
+        assert (await cache.get("owner:1")).unwrap() == 3
 
     @pytest.mark.asyncio
     async def test_get_many_and_set_many(self) -> None:
         cache = InMemoryCacheBackend()
-        assert await cache.set_many({"a": 1, "b": 2}) is True
-        assert await cache.get_many(["a", "b", "c"]) == {"a": 1, "b": 2}
-        assert await cache.get_many([]) == {}
+        assert (await cache.set_many({"a": 1, "b": 2})).is_ok()
+        assert (await cache.get_many(["a", "b", "c"])).unwrap() == {"a": 1, "b": 2}
+        assert (await cache.get_many([])).unwrap() == {}
 
     @pytest.mark.asyncio
     async def test_clear(self) -> None:
         cache = InMemoryCacheBackend()
         await cache.set("a", 1)
-        assert await cache.clear() is True
-        assert await cache.get("a") is None
+        assert (await cache.clear()).is_ok()
+        assert (await cache.get("a")).unwrap() is None
 
     @pytest.mark.asyncio
     async def test_health_check_reports_entry_count(self) -> None:

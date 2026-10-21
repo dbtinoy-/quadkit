@@ -92,6 +92,12 @@ class DeliveryAttempt:
         payload: The event payload that was sent, so failed attempts can be
             redelivered with their original data (``None`` for records
             created before this field existed).
+        response_body: The endpoint's response body, truncated by the sender
+            (``WebhookConfig.response_body_limit``) — ``None`` when the attempt
+            never reached the endpoint.
+            The delivery log is the operator's only view of what the receiver
+            answered; without it a failing integration shows a status code and
+            nothing else.
     """
 
     attempt_id: str
@@ -106,6 +112,7 @@ class DeliveryAttempt:
     error_message: str | None = None
     duration_ms: float | None = None
     payload: dict[str, Any] | None = None
+    response_body: str | None = None
 
 
 __all__ = [

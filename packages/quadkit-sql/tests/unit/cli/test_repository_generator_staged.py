@@ -39,6 +39,44 @@ def _gen_with(root: Path) -> DatabaseRepositoryGenerator:
     return DatabaseRepositoryGenerator(output_dir=root)
 
 
+def test_outcome_methods_return_result_and_probes_stay_inside(tmp_path: Path) -> None:
+    """R6 pin: get/update/delete return `Result`; absence is an `Err` value,
+    never `None`/bool; `list` stays raw (an empty page is a value)."""
+    gen = _gen(tmp_path)
+    gen.generate("Order", fields_str="total:float")
+    content = (tmp_path / "out" / "order_repository.py").read_text()
+
+    assert "from quadkit.result import Err, Ok, Result" in content
+    assert (
+        "from quadkit.contracts.exceptions import NotFoundError" in content
+    )
+    assert "def get(self, key: str) -> Result[dict[str, Any], NotFoundError]:" in content
+    assert ") -> Result[dict[str, Any], NotFoundError]:" in content  # update
+    assert "def delete(self, key: str) -> Result[bool, NotFoundError]:" in content
+    assert "def list(self, limit: int = 50) -> list[dict[str, Any]]:" in content
+    # And the old sentinel-ful law is gone — the translation happens here,
+    # inside the repository, exactly once per outcome.
+    assert "-> dict[str, Any] | None" not in content
+    assert '"""Delete by primary key; *bool* answers' not in content
+
+
+def test_exception_source_is_a_context_option(tmp_path: Path) -> None:
+    """Modular apps name their own error class; the CLI default is contracts."""
+    gen = _gen(tmp_path)
+    gen.generate(
+        "Order",
+        fields_str="total:float",
+        not_found_error="OrderNotFoundError",
+        exceptions_module="shop_api.modules.users.exceptions",
+    )
+    content = (tmp_path / "out" / "order_repository.py").read_text()
+    assert (
+        "from shop_api.modules.users.exceptions import OrderNotFoundError" in content
+    )
+    assert "def get(self, key: str) -> Result[dict[str, Any], OrderNotFoundError]:" in content
+    assert 'OrderNotFoundError(f"Order not found with id: {key}")' in content
+
+
 def test_dry_run_reports_without_writing(tmp_path: Path) -> None:
     gen = _gen(tmp_path)
     result = gen.generate("Order", fields_str="total:float", dry_run=True)

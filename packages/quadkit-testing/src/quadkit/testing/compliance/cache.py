@@ -22,6 +22,19 @@ import pytest
 __all__ = ["CacheBackendCompliance"]
 
 
+def _value(result: Any) -> Any:
+    """Unwrap an ``Ok`` result, failing the test when it is ``Err``.
+
+    ``CacheBackendProtocol`` answers every operation with a
+    ``Result[T, CacheError]``: a cache that cannot reach its store reports that
+    rather than raising. Unwrapping in one place keeps each test about the
+    behaviour it names, and a failure message carries the error instead of a
+    bare assertion.
+    """
+    assert result.is_ok(), f"expected Ok, got {result!r}"
+    return result.unwrap()
+
+
 class CacheBackendCompliance:
     """Reusable test suite for any ``CacheBackendProtocol`` implementation.
 
@@ -47,39 +60,28 @@ class CacheBackendCompliance:
     async def test_set_and_get(self) -> None:
         """set then get returns the stored value."""
         backend = await self.create_backend()
-        await backend.set("key", "value")
-        result = await backend.get("key")
-        assert result == "value"
+        _value(await backend.set("key", "value"))
+        assert _value(await backend.get("key")) == "value"
 
     @pytest.mark.asyncio
-    async def test_get_missing_returns_default(self) -> None:
-        """get on a missing key returns the default."""
+    async def test_get_missing_returns_none(self) -> None:
+        """get on a missing key returns Ok(None)."""
         backend = await self.create_backend()
-        result = await backend.get("nonexistent", "fallback")
-        assert result == "fallback"
-
-    @pytest.mark.asyncio
-    async def test_get_missing_returns_none_without_default(self) -> None:
-        """get on a missing key returns None when no default is given."""
-        backend = await self.create_backend()
-        result = await backend.get("nonexistent")
-        assert result is None
+        assert _value(await backend.get("nonexistent")) is None
 
     @pytest.mark.asyncio
     async def test_delete_existing_key(self) -> None:
-        """delete returns True and removes the key."""
+        """delete returns Ok(True) and removes the key."""
         backend = await self.create_backend()
         await backend.set("key", "value")
-        deleted = await backend.delete("key")
-        assert deleted is True
-        assert await backend.get("key") is None
+        assert _value(await backend.delete("key")) is True
+        assert _value(await backend.get("key")) is None
 
     @pytest.mark.asyncio
     async def test_delete_missing_key(self) -> None:
-        """delete on a missing key returns False."""
+        """delete on a missing key returns Ok(False)."""
         backend = await self.create_backend()
-        deleted = await backend.delete("nonexistent")
-        assert deleted is False
+        assert _value(await backend.delete("nonexistent")) is False
 
     @pytest.mark.asyncio
     async def test_clear(self) -> None:
@@ -87,9 +89,9 @@ class CacheBackendCompliance:
         backend = await self.create_backend()
         await backend.set("a", 1)
         await backend.set("b", 2)
-        await backend.clear()
-        assert await backend.get("a") is None
-        assert await backend.get("b") is None
+        _value(await backend.clear())
+        assert _value(await backend.get("a")) is None
+        assert _value(await backend.get("b")) is None
 
     @pytest.mark.asyncio
     async def test_overwrite_existing_key(self) -> None:
@@ -97,7 +99,7 @@ class CacheBackendCompliance:
         backend = await self.create_backend()
         await backend.set("key", "first")
         await backend.set("key", "second")
-        assert await backend.get("key") == "second"
+        assert _value(await backend.get("key")) == "second"
 
     @pytest.mark.asyncio
     async def test_ttl_expiry(self) -> None:
@@ -105,8 +107,7 @@ class CacheBackendCompliance:
         backend = await self.create_backend()
         await backend.set("key", "value", ttl=0.05)
         await asyncio.sleep(0.1)
-        result = await backend.get("key")
-        assert result is None
+        assert _value(await backend.get("key")) is None
 
     @pytest.mark.asyncio
     async def test_no_ttl_does_not_expire(self) -> None:
@@ -114,8 +115,7 @@ class CacheBackendCompliance:
         backend = await self.create_backend()
         await backend.set("key", "value")
         await asyncio.sleep(0.1)  # small delay
-        result = await backend.get("key")
-        assert result == "value"
+        assert _value(await backend.get("key")) == "value"
 
     @pytest.mark.asyncio
     async def test_stores_various_value_types(self) -> None:
@@ -128,4 +128,25 @@ class CacheBackendCompliance:
             ("list", [1, 2, 3]),
         ]:
             await backend.set(key, value)
-            assert await backend.get(key) == value
+            assert _value(await backend.get(key)) == value
+
+    @pytest.mark.asyncio
+    async def test_errors_are_returned_not_raised(self) -> None:
+        """A backend that fails reports Err(CacheError) rather than raising.
+
+        The protocol's whole point is that a cache miss or an unreachable
+        cache is a value the caller handles; a suite that only ever sees a
+        happy backend would certify a backend that raises on failure.
+        """
+        backend = await self.create_backend()
+        for result in (
+            await backend.get("key"),
+            await backend.set("key", "value"),
+            await backend.delete("key"),
+            await backend.exists("key"),
+            await backend.clear(),
+        ):
+            assert hasattr(result, "is_ok"), (
+                f"{type(backend).__name__} returned {type(result).__name__} "
+                "where CacheBackendProtocol promises Result"
+            )

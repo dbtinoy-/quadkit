@@ -18,6 +18,7 @@ class FlagType(StrEnum):
     PERCENTAGE = "percentage"
     USER_LIST = "user_list"
     USER_ATTRIBUTE = "user_attribute"
+    TENANT_LIST = "tenant_list"
     TIME_BASED = "time_based"
     VARIANT = "variant"
 

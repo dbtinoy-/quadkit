@@ -6,7 +6,12 @@ enabling swappable database backends (PostgreSQL, MySQL, SQLite, MongoDB).
 
 from __future__ import annotations
 
+from quadkit.contracts.data.sql.database._binding import (
+    encode_bind_value,
+    encode_bind_values,
+)
 from quadkit.contracts.data.sql.database._connection import ConnectionProtocol
+from quadkit.contracts.data.sql.database._dialect import provider_dialect
 from quadkit.contracts.data.sql.database._managers import (
     CrudOperationsProtocol,
     DatabaseMetricsProtocol,
@@ -44,4 +49,7 @@ __all__ = [
     "SchemaManagerProtocol",
     "TransactionManagerProtocol",
     "UpdateResult",
+    "encode_bind_value",
+    "encode_bind_values",
+    "provider_dialect",
 ]

@@ -61,7 +61,7 @@ jobs:
           python -m venv /tmp/quadkit-public-venv
           /tmp/quadkit-public-venv/bin/python -m pip install --upgrade pip
           /tmp/quadkit-public-venv/bin/python -m pip install \
-            dist/*.whl pytest pytest-asyncio pytest-mock cryptography \
+            dist/*.whl pytest pytest-asyncio pytest-mock cryptography pyotp \
             python-multipart ruff
 
       - name: Import installed public packages

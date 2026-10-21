@@ -112,6 +112,25 @@ class _DatabaseRegistrationMixin:
         # Register admin widget services
         self._register_admin_widgets(container)
 
+    def _make_session_factory(self, name: str, backend: Any) -> Any:
+        """Build (once) the ORM session factory for one backend.
+
+        Memoised so repeated resolution shares the engine rather than
+        quietly opening another pool — which is the very problem this
+        feature exists to remove.
+        """
+        from quadkit.sql.orm.session import SessionFactory
+
+        existing = self._session_factories.get(name)
+        if existing is not None:
+            return existing
+        factory = SessionFactory(
+            backend.url.get_secret_value(),
+            echo=bool(getattr(backend, "echo", False)),
+        )
+        self._session_factories[name] = factory
+        return factory
+
     async def _register_single_backend(
         self,
         container: ContainerRegistrarProtocol,
@@ -125,12 +144,28 @@ class _DatabaseRegistrationMixin:
             QueryLoggerProtocol,
             UnitOfWorkProtocol,
         )
+        from quadkit.sql.orm.session import SessionFactory
 
         self._db_provider = self._db_provider or DatabaseService(
             config, clock=self._clock, id_generator=self._id_generator
         )
         container.singleton(DatabaseService, self._db_provider)
         container.singleton(DatabaseProviderProtocol, self._db_provider)
+
+        # ORM session factory: one engine and one pool shared with the raw
+        # providers, so an application mapping declarative models does not
+        # build a second engine against the same database
+        # (Improve-QuadKit #1).
+        #
+        # Registered as a FACTORY, not an instance: the engine is built
+        # only if something resolves it. Building eagerly would also fail
+        # for apps configured with a sync driver (`sqlite://` rather than
+        # `sqlite+aiosqlite://`), which use the raw providers happily and
+        # never ask for an ORM session.
+        container.singleton(
+            SessionFactory,
+            factory=lambda: self._make_session_factory("default", config.backend),
+        )
 
         # Protocol bindings for optional collaborators
         container.singleton(
@@ -212,12 +247,15 @@ class _DatabaseRegistrationMixin:
             QueryLoggerProtocol,
             UnitOfWorkProtocol,
         )
+        from quadkit.sql.orm.session import SessionFactory
 
         backends = config.backends
         primary_entry = next((b for b in backends if b.primary), backends[0])
 
         self._db_services = []
+        self._session_factories: dict[str, Any] = {}
         primary_svc: Any = None
+        primary_factory: Any = None
 
         for entry in backends:
             db_cfg = DatabaseConfig.from_named(entry, base=config)
@@ -263,13 +301,31 @@ class _DatabaseRegistrationMixin:
                     container, db_svc, entry.migration_dir, name=entry.name
                 )
 
+            # ORM session factory: one engine and one pool per backend, so
+            # an application mapping declarative models does not build a
+            # second engine against the same database (Improve-QuadKit #1).
+            # Engine construction is lazy — no connection is opened here.
+            container.singleton(
+                SessionFactory,
+                name=entry.name,
+                factory=lambda e=entry: self._make_session_factory(e.name, e.backend),
+            )
+
             if entry.name == primary_entry.name:
                 primary_svc = db_svc
+                primary_factory = entry
 
         # Primary backend also gets the unnamed bindings (backward compat)
         self._db_provider = primary_svc
         container.singleton(DatabaseProviderProtocol, instance=primary_svc)
         container.singleton(DatabaseService, instance=primary_svc)
+        if primary_factory is not None:
+            container.singleton(
+                SessionFactory,
+                factory=lambda e=primary_factory: self._make_session_factory(
+                    e.name, e.backend
+                ),
+            )
 
         container.scoped(UnitOfWorkProtocol, primary_svc.get_unit_of_work)  # type: ignore[type-abstract]
 

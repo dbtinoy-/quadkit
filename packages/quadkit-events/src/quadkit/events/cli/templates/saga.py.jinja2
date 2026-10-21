@@ -1,7 +1,8 @@
 """{{ saga_name }} saga orchestrator.
 
 Generated scaffold — define the forward steps and their compensating
-actions, then run the saga from your application layer.
+actions, then run the saga from your application layer. A failed step
+rolls back the completed ones in reverse order before re-raising.
 """
 
 from __future__ import annotations

@@ -6,6 +6,27 @@ from quadkit.monitor.metrics.gauge import Gauge
 from quadkit.monitor.metrics.histogram import Histogram
 from quadkit.monitor.metrics.summary import Summary
 
+#: The process-wide collector the monitor provider installs at registration
+#: time. Middleware is constructed by the web layer with no access to the DI
+#: container (Starlette instantiates it while building the stack), so it needs
+#: a way to reach the *same* collector the application's services record into;
+#: two collectors would mean a scrape endpoint that reports nothing.
+_default_collector: MetricsCollectorProtocol | None = None
+
+
+def get_default_collector() -> MetricsCollectorProtocol:
+    """Return the process-wide metrics collector, creating it on first use."""
+    global _default_collector  # noqa: PLW0603 — process-wide singleton by design
+    if _default_collector is None:
+        _default_collector = MetricsCollectorProtocol()
+    return _default_collector
+
+
+def set_default_collector(collector: MetricsCollectorProtocol) -> None:
+    """Install *collector* as the process-wide collector (idempotent)."""
+    global _default_collector  # noqa: PLW0603 — process-wide singleton by design
+    _default_collector = collector
+
 
 class MetricsCollectorProtocol:
     """Central metrics collection and reporting."""

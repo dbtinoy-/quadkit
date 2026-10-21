@@ -198,7 +198,7 @@ class SnapshotManager(Generic[TState]):
         aggregate_key = str(aggregate_id)
 
         # Try to get latest snapshot (M-14)
-        snapshot = await self._snapshot_store.get_latest(aggregate_key)  # type: ignore[attr-defined]
+        snapshot = await self._snapshot_store.get_latest(aggregate_key)
 
         if snapshot:
             state = snapshot.state
@@ -206,7 +206,7 @@ class SnapshotManager(Generic[TState]):
             timestamp = snapshot.timestamp
 
             # Load only events after snapshot
-            events = await self._event_store.read(  # type: ignore[call-arg]
+            events = await self._event_store.read(
                 aggregate_key, from_version=version + 1
             )
 
@@ -298,7 +298,7 @@ class SnapshotManager(Generic[TState]):
         )
 
         # Save using M-14 API
-        await self._snapshot_store.save_snapshot(snapshot)  # type: ignore[attr-defined]
+        await self._snapshot_store.save_snapshot(snapshot)
 
         # Reset tracking
         self._events_since_snapshot[aggregate_key] = 0
@@ -335,7 +335,7 @@ class SnapshotManager(Generic[TState]):
     ) -> int:
         """Clean up old snapshots for an aggregate."""
         count = keep_count or self._config.max_snapshots_per_aggregate
-        count_deleted: int = await self._snapshot_store.delete_old_snapshots(  # type: ignore[attr-defined]
+        count_deleted: int = await self._snapshot_store.delete_old_snapshots(
             aggregate_id, count
         )
         return count_deleted

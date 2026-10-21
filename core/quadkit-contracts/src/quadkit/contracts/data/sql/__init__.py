@@ -30,7 +30,10 @@ if TYPE_CHECKING:
         DataMapperProtocol,
         ReadOnlyMapperProtocol,
     )
-    from quadkit.contracts.data.sql.migrations import MigrationRunnerProtocol
+    from quadkit.contracts.data.sql.migrations import (
+        MigrationRunnerProtocol,
+        SchemaInitializableProtocol,
+    )
     from quadkit.contracts.data.sql.query_log import QueryLogEntry, QueryLoggerProtocol
     from quadkit.contracts.data.sql.sql import InvalidIdentifierError, RawSQL
     from quadkit.contracts.data.sql.sql_dialect import (
@@ -112,6 +115,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "MigrationRunnerProtocol": (
         "quadkit.contracts.data.sql.migrations",
         "MigrationRunnerProtocol",
+    ),
+    "SchemaInitializableProtocol": (
+        "quadkit.contracts.data.sql.migrations",
+        "SchemaInitializableProtocol",
     ),
     "QueryLogEntry": (
         "quadkit.contracts.data.sql.query_log",
@@ -199,6 +206,7 @@ __all__ = [
     "RawSQL",
     "ReadOnlyMapperProtocol",
     "SQLDialect",
+    "SchemaInitializableProtocol",
     "SchemaManagerProtocol",
     "TransactionManagerProtocol",
     "UnitOfWorkProtocol",

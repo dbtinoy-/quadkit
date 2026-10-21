@@ -93,7 +93,7 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
             policy = snapshot_policy or EventCountPolicy(snapshot_every)
             self._snapshot_manager = SnapshotManager(
                 event_store=event_store,
-                snapshot_store=snapshot_store,  # type: ignore[arg-type]
+                snapshot_store=snapshot_store,
                 policy=policy,
             )
 

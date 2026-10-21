@@ -8,8 +8,10 @@ from pathlib import Path
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
-from starlette.responses import FileResponse, Response
+from starlette.responses import Response as StarletteResponse
 from starlette.types import ASGIApp
+
+from quadkit.web.transport.responses import FileResponse, Response
 
 
 class StaticFilesMiddleware(BaseHTTPMiddleware):
@@ -37,8 +39,10 @@ class StaticFilesMiddleware(BaseHTTPMiddleware):
             raise RuntimeError(f"Static files path '{directory}' is not a directory")
 
     async def dispatch(
-        self, request: Request, call_next: Callable[[Request], Awaitable[Response]]
-    ) -> Response:
+        self,
+        request: Request,
+        call_next: Callable[[Request], Awaitable[StarletteResponse]],
+    ) -> StarletteResponse:
         """Serve static files if path matches prefix"""
         if not request.url.path.startswith(self.prefix + "/"):
             return await call_next(request)

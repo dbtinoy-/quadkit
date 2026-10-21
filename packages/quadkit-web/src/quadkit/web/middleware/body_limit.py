@@ -140,7 +140,7 @@ def _413_response() -> ASGIApp:
         await send(
             {
                 "type": "http.response.body",
-                "body": b'{"detail":"Request Entity Too Large"}',
+                "body": b'{"detail":"Request Entity Too Large: body size exceeds limit"}',
                 "more_body": False,
             }
         )

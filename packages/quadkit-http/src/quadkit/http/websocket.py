@@ -9,7 +9,8 @@ client. HTTP applications use the same aiohttp connection stack as the rest of
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any
+from types import TracebackType
+from typing import Any, Self
 
 import aiohttp
 
@@ -42,7 +43,7 @@ class WebSocketClient:
         self._session: aiohttp.ClientSession | None = None
         self._socket: aiohttp.ClientWebSocketResponse | None = None
 
-    async def __aenter__(self) -> WebSocketClient:
+    async def __aenter__(self) -> Self:
         self._session = aiohttp.ClientSession(
             timeout=aiohttp.ClientTimeout(total=None, sock_connect=self.connect_timeout)
         )
@@ -59,7 +60,12 @@ class WebSocketClient:
             raise
         return self
 
-    async def __aexit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc: BaseException | None,
+        tb: TracebackType | None,
+    ) -> None:
         await self.close()
 
     @property

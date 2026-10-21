@@ -41,11 +41,12 @@ class TestFlagType:
     def test_all_types_defined(self) -> None:
         """Verify all flag types are defined."""
         types = list(FlagType)
-        assert len(types) == 6
+        assert len(types) == 7
         assert FlagType.BOOLEAN in types
         assert FlagType.PERCENTAGE in types
         assert FlagType.USER_LIST in types
         assert FlagType.USER_ATTRIBUTE in types
+        assert FlagType.TENANT_LIST in types
         assert FlagType.TIME_BASED in types
         assert FlagType.VARIANT in types
 

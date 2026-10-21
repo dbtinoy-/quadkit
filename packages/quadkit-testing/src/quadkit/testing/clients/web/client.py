@@ -61,6 +61,19 @@ class TestResponse:
         """Get the response headers."""
         return dict(self._response.headers)
 
+    @property
+    def cookies(self) -> dict[str, str]:
+        """Get the cookies the response set.
+
+        Without this an application whose behaviour *is* a cookie cannot be
+        tested through this client at all — a session that issues an
+        identity, a per-visitor scope, anything that proves two callers are
+        kept apart. ``headers`` carries only the raw ``set-cookie`` line,
+        which a test then has to parse, and the underlying response is
+        private on purpose.
+        """
+        return dict(self._response.cookies)
+
     def assert_status(self, expected: int) -> TestResponse:
         """Assert the response status code.
 

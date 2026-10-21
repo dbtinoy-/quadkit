@@ -77,4 +77,41 @@ class MigrationRunnerProtocol(Protocol):
         ...
 
 
-__all__ = ["MigrationRunnerProtocol"]
+@runtime_checkable
+class SchemaInitializableProtocol(Protocol):
+    """A store that prepares its own backing schema.
+
+    Some stores create the tables they read from; others (a memory store, or a
+    SQL store whose tables are created by the application's migration runner)
+    do not. Providers need to ask that question *at boot* without a
+    ``hasattr``/``getattr`` guess and without every store protocol having to
+    declare a member its implementations do not all have — which is what makes
+    this a separate, optional protocol rather than a member of each store
+    protocol:
+
+    ``initialize()`` is guaranteed **idempotent** (``CREATE TABLE IF NOT
+    EXISTS`` is the reference implementation), because a provider may call it
+    on every boot, and it must be safe to call concurrently from two instances
+    starting at once.
+
+    Example::
+
+        from quadkit.contracts.data.sql.migrations import (
+            SchemaInitializableProtocol,
+        )
+
+        store = await container.resolve(WebhookSubscriptionStoreProtocol)
+        if isinstance(store, SchemaInitializableProtocol):
+            await store.initialize()
+    """
+
+    async def initialize(self) -> None:
+        """Create the backing schema if it is absent. Idempotent.
+
+        Implementations must not raise when the schema already exists, and must
+        be safe to call once per process boot.
+        """
+        ...
+
+
+__all__ = ["MigrationRunnerProtocol", "SchemaInitializableProtocol"]

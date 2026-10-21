@@ -35,10 +35,7 @@ def main(
         "api",
         "--template",
         "-t",
-        help=(
-            "Project template "
-            f"(available in this install: {', '.join(template_names())})"
-        ),
+        help=f"Project template (the only template: {', '.join(template_names())})",
     ),
     directory: str = typer.Option(".", "--directory", "-d", help="Target directory"),
     interactive: bool = typer.Option(
@@ -53,13 +50,14 @@ def main(
     project_name = _valid_name(name, "Project")
     selected_template = template
 
-    if interactive:
+    names = template_names()
+    if interactive and len(names) > 1:
         import click
 
         selected_template = typer.prompt(
             "Select a template",
             default="api",
-            type=click.Choice(template_names()),
+            type=click.Choice(names),
         )
 
     try:

@@ -84,7 +84,14 @@ class CacheService(PipelineMixin, InvalidationMixin, PatternsMixin):
         """
         self.provider = provider
         self._backend = backend
-        self.config = config or default_cache_config()
+        # A directly-supplied backend carries the configuration that governs
+        # key prefixing and default TTL. Adopting it when the caller passed no
+        # service config keeps the two in step: the alternative is a service
+        # reporting no prefix while every key it writes is prefixed by the
+        # backend it delegates to.
+        self.config = (
+            config or getattr(backend, "config", None) or default_cache_config()
+        )
         self._protection = protection
         self._ctx = ctx
 
@@ -432,6 +439,48 @@ class CacheService(PipelineMixin, InvalidationMixin, PatternsMixin):
             Dictionary of metrics
         """
         return self._metrics.copy()
+
+    @property
+    def backend(self) -> CacheBackendProtocol | None:
+        """Return the backing store, or ``None`` when only a provider is set.
+
+        Admin surfaces report per-cache occupancy and eviction from the
+        backend itself; exposing it keeps that reporting out of the private
+        attribute layout.
+        """
+        return self._backend
+
+    @property
+    def key_prefix(self) -> str:
+        """Return this service's key prefix (``""`` when it has none)."""
+        return str(getattr(self.config, "key_prefix", "") or "")
+
+    @property
+    def default_ttl(self) -> int | None:
+        """Return the default TTL in seconds applied when ``set`` omits one."""
+        value = getattr(self.config, "default_ttl", None)
+        return int(value) if value is not None else None
+
+    def get_backend_stats(self) -> dict[str, int]:
+        """Return the backend's own counters for administrative reporting.
+
+        ``get_stats`` is optional on the backend protocol — a Redis backend
+        answers through ``INFO`` instead — so an unreporting backend yields
+        zeros rather than fabricated activity.
+
+        Returns:
+            Mapping with ``hits``, ``misses``, ``evictions`` and ``entries``.
+        """
+        empty = {"hits": 0, "misses": 0, "evictions": 0, "entries": 0}
+        get_stats = getattr(self._backend, "get_stats", None)
+        if not callable(get_stats):
+            return empty
+        try:
+            raw = get_stats() or {}
+        except Exception:  # noqa: BLE001 — reporting never raises
+            logger.warning("cache.backend_stats_unavailable", exc_info=True)
+            return empty
+        return {key: int(raw.get(key, 0) or 0) for key in empty}
 
     def reset_metrics(self) -> None:
         """Reset performance metrics."""

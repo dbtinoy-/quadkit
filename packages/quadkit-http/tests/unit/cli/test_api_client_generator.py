@@ -41,6 +41,19 @@ class TestAPIClientGenerator:
         assert "token" in content
         assert "PaymentsClient" in content
 
+    def test_request_answers_result_never_raises(self, tmp_path) -> None:
+        g = _gen(tmp_path)
+        g.generate("Stripe")
+        content = (tmp_path / "clients" / "stripe_client.py").read_text()
+        # the _request seam is Result-shaped: an outbound failure is a VALUE
+        assert "from quadkit.result import Err, Ok, Result" in content
+        assert "-> Result[HttpResponse, StripeAPIError]:" in content
+        assert "return Ok(response)" in content
+        assert content.count("return Err(") == 2
+        assert "raise StripeAPIError(" not in content
+        # scaffold examples teach composing, not catching
+        assert "return result.map_sync(lambda response:" in content
+
     def test_fields_str_invalid_raises(self, tmp_path) -> None:
         import pytest
 

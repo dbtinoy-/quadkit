@@ -37,7 +37,15 @@ class WidgetCategory(StrEnum):
 
 
 class PageCategory(StrEnum):
-    """Management page category."""
+    """Management page category.
+
+    ``OPERATIONS`` covers the operator workflows (support, alerts, feature
+    flags, communications, API management, billing): the navigation manager
+    already orders an ``operations`` group and the System Center lists it
+    among the technical groups, so contributor pages that classify
+    themselves as operations must be able to say so without tripping the
+    route integrator.
+    """
 
     INFRASTRUCTURE = "infrastructure"
     SECURITY = "security"
@@ -45,6 +53,7 @@ class PageCategory(StrEnum):
     DATA = "data"
     MONITORING = "monitoring"
     CONFIGURATION = "configuration"
+    OPERATIONS = "operations"
 
 
 @dataclass(frozen=True)

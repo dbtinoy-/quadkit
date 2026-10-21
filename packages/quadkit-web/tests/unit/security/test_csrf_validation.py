@@ -71,8 +71,9 @@ async def test_non_excluded_post_without_token_returns_403() -> None:
 
 @pytest.mark.asyncio
 async def test_excluded_path_with_cookie_still_validates() -> None:
-    """Excluded-path bypass applies to cookie-less clients; cookie-bearing
-    requests on excluded paths are validated."""
+    """A request that already holds the CSRF cookie is validated on
+    excluded paths (F-W2): the exemption exists for callers that were never
+    issued a double-submit token, not for cookie-holding callers."""
     config = CSRFConfig(
         excluded_paths=["/api/"],
         cookie_name="csrf_token",
@@ -89,6 +90,33 @@ async def test_excluded_path_with_cookie_still_validates() -> None:
     messages = await _run(middleware, scope)
     start = next(m for m in messages if m.get("type") == "http.response.start")
     assert start["status"] == 403
+
+
+@pytest.mark.asyncio
+async def test_excluded_path_with_unrelated_cookie_passes() -> None:
+    """An unrelated cookie does not disable the exempt-path bypass.
+
+    Regression: the gate used to test for *any* cookie, so the second call
+    to an exempt credential-exchange path 403'd as soon as the first
+    response set a session cookie — the exemption applied exactly once per
+    client.
+    """
+    config = CSRFConfig(
+        excluded_paths=["/api/auth/login"],
+        cookie_name="csrf_token",
+        header_name="X-CSRF-Token",
+    )
+    inner_called: list[bool] = []
+    app = _make_app(called=inner_called)
+    middleware = CSRFProtectionMiddleware(app, config=config)
+
+    scope = _make_scope(
+        method="POST",
+        path="/api/auth/login",
+        headers=[_cookie_header({"session_id": "abc123"})],
+    )
+    await _run(middleware, scope)
+    assert inner_called, "An unrelated cookie must not re-enable CSRF validation"
 
 
 @pytest.mark.asyncio

@@ -7,7 +7,7 @@ guards the public surface of :mod:`quadkit.testing`.
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 
 import pytest
 
@@ -86,6 +86,37 @@ def test_fixed_clock_normalises_non_utc_timezone() -> None:
     clock = FixedClock(initial=datetime(2024, 5, 5, 10, 0, tzinfo=plus2))
     assert clock.now().tzinfo == UTC
     assert clock.now().hour == 8
+
+
+def test_fixed_clock_backs_the_ambient_seam_for_a_naive_utc_schema() -> None:
+    """FixedClock drives an aware/naive-UTC storage seam deterministically.
+
+    This is the shape the reference applications use: production
+    reads go through :mod:`quadkit.primitives.clock`, the database stores naive
+    UTC, and tests override the ambient clock rather than patching call sites.
+    ``FixedClock`` deliberately rejects a naive ``set()`` (see
+    ``test_fixed_clock_rejects_naive_datetime``), so a stored naive value is
+    lifted with ``replace(tzinfo=UTC)`` — naive means UTC, the invariant both
+    apps document.
+    """
+    from quadkit.primitives import clock as ambient
+    from quadkit.testing.clock import FixedClock
+
+    clock = FixedClock(initial=datetime(2026, 3, 4, 5, 6, 7, tzinfo=UTC))
+    with ambient.use(clock):
+        # aware for logic, naive for the column
+        assert ambient.now().tzinfo == UTC
+        stored_naive = ambient.now().replace(tzinfo=None)
+        assert stored_naive.tzinfo is None
+        assert ambient.now().date() == date(2026, 3, 4)
+
+        # advancing moves both projections by the same amount
+        clock.advance(3600)
+        assert ambient.now().replace(tzinfo=None) - stored_naive == timedelta(hours=1)
+
+        # and a stored naive value round-trips back through set()
+        clock.set(stored_naive.replace(tzinfo=UTC))
+        assert ambient.now().replace(tzinfo=None) == stored_naive
 
 
 # ---------------------------------------------------------------------------

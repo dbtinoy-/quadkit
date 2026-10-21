@@ -89,8 +89,8 @@ class _JWTRevocationMixin(_JWTVerificationMixin):
         Returns:
             ``Ok(None)`` on success. ``Err(TokenError)`` if the cache write failed.
 
-        Raises:
-            RuntimeError: If no cache backend is configured.
+        Without a cache backend, this falls back to an in-process user-level
+        blacklist entry that is cleared on process restart.
         """
         return await self._blacklist_mgr.revoke_all_for_user(user_id)
 

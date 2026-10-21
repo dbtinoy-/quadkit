@@ -5,7 +5,8 @@ Protocols for service discovery, load balancing, and communication.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, AsyncContextManager, Protocol, runtime_checkable
+from contextlib import AbstractAsyncContextManager
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from quadkit.contracts.web.http_types import ServiceInfo as ServiceInfo
 
@@ -226,7 +227,7 @@ class HTTPClientProtocol(Protocol):
         method: str,
         url: str,
         **kwargs: Any,
-    ) -> AsyncContextManager[Any]:
+    ) -> AbstractAsyncContextManager[Any]:
         """Open a raw byte stream with response status and headers.
 
         The returned async context manager owns the connection. Its value

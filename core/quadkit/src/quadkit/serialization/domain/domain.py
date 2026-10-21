@@ -88,9 +88,13 @@ def model_dump_to_dict(
     else:
         data = dict(model.__dict__)
 
-    # Add extras from __dict__
+    # Add public extras from __dict__ — undeclared attributes only.
+    # `get_model_extra` already hides `_`-prefixed keys, so dumping them would
+    # make `model_dump()` and `model_extra` disagree about what an extra is, and
+    # framework bookkeeping (the domain field guard's marker, for one) is not
+    # payload.
     for k, v in model.__dict__.items():
-        if k not in data:
+        if k not in data and not k.startswith("_"):
             data[k] = v
 
     if exclude:

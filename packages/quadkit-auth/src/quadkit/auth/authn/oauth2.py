@@ -25,6 +25,7 @@ Example:
 
 from __future__ import annotations
 
+from inspect import isawaitable
 from typing import TYPE_CHECKING, Any, cast
 
 from quadkit.auth.authn.oauth2_session import (
@@ -32,6 +33,9 @@ from quadkit.auth.authn.oauth2_session import (
 )
 from quadkit.auth.authn.oauth2_session import (
     QuadkitConnectSession as QuadkitConnectSession,
+)
+from quadkit.auth.authn.oauth2_session import (
+    QuadkitConnectTransport as QuadkitConnectTransport,
 )
 from quadkit.auth.exceptions import OAuth2Error
 from quadkit.auth.types import OAuth2UserInfo
@@ -113,6 +117,36 @@ class OAuth2Manager:
         """Return developer-friendly string representation."""
         return f"OAuth2Manager(providers={list(self.providers)!r})"
 
+    def _new_client(self, **kwargs: Any) -> Any:
+        """Build an Authlib client and attach QuadKit's HTTP session adapter.
+
+        Recent Authlib versions initialize ``session`` internally, so passing
+        ``session=`` duplicates that argument and prevents construction. The
+        async integration is also an HTTPX client; its supported ``transport``
+        hook is therefore used to route all network I/O through QuadKit. The
+        session adapter remains attached for Authlib base-level utilities.
+        """
+        if not self._available or AsyncOAuth2Client is None:
+            raise RuntimeError(
+                "authlib is required for OAuth2 operations; OAuth2Manager is in no-op mode",
+            )
+        client_kwargs = dict(kwargs)
+        if self._http_client is not None:
+            client_kwargs["transport"] = QuadkitConnectTransport(self._http_client)
+        client = AsyncOAuth2Client(**client_kwargs)
+        if self._http_client is not None:
+            client.session = QuadkitConnectSession(self._http_client)
+        return client
+
+    @staticmethod
+    async def _close_client(client: Any) -> None:
+        """Close Authlib's underlying async HTTP client when supported."""
+        close = getattr(client, "aclose", None)
+        if callable(close):
+            result = close()
+            if isawaitable(result):
+                await result
+
     async def get_authorization_url(
         self,
         provider_name: str,
@@ -147,41 +181,38 @@ class OAuth2Manager:
                 provider=provider_name,
             )
 
-        # Use custom session if http_client provided, otherwise use default httpx
-        session = None
-        if self._http_client:
-            session = QuadkitConnectSession(self._http_client)
-
-        client = AsyncOAuth2Client(
+        client = self._new_client(
             client_id=provider.client_id,
             client_secret=provider.client_secret,
             redirect_uri=provider.redirect_uri,
-            session=session,
         )
+        try:
+            # Generate a verifier for every flow so callers can persist one
+            # uniform flow record. Only advertise PKCE when the provider
+            # configuration explicitly enables it; some established OAuth
+            # providers reject unknown authorization parameters.
+            code_verifier = secrets.token_urlsafe(64)
+            authorization_kwargs: dict[str, Any] = {
+                "scope": provider.scope,
+                "state": state,
+            }
+            if provider.require_pkce:
+                digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+                code_challenge = (
+                    base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+                )
+                authorization_kwargs.update(
+                    code_challenge=code_challenge,
+                    code_challenge_method="S256",
+                )
 
-        # Generate a verifier for every flow so callers can persist one
-        # uniform flow record.  Only advertise PKCE when the provider
-        # configuration explicitly enables it; some established OAuth
-        # providers reject unknown authorization parameters.
-        code_verifier = secrets.token_urlsafe(64)
-        authorization_kwargs: dict[str, Any] = {
-            "scope": provider.scope,
-            "state": state,
-        }
-        if provider.require_pkce:
-            digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-            code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-            authorization_kwargs.update(
-                code_challenge=code_challenge,
-                code_challenge_method="S256",
+            authorization_url, _ = client.create_authorization_url(
+                provider.authorize_url,
+                **authorization_kwargs,
             )
-
-        authorization_url, _ = client.create_authorization_url(
-            provider.authorize_url,
-            **authorization_kwargs,
-        )
-
-        return str(authorization_url), code_verifier, state
+            return str(authorization_url), code_verifier, state
+        finally:
+            await self._close_client(client)
 
     async def exchange_code_for_token(
         self,
@@ -200,10 +231,10 @@ class OAuth2Manager:
                 "include the code_verifier returned by get_authorization_url()"
             )
 
-        # Use custom session if http_client provided, otherwise use default httpx
-        session = None
-        if self._http_client:
-            session = QuadkitConnectSession(self._http_client)
+        if not self._available:
+            raise RuntimeError(
+                "authlib is required for OAuth2 operations; OAuth2Manager is in no-op mode",
+            )
 
         # New-api's generic provider uses form credentials for its explicit
         # params (style 1) mode and RFC 6749 HTTP Basic for style 2. Style 0
@@ -221,50 +252,50 @@ class OAuth2Manager:
                 else "client_secret_post",
             ]
         )
-
-        if not self._available:
-            raise RuntimeError(
-                "authlib is required for OAuth2 operations; OAuth2Manager is in no-op mode",
-            )
-
         fetch_kwargs: dict[str, Any] = {"code": code}
         if code_verifier:
             fetch_kwargs["code_verifier"] = code_verifier
 
         for attempt, token_auth_method in enumerate(auth_methods):
-            client = AsyncOAuth2Client(
+            client = self._new_client(
                 client_id=provider.client_id,
                 client_secret=provider.client_secret,
                 redirect_uri=provider.redirect_uri,
                 token_endpoint_auth_method=token_auth_method,
-                session=session,
             )
             try:
-                return cast(
-                    "dict[str, Any]",
-                    await client.fetch_token(provider.access_token_url, **fetch_kwargs),
-                )
-            except OAuthError as e:
-                # Only retry errors that identify client authentication as the
-                # problem. Retrying invalid_grant would submit a one-time code
-                # twice and hide the real callback failure.
-                if (
-                    provider.auth_style == 0
-                    and attempt == 0
-                    and self._should_retry_basic_auth(e)
-                ):
-                    logger.info(
-                        "OAuth2 token endpoint rejected form client authentication; retrying Basic",
-                        provider=provider_name,
-                        error=getattr(e, "error", None),
+                try:
+                    return cast(
+                        "dict[str, Any]",
+                        await client.fetch_token(
+                            provider.access_token_url, **fetch_kwargs
+                        ),
                     )
-                    continue
-                logger.exception("OAuth2 token exchange failed")
-                raise ValueError(f"OAuth2 token exchange failed: {e!s}") from e
+                except OAuthError as e:
+                    # Only retry errors that identify client authentication as
+                    # the problem. Retrying invalid_grant would submit a
+                    # one-time code twice and hide the real callback failure.
+                    if (
+                        provider.auth_style == 0
+                        and attempt == 0
+                        and self._should_retry_basic_auth(e)
+                    ):
+                        logger.info(
+                            "OAuth2 token endpoint rejected form client authentication; retrying Basic",
+                            provider=provider_name,
+                            error=getattr(e, "error", None),
+                        )
+                        continue
+                    logger.exception("OAuth2 token exchange failed")
+                    raise ValueError(f"OAuth2 token exchange failed: {e!s}") from e
+            finally:
+                await self._close_client(client)
 
         # The loop always returns or raises, but keep a defensive guard for
         # type-checkers and future auth-method additions.
-        raise ValueError("OAuth2 token exchange failed: no token authentication method succeeded")
+        raise ValueError(
+            "OAuth2 token exchange failed: no token authentication method succeeded"
+        )
 
     @staticmethod
     def _should_retry_basic_auth(error: Exception) -> bool:
@@ -291,41 +322,37 @@ class OAuth2Manager:
         if not provider:
             raise ValueError(f"OAuth2 provider '{provider_name}' not configured")
 
-        # Use custom session if http_client provided, otherwise use default httpx
-        session = None
-        if self._http_client:
-            session = QuadkitConnectSession(self._http_client)
-
-        client = AsyncOAuth2Client(
-            client_id=provider.client_id,
-            client_secret=provider.client_secret,
-            token=token,
-            session=session,
-        )
-
         if not self._available:
             raise RuntimeError(
                 "authlib is required for OAuth2 operations; OAuth2Manager is in no-op mode",
             )
 
+        client = self._new_client(
+            client_id=provider.client_id,
+            client_secret=provider.client_secret,
+            token=token,
+        )
+        response: Any = None
         try:
-            resp = await client.get(provider.userinfo_url)
-            resp.raise_for_status()
-            # Handle sync or async json() implementations (tests use mocks returning dict)
-            import asyncio
+            response = await client.get(provider.userinfo_url)
 
-            maybe_json = resp.json()
-            if asyncio.iscoroutine(maybe_json):
-                data = await maybe_json
-            else:
-                data = maybe_json
+            response.raise_for_status()
+            maybe_json = response.json()
+            data = await maybe_json if isawaitable(maybe_json) else maybe_json
             return cast("dict[str, Any]", data)
         except Exception as e:  # noqa: BLE001 — provider/HTTP failures become ValueError
             logger.exception("Failed to get user info from OAuth2 provider")
             raise ValueError(f"Failed to get user info: {e!s}") from e
-        except (KeyError, TypeError, ValueError) as e:
-            logger.exception("Unexpected error during OAuth2 user info retrieval")
-            raise ValueError(f"Unexpected error: {e!s}") from e
+        finally:
+            if response is not None:
+                close_response = getattr(response, "aclose", None) or getattr(
+                    response, "close", None
+                )
+                if callable(close_response):
+                    close_result = close_response()
+                    if isawaitable(close_result):
+                        await close_result
+            await self._close_client(client)
 
 
 class OAuth2AuthProvider:
@@ -488,4 +515,5 @@ __all__ = [
     "OAuth2Manager",
     "QuadkitConnectResponse",
     "QuadkitConnectSession",
+    "QuadkitConnectTransport",
 ]

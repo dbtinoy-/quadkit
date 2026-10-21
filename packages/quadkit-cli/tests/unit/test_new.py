@@ -1,9 +1,8 @@
 """Tests for the new command."""
 
+from pathlib import Path
 import subprocess
 import sys
-from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 import pytest
 from typer.testing import CliRunner
@@ -11,9 +10,7 @@ from typer.testing import CliRunner
 from quadkit.cli.commands.new import app as new_app  # Test the new app directly
 from quadkit.cli.scaffold import template_names
 
-_AVAILABLE_TEMPLATES = tuple(
-    name for name in ("api", "web-api", "full") if name in template_names()
-)
+_AVAILABLE_TEMPLATES = tuple(template_names())
 
 
 class TestNewCommand:
@@ -41,6 +38,7 @@ class TestNewCommand:
         project_dir = temp_dir / "my-test-app"
         assert project_dir.exists()
         assert (project_dir / "pyproject.toml").exists()
+        assert (project_dir / "AGENTS.md").is_file()
 
     def test_new_project_with_directory(self, runner: CliRunner, temp_dir: Path):
         """Test creating a project in a specific directory."""
@@ -119,6 +117,7 @@ class TestNewCommand:
         proc = subprocess.run(
             [sys.executable, "-m", "ruff", "check", "--select", "E,F,I", "--", *[str(f) for f in py_files]],
             capture_output=True,
+            check=False,
             text=True,
         )
         assert proc.returncode == 0, (

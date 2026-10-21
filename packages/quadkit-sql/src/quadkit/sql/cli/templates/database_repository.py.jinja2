@@ -1,4 +1,8 @@
-"""{{ entity_name }} repository."""
+"""Convention followed: **Repository pattern** — this module owns the
+row<->entity mapping only; every read/write goes through
+``GenericRepository`` plus the injected provider.
+
+{{ entity_name }} repository."""
 
 from __future__ import annotations
 
@@ -8,16 +12,19 @@ import uuid as _uuid
 {% endif %}
 from quadkit import clock
 from quadkit.contracts import DatabaseProviderProtocol
-
+{% if not exceptions_first_party %}from {{ exceptions_module }} import {{ not_found_error }}
+{% endif %}from quadkit.result import Err, Ok, Result
+from quadkit.serialization.domain import json_serialize
 from quadkit.sql.repositories.generic_repository import GenericRepository
+{% if exceptions_first_party %}
+
+from {{ exceptions_module }} import {{ not_found_error }}
+{% endif %}
 
 
 class {{ entity_name }}Entity:
     """{{ entity_name }} row entity (plain attrs; swap for a model later)."""
-
-{% for field in fields %}
-    {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
-
+{% for field in fields %}    {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
 {% endfor %}
     def __init__(self, **kwargs: Any) -> None:
         for key, value in kwargs.items():
@@ -27,8 +34,12 @@ class {{ entity_name }}Entity:
 class _{{ repo_name }}Inner(GenericRepository[{{ entity_name }}Entity, str]):
     """Row mapper bridge over the generic SQL repository."""
 
-    def _entity_to_dict(self, entity: {{ entity_name }}Entity) -> dict[str, Any]:
-        return dict(vars(entity))
+    def _serialize_entity(self, entity: {{ entity_name }}Entity) -> dict[str, Any]:
+        """Row dict via the framework serializer (datetime/UUID/enum-safe)."""
+        serialized = json_serialize(entity)
+        if isinstance(serialized, dict):
+            return serialized
+        return {"value": serialized}
 
     def _row_to_entity(self, row: dict[str, Any]) -> {{ entity_name }}Entity:
         return self.entity_class(**dict(row))
@@ -70,17 +81,28 @@ class {{ repo_name }}Repository:
             )
         return found
 
-    async def get(self, key: str) -> dict[str, Any] | None:
+    async def get(self, key: str) -> Result[dict[str, Any], {{ not_found_error }}]:
+        """A row that is not there is an expected outcome: absence travels
+        as ``Err({{ not_found_error }})`` — a value — never as ``None`` (R6)."""
         entity = await self._inner.find_by_id(key)
         if entity is None:
-            return None
-        return self._inner._entity_to_dict(entity)
+            return Err(
+                {{ not_found_error }}(f"{{ entity_name }} not found with id: {key}")
+            )
+        return Ok(self._inner._serialize_entity(entity))
 
     async def list(self, limit: int = 50) -> list[dict[str, Any]]:
         entities = await self._inner.find(limit=limit)
-        return [self._inner._entity_to_dict(e) for e in entities]
+        return [self._inner._serialize_entity(e) for e in entities]
 
-    async def update(self, key: str, data: dict[str, Any]) -> dict[str, Any] | None:
+    async def update(
+        self, key: str, data: dict[str, Any]
+    ) -> Result[dict[str, Any], {{ not_found_error }}]:
+        existing = await self._inner.find_by_id(key)
+        if existing is None:
+            return Err(
+                {{ not_found_error }}(f"{{ entity_name }} not found with id: {key}")
+            )
         async with self._provider.transaction():
             row = {
                 **data,
@@ -90,7 +112,17 @@ class {{ repo_name }}Repository:
             await self._provider.execute_update(
                 "{{ table_name }}", row, '"{{ key_field }}" = ?', [key]
             )
-            return await self.get(key)
+        return await self.get(key)
 
-    async def delete(self, key: str) -> bool:
-        return await self._inner.delete_by_id(key)
+    async def delete(self, key: str) -> Result[bool, {{ not_found_error }}]:
+        """Deleting a row that is not there is an expected outcome, so it
+        travels as ``Err({{ not_found_error }})`` — one named error type for the
+        outcome, defined once, instead of a truthiness every caller must
+        re-read (R6). Harder faults (a dead connection) stay on the throw
+        path."""
+        removed = await self._inner.delete_by_id(key)
+        if not removed:
+            return Err(
+                {{ not_found_error }}(f"{{ entity_name }} not found with id: {key}")
+            )
+        return Ok(True)

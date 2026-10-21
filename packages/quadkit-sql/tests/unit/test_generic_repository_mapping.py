@@ -1,19 +1,18 @@
+#!/usr/bin/env python3
 """GenericRepository init and entity<->row mapping tests."""
 
 from __future__ import annotations
 
 from dataclasses import dataclass
-#!/usr/bin/env python3
-"""Unit tests for GenericRepository"""
-
+import datetime
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
-from quadkit.domain import DomainModel
 import pytest
 
-from quadkit.contracts.data import DatabaseProviderProtocol, QueryResult, UpdateResult
-from quadkit.sql.exceptions import DatabaseError, RepositoryError
+from quadkit.contracts.data import DatabaseProviderProtocol
+from quadkit.domain import DomainModel
+from quadkit.sql.exceptions import RepositoryError
 from quadkit.sql.repositories.generic_repository import GenericRepository
 from quadkit.sql.row_level_security import RowLevelSecurityPolicy, ScopeColumn
 
@@ -135,6 +134,34 @@ class TestGenericRepository:
         assert entity.id == 1
         assert entity.name == "test"
         assert entity.value == 42
+
+    def test_row_to_entity_coerces_row_scalars(self, pydantic_repository):
+        """A row's scalars arrive typed, and an undeclared column is not fatal.
+
+        ``_row_to_entity`` calls ``entity_class.model_validate(row)``, so this is
+        where the framework's hydration contract is load-bearing: a DATE/TIMESTAMP
+        column comes back as a string from some drivers and as a ``date``/
+        ``datetime`` from others, and a schema that grew a column must not turn
+        every read into ``TypeError: unexpected keyword argument``.
+        """
+
+        @dataclass
+        class Timestamped(DomainModel):
+            id: int | None = None
+            name: str = ""
+            created_at: datetime.datetime = datetime.datetime(2026, 1, 1)  # noqa: DTZ001
+
+        repository = GenericRepository(
+            provider=pydantic_repository.provider,
+            table_name="sample",
+            entity_class=Timestamped,
+        )
+        entity = repository._row_to_entity(
+            {"id": 1, "name": "test", "created_at": "2026-10-14T01:02:03", "tenant_id": "t-9"}
+        )
+        assert isinstance(entity.created_at, datetime.datetime)
+        assert entity.created_at.year == 2026
+        assert entity.model_extra == {"tenant_id": "t-9"}
 
     def test_row_to_entity_regular_class(self, regular_repository):
         """Test converting row to regular class entity"""

@@ -376,4 +376,7 @@ class TestFlagManagerProtocol:
             ) -> dict:
                 return {}
 
+            async def get_all_definitions(self) -> dict:
+                return {}
+
         assert isinstance(Manager(), FlagManagerProtocol)

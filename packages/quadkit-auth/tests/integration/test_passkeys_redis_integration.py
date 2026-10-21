@@ -1,6 +1,10 @@
 import os
+from typing import Any
 
 import pytest
+
+from quadkit.contracts.infra.cache.exceptions import CacheError, CacheWriteError
+from quadkit.result import Err, Ok, Result
 
 
 @pytest.mark.integration
@@ -28,10 +32,12 @@ async def test_passkey_flow_with_redis_backend():
         await client.ping()
     except (ConnectionError, TimeoutError, OSError, Exception) as e:
         # Also catch redis-specific exceptions
-        if "redis" in type(e).__module__.lower() or isinstance(e, getattr(redis_exc, 'ConnectionError', ConnectionError)):
+        if "redis" in type(e).__module__.lower() or isinstance(
+            e, getattr(redis_exc, "ConnectionError", ConnectionError)
+        ):
             pytest.skip(
-                "Could not connect to Redis at %s; set REDIS_URL to run this integration test"
-                % redis_url,
+                f"Could not connect to Redis at {redis_url}; "
+                "set REDIS_URL to run this integration test",
             )
         raise
 
@@ -64,30 +70,44 @@ async def test_passkey_flow_with_redis_backend():
     user = _FakeUser("u-redis", "redis-user")
     store._users[user.user_id] = user
 
-    # Wrap redis client into the minimal async cache interface expected by _PendingStore
+    # Adapt the Redis client to CacheBackendProtocol for the real-backend test.
     class RedisWrapper:
-        def __init__(self, r_client):
+        def __init__(self, r_client: Any) -> None:
             self._r = r_client
 
-        async def set(self, k, v, ex=None):
-            await self._r.set(k, v, ex=ex)
+        async def set(
+            self, key: str, value: Any, ttl: int | None = None
+        ) -> Result[None, CacheError]:
+            try:
+                await self._r.set(key, value, ex=ttl)
+            except Exception as exc:  # noqa: BLE001 - protocol adapter translates backend errors
+                return Err(CacheWriteError(key, str(exc)))
+            return Ok(None)
 
-        async def get(self, k):
-            return await self._r.get(k)
+        async def get(self, key: str) -> Result[Any | None, CacheError]:
+            try:
+                return Ok(await self._r.get(key))
+            except Exception as exc:  # noqa: BLE001 - protocol adapter translates backend errors
+                return Err(CacheError(f"Cache read failed for key {key}: {exc}"))
 
-        async def delete(self, k):
-            await self._r.delete(k)
+        async def delete(self, key: str) -> Result[bool, CacheError]:
+            try:
+                deleted = await self._r.delete(key)
+            except Exception as exc:  # noqa: BLE001 - protocol adapter translates backend errors
+                return Err(CacheError(f"Cache delete failed for key {key}: {exc}"))
+            return Ok(bool(deleted))
 
     wrapper = RedisWrapper(client)
-    
+
     # Import service lazily to ensure we use project code
     from quadkit.auth.authn.passkeys import PasskeyService
 
     service = PasskeyService(store, wrapper)
 
     # Run registration/auth flow
-    reg_id, challenge = await service.start_registration(
-        user.user_id, name="Redis Device",
+    reg_id, _challenge = await service.start_registration(
+        user.user_id,
+        name="Redis Device",
     )
 
     # Client creates keypair and registers

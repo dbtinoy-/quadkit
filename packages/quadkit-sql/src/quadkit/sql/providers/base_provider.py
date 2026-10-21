@@ -453,20 +453,6 @@ class DatabaseDriver(DatabaseProviderProtocol, ABC):
         await self.rollback_transaction()
 
     # Schema operations
-    def get_repository(self, model_class: Any) -> Any:
-        """Get or create a repository for the given model class"""
-        if not hasattr(self, "_repositories"):
-            self._repositories = {}
-
-        if model_class not in self._repositories:
-            # Local import to avoid circular dependency
-            from quadkit.sql.orm import (
-                ModelRepository,
-            )
-
-            self._repositories[model_class] = ModelRepository(model_class, self)
-        return self._repositories[model_class]
-
     def query(self, table: str) -> Any:
         """Return a SELECT query builder for the given table"""
         return self.query_builder_manager.query(table)

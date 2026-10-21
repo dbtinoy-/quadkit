@@ -4,6 +4,8 @@
 {{ doc }}
 {% endif %}
 Converts ``{{ exception_type }}`` exceptions into a structured JSON response.
+Register it with ``@use_filters(...)`` on the controllers it guards so
+matching failures convert instead of propagating as 500s.
 """
 from __future__ import annotations
 

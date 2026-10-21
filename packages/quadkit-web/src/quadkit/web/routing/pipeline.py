@@ -61,6 +61,23 @@ class RequestPipeline:
             # 1. Execute Guards
             for guard in self.guards:
                 if not await guard.can_activate(context):
+                    # ``GuardProtocol.handle_rejection`` lets a guard answer in
+                    # its own words (an application's problem-detail shape);
+                    # a guard without one gets the generic 403.
+                    rejection = getattr(guard, "handle_rejection", None)
+                    if callable(rejection):
+                        import inspect as _inspect
+
+                        # boundary-catch: a guard may hand back a raw starlette
+                        # response; quadkit's family subclasses it, so this
+                        # isinstance accepts both shapes.
+                        from starlette.responses import Response
+
+                        response = rejection(context)
+                        if _inspect.isawaitable(response):
+                            response = await response
+                        if isinstance(response, Response):
+                            return response
                     from quadkit.web.exceptions import ForbiddenError
 
                     raise ForbiddenError("Access denied by guard")
@@ -107,6 +124,8 @@ class RequestPipeline:
             result = await chain.handle()
 
             # 3. Post-execution: Serialize result to Response if needed
+            # boundary-catch: handlers may return a raw starlette response;
+            # quadkit's family subclasses it, so this isinstance accepts both.
             from starlette.responses import Response as StarletteResponse
 
             # 3.0 Peel ``(payload, BackgroundTasks)``: queued work attaches to

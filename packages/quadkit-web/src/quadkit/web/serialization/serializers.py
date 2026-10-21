@@ -5,7 +5,13 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
-from starlette.responses import HTMLResponse, JSONResponse, PlainTextResponse, Response
+# boundary-catch: handlers may hand back a raw starlette response; quadkit's
+# family subclasses it, so ``isinstance(x, Response)`` accepts both shapes
+# and the passthrough contract (return the handler's object untouched) holds.
+from starlette.responses import (
+    PlainTextResponse,  # anchor: quadkit's response family has no plain-text class
+    Response,
+)
 
 from quadkit.logging import get_logger
 from quadkit.web.transport.responses import (
@@ -13,6 +19,9 @@ from quadkit.web.transport.responses import (
 )
 from quadkit.web.transport.responses import (
     JSONResponse as QuadkitJSONResponse,
+)
+from quadkit.web.transport.responses import (
+    Response as QuadkitResponse,
 )
 
 if TYPE_CHECKING:
@@ -62,11 +71,11 @@ class JSONSerializer(AbstractMediaSerializer):
         data: Any,
         request: StarletteRequest,
         status_code: int = 200,
-    ) -> JSONResponse:
+    ) -> QuadkitJSONResponse:
         # quadkit.web.transport.responses.JSONResponse handles high-performance
         # serialization (orjson/Pydantic) via core quadkit.serialization.
         # Bound at module import — this runs once per response.
-        return QuadkitJSONResponse(content=data, status_code=status_code)  # type: ignore[return-value]
+        return QuadkitJSONResponse(content=data, status_code=status_code)
 
 
 class HTMLSerializer(AbstractMediaSerializer):
@@ -83,7 +92,7 @@ class HTMLSerializer(AbstractMediaSerializer):
         data: Any,
         request: StarletteRequest,
         status_code: int = 200,
-    ) -> HTMLResponse:
+    ) -> QuadkitHTMLResponse:
         # Bound at module import — this runs once per response.
         # Convert to string if not already
         if not isinstance(data, str):
@@ -128,12 +137,12 @@ class XMLSerializer(AbstractMediaSerializer):
         data: Any,
         request: StarletteRequest,
         status_code: int = 200,
-    ) -> Response:
+    ) -> QuadkitResponse:
         # Convert to string if not already
         if not isinstance(data, str):
             data = str(data)
 
-        return Response(
+        return QuadkitResponse(
             content=data, status_code=status_code, media_type="application/xml"
         )
 
@@ -217,7 +226,7 @@ class ResponseSerializer:
         # 0. Handle None → 204 No Content
         # (Status code from decorator is ignored for None, as 204 is semantic for NO content)
         if result is None:
-            return Response(status_code=204)
+            return QuadkitResponse(status_code=204)
 
         # Extract status code from route metadata if available
         status_code = 200
@@ -232,7 +241,9 @@ class ResponseSerializer:
 
         # 1.5 Handle bytes directly
         if isinstance(result, (bytes, bytearray)):
-            return Response(content=result, media_type="application/octet-stream")
+            return QuadkitResponse(
+                content=result, media_type="application/octet-stream"
+            )
 
         # 1.6 Handle HTMLContent marker (check before bare str since HTMLContent is str subclass)
         if isinstance(result, HTMLContent):
@@ -242,7 +253,7 @@ class ResponseSerializer:
 
         # 1.7 Handle bare strings as HTML (HTMX-friendly)
         if isinstance(result, str):
-            return Response(content=result, media_type="text/html")
+            return QuadkitResponse(content=result, media_type="text/html")
 
         # 2. Handle Result Object
         if isinstance(result, Result):
@@ -270,7 +281,7 @@ class ResponseSerializer:
                     )
                 from quadkit.web.routing.result_bridge import ResultResponseMapper
 
-                return ResultResponseMapper.error_to_response(error)
+                return ResultResponseMapper.error_to_response(error, request=request)
 
         # 3. Handle CQRS Messages (Command/Query)
         from quadkit.contracts.events.messages import Command, Query

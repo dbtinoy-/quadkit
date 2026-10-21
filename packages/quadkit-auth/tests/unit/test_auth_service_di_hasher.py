@@ -114,3 +114,41 @@ async def test_composed_hasher_defaults_new_hashes_to_argon2id() -> None:
 
     # Argon2id hashes at current parameters are not flagged.
     assert composed.needs_rehash(hashed) is False
+
+
+@pytest.mark.asyncio
+async def test_change_user_password_uses_injected_hasher() -> None:
+    store = InMemoryUserStore()
+    spy = _SpyHasher()
+    service = _service(store, spy)
+    service.password_policy.prevent_reuse = False
+
+    result = await service.register_user(
+        RegisterRequest(
+            name="changepass",
+            email="change@example.com",
+            password="Password123!",
+            confirm_password="Password123!",
+        ),
+    )
+    assert result.is_ok()
+    user = result.unwrap()
+
+    changed = await service.change_user_password(
+        user.user_id,
+        "Password123!",
+        "Different123!",
+    )
+    assert changed.is_ok(), changed.unwrap_err() if changed.is_err() else None
+    assert spy.hash_calls == ["Password123!", "Different123!"]
+    assert "Password123!" in spy.verify_calls
+
+    old_login = await service.authenticate_user("change@example.com", "Password123!")
+    assert old_login.is_err()
+    new_login = await service.authenticate_user("change@example.com", "Different123!")
+    assert new_login.is_ok()
+
+    creds = await store.get_credentials(user.user_id)
+    assert creds is not None
+    assert len(creds.previous_hashes) == 1
+    assert await spy.verify("Password123!", creds.previous_hashes[0])

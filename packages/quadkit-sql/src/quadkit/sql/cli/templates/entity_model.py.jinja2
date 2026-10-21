@@ -1,4 +1,8 @@
-"""{{ entity_name }} entity model.
+"""Convention followed: **Domain model pattern** — one shape per
+entity: the model carries the stored fields, the Create/Update DTOs
+carry the write shapes; repository and controller share them.
+
+{{ entity_name }} entity model.
 {% if extra_dependencies %}
 
 Requires: {{ extra_dependencies | join(', ') }} — install it alongside pydantic

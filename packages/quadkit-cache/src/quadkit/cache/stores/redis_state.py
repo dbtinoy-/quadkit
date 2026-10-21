@@ -151,6 +151,32 @@ class RedisStateStore(RedisDriver, StateStoreProtocol):
         await cast("Awaitable[Any]", client.delete(self._key(key)))
         return True
 
+    async def exists(self, key: str) -> bool:
+        """Check whether a key exists."""
+        client = await self._get_client()
+        return bool(await client.exists(self._key(key)))
+
+    async def expire(self, key: str, ttl: int) -> bool:
+        """Set expiration on a key; False when the key does not exist."""
+        client = await self._get_client()
+        return bool(await cast("Awaitable[Any]", client.expire(self._key(key), ttl)))
+
+    async def ttl(self, key: str) -> int:
+        """Remaining TTL in seconds; -1 with no expiry, -2 when absent."""
+        client = await self._get_client()
+        # Redis already returns -1 for "no expiry" and -2 for "no such key",
+        # which is exactly the StateStoreProtocol contract.
+        return int(await client.ttl(self._key(key)))
+
+    async def get_many(self, keys: list[str]) -> dict[str, Any]:
+        """Fetch several keys at once; absent keys are omitted."""
+        return await self.get_bulk(keys)
+
+    async def set_many(self, items: dict[str, Any], ttl: int | None = None) -> None:
+        """Persist several key-value pairs in one call."""
+        for key, value in items.items():
+            await self.set(key, value, ttl)
+
     async def get_bulk(self, keys: list[str]) -> dict[str, Any]:
         """Get multiple values by keys"""
         client = await self._get_client()

@@ -7,13 +7,13 @@ Guards are executed before route handlers to validate authorization.
 from __future__ import annotations
 
 from abc import ABC
+from collections.abc import Callable
 from dataclasses import dataclass
 from functools import wraps
 import inspect
-from typing import Any
+from typing import Any, TypeVar, cast
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from quadkit.contracts import AuthorizerProtocol
 from quadkit.contracts.web.guard import GuardProtocol
@@ -21,6 +21,9 @@ from quadkit.result import Err, Ok, Result
 from quadkit.web.protocols import (
     ExecutionContextProtocol as _BaseExecutionContext,
 )
+from quadkit.web.transport.responses import JSONResponse
+
+_Decorated = TypeVar("_Decorated")
 
 
 @dataclass(frozen=True)
@@ -144,7 +147,7 @@ class PermissionGuard(ABC):
         return False
 
 
-def use_guards(*guards: type[Any] | Any) -> Any:
+def use_guards(*guards: type[Any] | Any) -> Callable[[_Decorated], _Decorated]:
     """
     Decorator to attach guards to a route handler or controller.
 
@@ -166,7 +169,7 @@ def use_guards(*guards: type[Any] | Any) -> Any:
             ...
     """
 
-    def decorator(target: Any) -> Any:
+    def decorator(target: _Decorated) -> _Decorated:
         # Store guards metadata
         guard_instances = []
         for guard in guards:
@@ -175,12 +178,13 @@ def use_guards(*guards: type[Any] | Any) -> Any:
             else:
                 guard_instances.append(guard)
 
-        target.__guards__ = guard_instances
+        cast("Any", target).__guards__ = guard_instances
 
         # Wrap the function to execute guards
         if inspect.iscoroutinefunction(target):
+            target_callable = cast("Callable[..., Any]", target)
 
-            @wraps(target)
+            @wraps(target_callable)
             async def wrapper(*args: Any, **kwargs: Any) -> Any:
                 # Find request in kwargs first, then scan positional args
                 request = kwargs.get("request")
@@ -190,7 +194,9 @@ def use_guards(*guards: type[Any] | Any) -> Any:
                             request = arg
                             break
                 if request is None:
-                    qualname = getattr(target, "__qualname__", repr(target))
+                    qualname = getattr(
+                        target_callable, "__qualname__", repr(target_callable)
+                    )
                     raise RuntimeError(
                         "GuardProtocol requires request context for "
                         f"{qualname!r}. Ensure the handler declares "
@@ -205,9 +211,9 @@ def use_guards(*guards: type[Any] | Any) -> Any:
                         status_code=rejection.status_code,
                     )
 
-                return await target(*args, **kwargs)
+                return await target_callable(*args, **kwargs)
 
-            return wrapper
+            return cast("_Decorated", wrapper)
         return target
 
     return decorator

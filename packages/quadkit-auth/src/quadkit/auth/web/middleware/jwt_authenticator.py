@@ -52,7 +52,11 @@ class JwtAuthenticator:
             return None
 
         if token_result is None or token_result.is_err():
-            self.logger.info(
+            # Debug, not info: a deployment that also accepts API keys on the
+            # same header sees a non-JWT bearer on every machine request, and
+            # "not a JWT" is the normal outcome there, not an incident. The
+            # application decides what an unauthenticated request means.
+            self.logger.debug(
                 "JWT verification failed: %s",
                 token_result.unwrap_err() if token_result is not None else "no result",
             )

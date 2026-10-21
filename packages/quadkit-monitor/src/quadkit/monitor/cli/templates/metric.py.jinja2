@@ -1,7 +1,8 @@
 """{{ metric_name }} metric definition.
 
-Generated scaffold — record this metric from your services and let the
-monitoring backend export it.
+Record observations from services with ``record()`` (raw values) or
+``observe_duration()`` (seconds converted to ms for timing call
+sites); the monitoring backend owns the export.
 """
 
 from __future__ import annotations

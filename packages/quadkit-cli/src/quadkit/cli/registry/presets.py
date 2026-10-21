@@ -9,7 +9,7 @@ import abc
 from dataclasses import dataclass, field
 from typing import Any, ClassVar
 
-from quadkit.cli.package_names import packages_for, provider_available
+from quadkit.cli.package_names import packages_for
 
 
 @dataclass
@@ -35,114 +35,14 @@ class PresetDefinition(abc.ABC):
         """Get the preset configuration."""
 
 
-class WebAPIPreset(PresetDefinition):
-    """Basic web API preset."""
+class ApiPreset(PresetDefinition):
+    """The single application preset: REST API with the web framework."""
 
-    name = "web-api"
-    description = "Basic web API with HTTP routing and middleware"
-    packages = packages_for("web", "sql")
+    name = "api"
+    description = "REST API with the web framework"
+    packages = packages_for("web")
     config = {
         "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
-        "database": {"url": "sqlite:///./dev.db"},
-    }
-
-    def get_preset(self) -> Preset:
-        return Preset(
-            name=self.name,
-            description=self.description,
-            packages=self.packages.copy(),
-            config=self.config.copy(),
-        )
-
-
-class GraphQLPreset(PresetDefinition):
-    """GraphQL API preset."""
-
-    name = "graphql"
-    description = "GraphQL API with web framework"
-    packages = packages_for("web", "sql", "graphql")
-    config = {
-        "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
-        "database": {"url": "sqlite:///./dev.db"},
-        "graphql": {"path": "/graphql"},
-    }
-
-    def get_preset(self) -> Preset:
-        return Preset(
-            name=self.name,
-            description=self.description,
-            packages=self.packages.copy(),
-            config=self.config.copy(),
-        )
-
-
-class WorkerPreset(PresetDefinition):
-    """Background worker preset."""
-
-    name = "worker"
-    description = "Background job processor"
-    packages = packages_for("sql", "tasks", "queue")
-    config = {
-        "database": {"url": "sqlite:///./worker.db"},
-    }
-
-    def get_preset(self) -> Preset:
-        return Preset(
-            name=self.name,
-            description=self.description,
-            packages=self.packages.copy(),
-            config=self.config.copy(),
-        )
-
-
-class FullStackPreset(PresetDefinition):
-    """Full-stack application preset."""
-
-    name = "fullstack"
-    description = "Complete web application: auth, cache, storage, events, tasks, HTTP, monitoring"
-    packages = packages_for(
-        "web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor"
-    )
-    config = {
-        "web": {"host": "0.0.0.0", "port": 8000},  # noqa: S104 — preset template default
-        "database": {"url": "sqlite:///./app.db"},
-        "auth": {"enabled": True},
-    }
-
-    def get_preset(self) -> Preset:
-        return Preset(
-            name=self.name,
-            description=self.description,
-            packages=self.packages.copy(),
-            config=self.config.copy(),
-        )
-
-
-class MinimalPreset(PresetDefinition):
-    """Minimal preset."""
-
-    name = "minimal"
-    description = "Bare minimum Quadkit application"
-    packages = ["quadkit"]
-    config = {}
-
-    def get_preset(self) -> Preset:
-        return Preset(
-            name=self.name,
-            description=self.description,
-            packages=self.packages.copy(),
-            config=self.config.copy(),
-        )
-
-
-class MicroservicePreset(PresetDefinition):
-    """Microservice preset."""
-
-    name = "microservice"
-    description = "Microservice with CQRS, database, and monitoring"
-    packages = packages_for("sql", "events", "monitoring")
-    config = {
-        "database": {"url": "sqlite:///./service.db"},
     }
 
     def get_preset(self) -> Preset:
@@ -184,18 +84,8 @@ class PresetRegistry:
 
     @classmethod
     def _default_entries(cls) -> tuple[type[PresetDefinition], ...]:
-        """Return presets supported by installed optional providers."""
-        entries: list[type[PresetDefinition]] = [MinimalPreset, WebAPIPreset]
-        optional = (
-            (GraphQLPreset, ("sql", "graphql")),
-            (WorkerPreset, ("sql", "tasks", "queue")),
-            (FullStackPreset, ("web", "sql", "auth", "admin", "cache", "tasks")),
-            (MicroservicePreset, ("sql", "events", "monitoring")),
-        )
-        for entry, features in optional:
-            if all(provider_available(feature) for feature in features):
-                entries.append(entry)
-        return tuple(entries)
+        """Return the built-in presets (a single one today)."""
+        return (ApiPreset,)
 
     @classmethod
     def with_defaults(cls) -> PresetRegistry:
@@ -207,13 +97,8 @@ class PresetRegistry:
 
 
 __all__ = [
-    "FullStackPreset",
-    "GraphQLPreset",
-    "MicroservicePreset",
-    "MinimalPreset",
+    "ApiPreset",
     "Preset",
     "PresetDefinition",
     "PresetRegistry",
-    "WebAPIPreset",
-    "WorkerPreset",
 ]

@@ -1,10 +1,10 @@
 import hashlib
-import json
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 import pytest
 
+from quadkit import serialization as json
 from quadkit.auth.authn.passkeys import PasskeyService
 
 
@@ -74,26 +74,30 @@ async def test_passkey_register_and_auth_flow():
     user = _FakeUser("u1", "alice")
     store._users[user.user_id] = user
 
-    # simulate cache-backed provider by giving it a simple async cache
+    # Simulate a cache-backed provider with the standard Result contract.
+    from quadkit.result import Ok
+
     class DummyCache:
         def __init__(self):
             self._store = {}
 
-        async def set(self, k, v, ex=None):
-            self._store[k] = v
+        async def set(self, key, value, ttl=None):
+            self._store[key] = value
+            return Ok(None)
 
-        async def get(self, k):
-            return self._store.get(k)
+        async def get(self, key):
+            return Ok(self._store.get(key))
 
-        async def delete(self, k):
-            self._store.pop(k, None)
+        async def delete(self, key):
+            return Ok(self._store.pop(key, None) is not None)
 
     cache_service = DummyCache()
     service = PasskeyService(store, cache_service)
 
     # Start registration
-    reg_id, challenge = await service.start_registration(
-        user.user_id, name="Alice Phone",
+    reg_id, _challenge = await service.start_registration(
+        user.user_id,
+        name="Alice Phone",
     )
 
     # Client generates a key and provides credential + public key
@@ -117,7 +121,9 @@ async def test_passkey_register_and_auth_flow():
     # Client signs the challenge using ECDSA SHA256
     signature_der = priv.sign(auth_challenge.encode("utf-8"), ec.ECDSA(hashes.SHA256()))
     verified = await service.finish_authentication(
-        auth_id, credential_id, signature_der,
+        auth_id,
+        credential_id,
+        signature_der,
     )
     assert verified
 
@@ -133,9 +139,7 @@ async def test_finish_registration_rejects_wrong_origin():
     user = _FakeUser("u2", "bob")
     store._users[user.user_id] = user
 
-    service = PasskeyService(
-        store, allowed_origins={"https://example.com"}
-    )
+    service = PasskeyService(store, allowed_origins={"https://example.com"})
 
     reg_id, _ch = await service.start_registration(user.user_id)
     _priv, pub_pem = _make_keypair()
@@ -153,9 +157,7 @@ async def test_finish_registration_accepts_correct_origin():
     user = _FakeUser("u3", "carol")
     store._users[user.user_id] = user
 
-    service = PasskeyService(
-        store, allowed_origins={"https://example.com"}
-    )
+    service = PasskeyService(store, allowed_origins={"https://example.com"})
 
     reg_id, _ch = await service.start_registration(user.user_id)
     _priv, pub_pem = _make_keypair()
@@ -172,9 +174,7 @@ async def test_finish_registration_rejects_missing_origin_when_required():
     user = _FakeUser("u4", "dave")
     store._users[user.user_id] = user
 
-    service = PasskeyService(
-        store, allowed_origins={"https://example.com"}
-    )
+    service = PasskeyService(store, allowed_origins={"https://example.com"})
 
     reg_id, _ch = await service.start_registration(user.user_id)
     _priv, pub_pem = _make_keypair()
@@ -189,9 +189,7 @@ async def test_finish_authentication_rejects_wrong_origin():
     user = _FakeUser("u5", "eve")
     store._users[user.user_id] = user
 
-    service = PasskeyService(
-        store, allowed_origins={"https://example.com"}
-    )
+    service = PasskeyService(store, allowed_origins={"https://example.com"})
 
     priv = await _register_passkey(
         service, user.user_id, "cred-5", origin="https://example.com"
@@ -212,9 +210,7 @@ async def test_finish_authentication_accepts_correct_origin():
     user = _FakeUser("u6", "frank")
     store._users[user.user_id] = user
 
-    service = PasskeyService(
-        store, allowed_origins={"https://example.com"}
-    )
+    service = PasskeyService(store, allowed_origins={"https://example.com"})
 
     priv = await _register_passkey(
         service, user.user_id, "cred-6", origin="https://example.com"
@@ -269,9 +265,7 @@ async def test_sign_counter_equal_is_rejected():
     # First auth — advance counter to 2.
     auth_id, ch, _ = await service.start_authentication(user.user_id)
     sig = await _sign_challenge(priv, ch)
-    assert await service.finish_authentication(
-        auth_id, "cred-8", sig, new_sign_count=2
-    )
+    assert await service.finish_authentication(auth_id, "cred-8", sig, new_sign_count=2)
 
     # Second auth — replay same counter value (cloned authenticator).
     auth_id2, ch2, _ = await service.start_authentication(user.user_id)
@@ -294,9 +288,7 @@ async def test_sign_counter_regression_is_rejected():
     # Advance counter to 5.
     auth_id, ch, _ = await service.start_authentication(user.user_id)
     sig = await _sign_challenge(priv, ch)
-    assert await service.finish_authentication(
-        auth_id, "cred-9", sig, new_sign_count=5
-    )
+    assert await service.finish_authentication(auth_id, "cred-9", sig, new_sign_count=5)
 
     # Try to authenticate with counter 3 (regression).
     auth_id2, ch2, _ = await service.start_authentication(user.user_id)
@@ -352,11 +344,9 @@ async def test_browser_webauthn_assertion_validates_client_data_rp_and_signature
             "origin": "https://example.com",
         },
         separators=(",", ":"),
-    ).encode("utf-8")
+    )
     authenticator_data = (
-        hashlib.sha256(b"example.com").digest()
-        + b"\x01"
-        + (1).to_bytes(4, "big")
+        hashlib.sha256(b"example.com").digest() + b"\x01" + (1).to_bytes(4, "big")
     )
     signed = authenticator_data + hashlib.sha256(client_data_json).digest()
     signature = priv.sign(signed, ec.ECDSA(hashes.SHA256()))

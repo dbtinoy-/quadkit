@@ -31,6 +31,10 @@ class MemoryStateStore(StateStoreProtocol):
                 entry is evicted first.  ``None`` (default) disables eviction.
         """
         self.max_size = max_size
+        #: Entries dropped to make room for new ones. Expired entries that
+        #: happen to be reaped during a write are not evictions — they were
+        #: going to disappear anyway — so only the LRU drop is counted here.
+        self.eviction_count = 0
         # OrderedDict preserves insertion/access order for LRU tracking.
         self._data: OrderedDict[str, dict[str, Any]] = OrderedDict()
 
@@ -98,6 +102,7 @@ class MemoryStateStore(StateStoreProtocol):
                 self._evict_expired()
                 if len(self._data) >= self.max_size:
                     self._data.popitem(last=False)  # remove least-recently used
+                    self.eviction_count += 1
 
             self._data[key] = {"value": serialized_value, "expires_at": expires_at}
 
@@ -120,6 +125,44 @@ class MemoryStateStore(StateStoreProtocol):
             return False
         return True
 
+    async def expire(self, key: str, ttl: int) -> bool:
+        """Set a new expiration on an existing, non-expired key."""
+        entry = self._data.get(key)
+        if entry is None:
+            return False
+        now = ambient_clock.timestamp()
+        expires_at = entry.get("expires_at")
+        if expires_at is not None and now > expires_at:
+            del self._data[key]
+            return False
+        entry["expires_at"] = now + ttl
+        if self.max_size is not None:
+            self._data.move_to_end(key)
+        return True
+
+    async def ttl(self, key: str) -> int:
+        """Remaining TTL in seconds; -1 with no expiry, -2 when absent."""
+        entry = self._data.get(key)
+        if entry is None:
+            return -2
+        now = ambient_clock.timestamp()
+        expires_at = entry.get("expires_at")
+        if expires_at is None:
+            return -1
+        if now > expires_at:
+            del self._data[key]
+            return -2
+        return max(0, int(expires_at - now))
+
+    async def get_many(self, keys: list[str]) -> dict[str, Any]:
+        """Fetch several keys at once; absent keys are omitted."""
+        return await self.get_bulk(keys)
+
+    async def set_many(self, items: dict[str, Any], ttl: int | None = None) -> None:
+        """Persist several key-value pairs in one call."""
+        for key, value in items.items():
+            await self.set(key, value, ttl)
+
     async def clear(self) -> None:
         """Clear all values from the store."""
         self._data.clear()
@@ -133,6 +176,19 @@ class MemoryStateStore(StateStoreProtocol):
                 result[key] = value
         return result
 
+    def get_stats(self) -> dict[str, Any]:
+        """Return occupancy and eviction counts for administrative reporting.
+
+        Reporting lives here rather than in each backend so a backend without
+        an eviction counter of its own (the memory cache) still reports the
+        evictions its store performed.
+        """
+        return {
+            "entries": len(self._data),
+            "max_size": self.max_size,
+            "evictions": self.eviction_count,
+        }
+
     async def health_check(self, timeout: float = 5.0) -> HealthCheckResult:
         """Check the health of the state store."""
         return HealthCheckResult(
@@ -142,5 +198,6 @@ class MemoryStateStore(StateStoreProtocol):
                 "driver": "memory",
                 "keys_count": len(self._data),
                 "max_size": self.max_size,
+                "evictions": self.eviction_count,
             },
         )

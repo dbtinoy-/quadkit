@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, cast
 
-from starlette.responses import HTMLResponse, JSONResponse
-
 from quadkit.logging import get_logger
+from quadkit.web.transport.responses import HTMLResponse, JSONResponse
 
 if TYPE_CHECKING:
     from quadkit.web.di.provider import WebProvider

@@ -191,6 +191,7 @@ tasks:
     # abort_if: null
     # retry_sync: false
     # idempotent_methods_only: true
+    # retry_after: null  # Callable(Exception) -> delay seconds, or None to fall back to the backoff schedule
   rate_limit:
     enabled: false  # Whether rate limiting is enabled
     # rate: 100  # Number of tasks allowed per time period

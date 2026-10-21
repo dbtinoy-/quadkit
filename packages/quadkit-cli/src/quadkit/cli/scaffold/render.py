@@ -14,6 +14,10 @@ from quadkit.cli.scaffold.app_files import (
     _infrastructure_py,
     _pyproject_toml,
 )
+from quadkit.cli.scaffold.metadata import (
+    ProjectMetadataContext,
+    render_project_metadata,
+)
 from quadkit.cli.scaffold.module_files import (
     _app_py,
     _component_files,
@@ -24,7 +28,7 @@ from quadkit.cli.scaffold.module_files import (
     _modules_init,
     _package_line,
 )
-from quadkit.cli.scaffold.specs import resolve_template
+from quadkit.cli.scaffold.specs import ProjectTemplateSpec, resolve_template
 from quadkit.cli.scaffold.support_files import (
     _env_example,
     _gitignore,
@@ -47,6 +51,80 @@ def _sample_module_files(
         _module_controller(package_name, module)
     )
     return files
+
+
+def _metadata_context(
+    project_name: str,
+    package_name: str,
+    spec: ProjectTemplateSpec,
+    files: dict[str, str],
+) -> ProjectMetadataContext:
+    """Build metadata from the same file map the scaffold will write."""
+    layout: list[tuple[str, str]] = []
+    descriptions = {
+        "README.md": "human-facing project overview and quickstart",
+        "application.yaml": "runtime configuration",
+        "pyproject.toml": "dependencies, build metadata, and developer tools",
+        ".env.example": "environment-variable examples; do not put real secrets here",
+        "tests/": "project tests",
+    }
+    for path, description in descriptions.items():
+        exists = (
+            path in files
+            if not path.endswith("/")
+            else any(item.startswith(path) for item in files)
+        )
+        if exists:
+            layout.append((path, description))
+
+    package_root = f"src/{package_name}"
+    if f"{package_root}/app.py" in files:
+        layout.append((f"{package_root}/app.py", "composition root"))
+    source_roots = sorted(
+        {
+            f"{package_root}/{path.split('/')[2]}/"
+            for path in files
+            if path.startswith(f"{package_root}/") and len(path.split("/")) > 3
+        }
+    )
+    for path in source_roots:
+        description = {
+            "controllers": "HTTP controllers",
+            "infrastructure": "application infrastructure adapters",
+            "modules": "bounded contexts; add modules with `quadkit new module`",
+            "shared": "cross-cutting application code",
+        }.get(
+            path.removeprefix(f"{package_root}/").rstrip("/"),
+            "application package code",
+        )
+        layout.append((path, description))
+
+    commands = [
+        ('pip install -e ".[dev]"', "install the project and its test/lint tools"),
+        ("python -m pytest", "run the project test suite"),
+        ("python -m ruff check .", "lint the project"),
+        (
+            "quadkit gen list",
+            "list available code generators (requires the QuadKit CLI)",
+        ),
+    ]
+    if "web" in spec.features:
+        commands.insert(
+            1,
+            ("quadkit dev", "run the development server (requires the QuadKit CLI)"),
+        )
+
+    return ProjectMetadataContext(
+        project_name=project_name,
+        package_name=package_name,
+        summary=spec.description,
+        template_name=spec.name,
+        features=tuple(sorted(spec.features)),
+        dependencies=tuple(spec.dependencies),
+        layout=tuple(layout),
+        commands=tuple(commands),
+        notes=tuple(spec.notes),
+    )
 
 
 def _file_map(
@@ -81,6 +159,11 @@ def _file_map(
         files[f"src/{package_name}/controllers/api.py"] = _controller_module(
             project_name
         )
+    files.update(
+        render_project_metadata(
+            _metadata_context(project_name, package_name, spec, files)
+        )
+    )
     return files
 
 
@@ -94,8 +177,7 @@ def render_project(
     """Render a canonical Quadkit project into *target_dir*.
 
     Args:
-        template: Template name (``minimal``, ``api``, ``web-api``,
-            ``graphql``, ``worker``, ``full``, ``fullstack``).
+        template: Template name (``api`` is the only template).
         project_name: Project / package name (dashes become underscores).
         target_dir: Destination directory (must be empty unless *force*).
         force: Allow writing into a non-empty directory.

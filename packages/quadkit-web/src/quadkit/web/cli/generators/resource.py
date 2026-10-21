@@ -35,11 +35,31 @@ class ResourceGenerator:
         **kwargs: object,
     ) -> GenerationResult:
         fields_str = str(kwargs.get("fields_str", ""))
+        # `ops` rides along when the caller selected a subset. The controller
+        # generator has accepted it since it learned to render a subset of
+        # CRUD; dropping it here meant a resource could only ever be the full
+        # five handlers, however few the caller asked for.
+        ops = kwargs.get("ops")
+        if ops is not None:
+            if isinstance(ops, str):
+                pass
+            elif isinstance(ops, (list, tuple, set)):
+                if not all(isinstance(operation, str) for operation in ops):
+                    raise TypeError("ops must be a string or a collection of strings")
+            else:
+                raise TypeError("ops must be a string or a collection of strings")
+
+        # Keep the delegated call statically typed. A dynamic ``**{"ops":
+        # object}`` passed the value through at runtime but made mypy lose the
+        # ControllerGenerator's accepted operation types; calling the typed
+        # keyword directly keeps that contract visible and rejects malformed
+        # CLI inputs above.
         return self.controller_generator_class(
             output_dir=self.output_dir / "controllers",
         ).generate(
             name,
             fields_str=fields_str,
+            ops=ops,
             dry_run=dry_run,
             force=force,
         )

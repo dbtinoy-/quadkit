@@ -11,10 +11,11 @@ import hashlib
 import os
 from pathlib import Path
 import tempfile
-from typing import Any
+from typing import Any, cast
 
 import aiofiles
 
+from quadkit import serialization
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.contracts.infra.storage import FileInfo, Uploadable
 from quadkit.contracts.infra.storage import UploadOptions as UploadOptionsContract
@@ -34,6 +35,8 @@ logger = get_logger(__name__)
 class LocalDriver(AbstractDriver):
     """Local file system storage driver"""
 
+    _METADATA_DIR = ".quadkit-metadata"
+
     def __init__(
         self,
         root_dir: str = "./storage",
@@ -46,6 +49,14 @@ class LocalDriver(AbstractDriver):
         """Get the full path for a storage path, with security checks"""
         # Normalize path to prevent directory traversal
         normalized_path = normalize_path(path)
+        if normalized_path == self._METADATA_DIR or normalized_path.startswith(
+            f"{self._METADATA_DIR}/"
+        ):
+            raise StorageError(
+                f"Invalid path: {path!r}",
+                details={"path": path, "root_dir": str(self.root_dir)},
+                hint="The QuadKit metadata namespace is reserved for storage-driver internals.",
+            )
 
         # Check for directory traversal attempts
         if ".." in normalized_path.split("/"):
@@ -72,6 +83,70 @@ class LocalDriver(AbstractDriver):
             ) from None
 
         return full_path
+
+    def _metadata_path(self, full_path: Path) -> Path:
+        """Return the hidden sidecar path for an already-validated file."""
+        relative = full_path.relative_to(self.root_dir)
+        return (
+            self.root_dir
+            / self._METADATA_DIR
+            / relative.parent
+            / f"{relative.name}.json"
+        )
+
+    async def _write_metadata(self, full_path: Path, record: dict[str, Any]) -> None:
+        """Persist content type and caller metadata atomically beside the store."""
+        metadata_path = self._metadata_path(full_path)
+        await asyncio.to_thread(metadata_path.parent.mkdir, parents=True, exist_ok=True)
+        fd, temp_path_str = await asyncio.to_thread(
+            tempfile.mkstemp,
+            dir=str(metadata_path.parent),
+            prefix=".metadata_",
+            suffix=".tmp",
+        )
+        temp_path = Path(temp_path_str)
+        try:
+            await asyncio.to_thread(os.close, fd)
+            async with aiofiles.open(temp_path, "wb") as stream:
+                await stream.write(serialization.dumps(record))
+            await asyncio.to_thread(temp_path.replace, metadata_path)
+        except Exception:
+            if await asyncio.to_thread(temp_path.exists):
+                await asyncio.to_thread(temp_path.unlink)
+            raise
+
+    async def _read_metadata(self, full_path: Path) -> dict[str, Any] | None:
+        """Read a file's sidecar when present; malformed sidecars fail soft."""
+        metadata_path = self._metadata_path(full_path)
+        if not await asyncio.to_thread(metadata_path.is_file):
+            return None
+        try:
+            async with aiofiles.open(metadata_path, "rb") as stream:
+                payload = await stream.read()
+            record = serialization.loads(payload)
+            return record if isinstance(record, dict) else None
+        except Exception:
+            logger.exception("storage.local.metadata_read_failed", path=str(full_path))
+            return None
+
+    async def _delete_metadata(self, full_path: Path) -> None:
+        """Remove a sidecar and its empty parent directories."""
+        metadata_path = self._metadata_path(full_path)
+        if await asyncio.to_thread(metadata_path.exists):
+            await asyncio.to_thread(metadata_path.unlink)
+        metadata_root = self.root_dir / self._METADATA_DIR
+        parent = metadata_path.parent
+        while parent not in {metadata_root, self.root_dir}:
+            try:
+                await asyncio.to_thread(parent.rmdir)
+            except OSError:
+                break
+            parent = parent.parent
+        if parent == metadata_root and await asyncio.to_thread(parent.exists):
+            try:
+                await asyncio.to_thread(parent.rmdir)
+            except OSError:
+                pass
 
     async def upload(
         self,
@@ -113,6 +188,7 @@ class LocalDriver(AbstractDriver):
             suffix=".tmp",
         )
         temp_path = Path(temp_path_str)
+        renamed = False
 
         logger.debug(
             "upload: starting atomic upload path=%s temp=%s",
@@ -184,12 +260,18 @@ class LocalDriver(AbstractDriver):
 
             # Atomic rename (only succeeds if temp file fully written)
             await asyncio.to_thread(temp_path.rename, full_path)
+            renamed = True
             logger.info("upload: atomic upload complete path=%s", path)
 
-            # Get file stats
+            # Persist metadata separately from the content so a later info/list
+            # call (or a new process) returns the same information as upload.
             stat = await asyncio.to_thread(full_path.stat)
             resolved_content_type = (
                 content_type if content_type else get_content_type(str(full_path))
+            )
+            await self._write_metadata(
+                full_path,
+                {"content_type": resolved_content_type, "metadata": opt_metadata},
             )
 
             return FileInfo(
@@ -217,6 +299,15 @@ class LocalDriver(AbstractDriver):
                         "upload: failed to cleanup temp file temp=%s",
                         temp_path_str,
                     )
+            if renamed:
+                try:
+                    if await asyncio.to_thread(full_path.exists):
+                        await asyncio.to_thread(full_path.unlink)
+                    await self._delete_metadata(full_path)
+                except OSError:
+                    logger.exception(
+                        "upload: failed to cleanup incomplete object path=%s", path
+                    )
             # Re-raise StorageError directly, wrap others
             if isinstance(e, StorageError):
                 raise
@@ -238,7 +329,7 @@ class LocalDriver(AbstractDriver):
             )
 
         async with aiofiles.open(full_path, "rb") as f:
-            return await f.read()
+            return cast("bytes", await f.read())
 
     async def stream(
         self, path: str, chunk_size: int = 8192
@@ -272,6 +363,7 @@ class LocalDriver(AbstractDriver):
             )
 
         await asyncio.to_thread(full_path.unlink)
+        await self._delete_metadata(full_path)
 
     async def exists(self, path: str) -> bool:
         """Check if file exists in local file system"""
@@ -290,7 +382,8 @@ class LocalDriver(AbstractDriver):
             )
 
         stat = await asyncio.to_thread(full_path.stat)
-        content_type = get_content_type(str(full_path))
+        stored = await self._read_metadata(full_path) or {}
+        content_type = stored.get("content_type") or get_content_type(str(full_path))
 
         return FileInfo(
             path=path,
@@ -298,6 +391,7 @@ class LocalDriver(AbstractDriver):
             content_type=content_type,
             last_modified=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
             etag=f'"{stat.st_mtime:.0f}"',
+            metadata=stored.get("metadata"),
         )
 
     async def list(self, prefix: str = "") -> AsyncGenerator[FileInfo, None]:
@@ -307,30 +401,36 @@ class LocalDriver(AbstractDriver):
         if await asyncio.to_thread(search_path.is_file):
             # If prefix points to a file, yield just that file
             stat = await asyncio.to_thread(search_path.stat)
-            content_type = get_content_type(str(search_path))
+            stored = await self._read_metadata(search_path) or {}
             yield FileInfo(
                 path=search_path.relative_to(self.root_dir).as_posix(),
                 size=stat.st_size,
-                content_type=content_type,
+                content_type=stored.get("content_type")
+                or get_content_type(str(search_path)),
                 last_modified=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
                 etag=f'"{stat.st_mtime:.0f}"',
+                metadata=stored.get("metadata"),
             )
         else:
-            # If prefix points to a directory, list all files recursively
-            # Wrap rglob and inner checks in loop
+            # Hide the internal metadata sidecars from the public blob listing.
             def _get_files() -> Any:
                 return list(filter(lambda f: f.is_file(), search_path.rglob("*")))
 
             file_paths = await asyncio.to_thread(_get_files)
             for file_path in file_paths:
+                relative = file_path.relative_to(self.root_dir)
+                if relative.parts and relative.parts[0] == self._METADATA_DIR:
+                    continue
                 stat = await asyncio.to_thread(file_path.stat)
-                content_type = get_content_type(str(file_path))
+                stored = await self._read_metadata(file_path) or {}
                 yield FileInfo(
-                    path=file_path.relative_to(self.root_dir).as_posix(),
+                    path=relative.as_posix(),
                     size=stat.st_size,
-                    content_type=content_type,
+                    content_type=stored.get("content_type")
+                    or get_content_type(str(file_path)),
                     last_modified=datetime.fromtimestamp(stat.st_mtime, tz=UTC),
                     etag=f'"{stat.st_mtime:.0f}"',
+                    metadata=stored.get("metadata"),
                 )
 
     async def get_url(self, path: str) -> str:

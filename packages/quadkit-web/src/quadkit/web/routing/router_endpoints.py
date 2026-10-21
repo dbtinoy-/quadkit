@@ -149,7 +149,12 @@ class RouterEndpointMixin(RouterSignatureMixin):
 
                 # 4. Collect Guards, Interceptors, and Filters
                 # Attached via decorators like @use_guards, @use_interceptors, @use_filters
-                guards = getattr(handler, "__guards__", [])
+                # Controller-level guards (``@use_guards`` on the class) run
+                # before handler-level ones, the way interceptors already do.
+                guards = [
+                    *getattr(controller_cls, "__guards__", []),
+                    *getattr(handler, "__guards__", []),
+                ]
                 handler_interceptors = getattr(handler, "__interceptors__", None)
                 if handler_interceptors is None:
                     handler_interceptors = getattr(

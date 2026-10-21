@@ -77,6 +77,28 @@ class SessionManagerImpl:
         """Return developer-friendly string representation."""
         return f"SessionManagerImpl(store={self._store!r})"
 
+    @property
+    def store(self) -> SessionStore:
+        """The storage backend currently in use."""
+        return self._store
+
+    def use_store(self, store: SessionStore) -> None:
+        """Rebind the backing store.
+
+        For host applications whose storage provider registers *after* the
+        auth bundle: the manager is a singleton built during the bundle's
+        boot, so by the time an application can offer a SQL session store
+        the manager already exists and is holding the in-memory default.
+        Without this the application silently keeps the default — sessions
+        that vanish on restart and are invisible to a second worker, which
+        is the one failure mode a session list must not have.
+
+        Call before the manager is used; existing in-memory sessions are
+        not migrated.
+        """
+        self._store = store
+        self._last_activity_write.clear()
+
     async def create_session(
         self,
         user_id: str,

@@ -29,6 +29,7 @@ from quadkit.testing.compliance.event_bus import EventBusCompliance
 from quadkit.testing.compliance.flags import FlagProviderCompliance
 from quadkit.testing.compliance.middleware import MiddlewareCompliance
 from quadkit.testing.compliance.notification import NotificationChannelCompliance
+from quadkit.testing.compliance.pool import ConnectionPoolCompliance
 from quadkit.testing.compliance.queue_backend import QueueBackendCompliance
 from quadkit.testing.compliance.repository import RepositoryCompliance
 from quadkit.testing.compliance.search import SearchEngineCompliance
@@ -77,6 +78,7 @@ __all__ = [
     "AuditStoreCompliance",
     "BlobStoreCompliance",
     "CacheBackendCompliance",
+    "ConnectionPoolCompliance",
     "DatabaseProviderCompliance",
     "DistributedLockCompliance",
     "EventBusCompliance",

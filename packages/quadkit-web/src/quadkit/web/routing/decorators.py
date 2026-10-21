@@ -41,7 +41,24 @@ def route(method: str, path: str, **kwargs: Any) -> Callable[[F], F]:
         # Use setattr to avoid ruff auto-converting to direct attribute access
         # which fails because RoutableProtocol is a Callable and ruff/mypy don't like
         # dynamic attributes on it without setattr.
-        cast("Any", func)._route_config = {"method": method, "path": path, **kwargs}
+        handler = cast("Any", func)
+        config = {"method": method, "path": path, **kwargs}
+
+        # **Decorators accumulate.** Stacking them is how one handler
+        # serves an alias — a legacy path kept alive beside its
+        # replacement, or a prefixed twin. Assigning a single config
+        # meant the outer decorator overwrote the inner one and the
+        # extra path simply did not exist: no error, no warning, a 404
+        # at runtime for a route the source plainly declares.
+        #
+        # Decorators apply bottom-up, so the list is built in reverse
+        # and reversed on read, leaving routes in written order.
+        configs = list(getattr(handler, "_route_configs", ()))
+        configs.insert(0, config)
+        handler._route_configs = configs
+        #: Retained for callers that read one config — notably the docs
+        #: decorators, which merge metadata into the route they annotate.
+        handler._route_config = config
         return func
 
     return decorator

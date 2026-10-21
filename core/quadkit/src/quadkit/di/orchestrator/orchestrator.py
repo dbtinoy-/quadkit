@@ -110,6 +110,24 @@ class ProviderOrchestrator:
         """
         self._registry._compiled_graph = graph
 
+    @property
+    def compiled_graph(self) -> CompiledModuleGraph | None:
+        """The compiled module graph, or ``None`` before compilation.
+
+        The public companion to :meth:`set_compiled_graph`. The graph is what
+        knows which module declares which export, and the code that needs to
+        answer that question lives outside this class: health probes, boot-time
+        assertions, and test guards. Without a reader the only way to ask was
+        the private ``_compiled_graph``, so every such caller reached into the
+        orchestrator's internals — and a rename would have broken them without
+        a test to notice.
+
+        Returns:
+            The graph produced by :class:`ModuleCompiler`, or ``None`` when the
+            application has not been compiled yet.
+        """
+        return self._registry._compiled_graph
+
     def add(self, provider: Provider) -> None:
         """Add a provider to be orchestrated.
 

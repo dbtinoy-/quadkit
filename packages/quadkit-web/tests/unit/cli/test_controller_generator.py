@@ -105,8 +105,8 @@ def test_repository_import_falls_back_without_project_anchor(tmp_path: Path) -> 
 def test_create_and_update_validate_payloads(tmp_path: Path) -> None:
     """Write handlers construct the Create/Update DTOs before hitting the repo."""
     content = _render(tmp_path, "src", "app", "controllers")
-    assert "payload = MessageCreate(**data)" in content
-    assert "payload = MessageUpdate(**data)" in content
+    assert "payload = MessageCreate(**body.unwrap())" in content
+    assert "payload = MessageUpdate(**body.unwrap())" in content
     assert "from pydantic import ValidationError" in content
     # Partial patch semantics: only the supplied fields reach the repository.
     assert 'payload.model_dump(mode="json", exclude_unset=True)' in content
@@ -117,9 +117,67 @@ def test_read_only_controller_omits_validation_imports(tmp_path: Path) -> None:
     content = _render(tmp_path, "src", "app", "controllers", ops="list,get")
     assert "ValidationError" not in content
     assert "MessageCreate" not in content
+    assert "InvalidMessageError" not in content
+    assert "DomainError" not in content
     assert "@post(" not in content
     assert "@put(" not in content
     assert "@delete(" not in content
+
+
+# -- R3b: Result-style handlers ------------------------------------------------
+
+
+def test_handlers_return_result_over_domain_errors(tmp_path: Path) -> None:
+    """Fallible handlers return Result; failures are Err(domain error)."""
+    content = _render(tmp_path, "src", "app", "controllers")
+    assert "from quadkit.contracts.exceptions import DomainError, NotFoundError" in content
+    assert "from quadkit.result import Err, Ok, Result" in content
+    assert "class InvalidMessageError(DomainError):" in content
+    assert "async def get(self, item_id: str) -> Result[dict[str, Any], NotFoundError]:" in content
+    assert "async def delete(self, item_id: str) -> Result[dict[str, str], NotFoundError]:" in content
+    # WS-8: the handler maps the repo's `Result` — serialize-or-bridge,
+    # never probe. The domain error is constructed once, at the data tier.
+    assert "return item.map(json_serialize)" in content
+    assert 'return deleted.map(lambda _done: {"message": "Message deleted"})' in content
+    # No raise-style remnants: the throw path is gone from controllers.
+    assert "raise NotFoundError" not in content
+    assert "raise BadRequestError" not in content
+    assert "quadkit.web.exceptions" not in content
+
+
+def test_controller_contains_zero_outcome_probes(tmp_path: Path) -> None:
+    """WS-8 pin: no handler re-reads a call result (one representation per outcome)."""
+    content = _render(tmp_path, "src", "app", "controllers")
+    assert " if item is None" not in content + " "
+    assert "if updated is None" not in content
+    assert "if not deleted:" not in content
+    # And no handler constructs a domain not-found — that is the repo's job.
+    assert content.count("NotFoundError(f") == 0
+
+
+def test_read_body_returns_result(tmp_path: Path) -> None:
+    """The body helper parses, or carries the 400 problem as Err."""
+    content = _render(tmp_path, "src", "app", "controllers")
+    assert "async def _read_body(request: Request) -> Result[dict[str, Any], InvalidMessageError]:" in content
+    assert 'return Err(InvalidMessageError("Invalid JSON body"))' in content
+    assert "body = await _read_body(request)" in content
+    assert "if body.is_err():" in content
+    assert "            return body" in content
+
+
+def test_list_only_controller_is_result_shaped_like_every_verb(tmp_path: Path) -> None:
+    """2026-10-21 (owner): even `list` envelopes in ``Ok(...)``.
+
+    The one raw-dict verb was the outlier every consumer notices first; one
+    controller now has one return shape, and the imports to say so.
+    """
+    content = _render(tmp_path, "src", "controllers", ops="list")
+    assert "from quadkit.result import Err, Ok, Result" in content
+    assert "from quadkit.contracts.exceptions import NotFoundError" in content
+    assert ") -> Result[dict[str, Any], NotFoundError]:" in content
+    assert "return Ok({" in content
+    assert '"items": [json_serialize(item) for item in items],' in content
+    assert '"limit": limit,' in content
 
 
 # -- QK-6: ops selection -------------------------------------------------

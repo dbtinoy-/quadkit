@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-events"
-version = "0.0.44"
+version = "0.0.45"
 description = "Event Sourcing and CQRS engine for Quadkit Framework - Domain events, aggregates, and projections"
 readme = "README.md"
 requires-python = ">=3.11"

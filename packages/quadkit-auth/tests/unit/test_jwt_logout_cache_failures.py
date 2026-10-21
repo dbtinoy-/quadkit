@@ -41,12 +41,17 @@ async def test_logout_returns_false_when_cache_set_raises():
 
 
 @pytest.mark.asyncio
-async def test_logout_all_user_tokens_raises_runtime_error_when_cache_missing():
+async def test_logout_all_user_tokens_uses_in_memory_fallback_when_cache_missing():
     manager = JWTTokenManager(
         current_key_id="default", keys={"default": SecretStr("secret_key_at_least_32_bytes_long_for_tests")}, cache_service=None,
     )
-    with pytest.raises(RuntimeError, match="no cache backend configured"):
-        await manager.logout_all_user_tokens("u3")
+    user = User(user_id="u3", name="u3", email="u3@example.com")
+    token = manager.create_access_token(user)
+
+    result = await manager.logout_all_user_tokens("u3")
+
+    assert result.is_ok()
+    assert (await manager.verify_token(token)).is_err()
 
 
 @pytest.mark.asyncio

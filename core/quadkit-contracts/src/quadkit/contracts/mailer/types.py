@@ -32,6 +32,23 @@ def _reject_crlf(value: str | None, field: str) -> None:
 
 
 @dataclass(frozen=True)
+class Attachment:
+    """An email attachment.
+
+    Attributes:
+        filename: Suggested filename shown to the recipient.
+        content: Raw bytes of the attachment.
+        content_type: MIME type; defaults to ``application/octet-stream``.
+        content_id: Optional CID for inline embedding (e.g. ``cid:logo``).
+    """
+
+    filename: str
+    content: bytes
+    content_type: str = "application/octet-stream"
+    content_id: str | None = None
+
+
+@dataclass(frozen=True)
 class EmailMessage:
     """A cross-channel email message value object.
 
@@ -51,6 +68,9 @@ class EmailMessage:
         cc: Carbon-copy recipients.
         bcc: Blind carbon-copy recipients.
         headers: Additional MIME headers.
+        attachments: Files to deliver with the message. An attachment
+            with a ``content_id`` is embedded inline (``cid:``) rather
+            than listed as a download.
     """
 
     to: list[str]
@@ -63,6 +83,7 @@ class EmailMessage:
     cc: list[str] = field(default_factory=list)
     bcc: list[str] = field(default_factory=list)
     headers: dict[str, str] = field(default_factory=dict)
+    attachments: list[Attachment] = field(default_factory=list)
 
     def __post_init__(self) -> None:
         """Reject CR/LF in header-bound fields to prevent SMTP header injection.
@@ -93,6 +114,14 @@ class EmailMessage:
                     f"EmailMessage.headers contains invalid header name: {name!r}"
                 )
             _reject_crlf(value, f"EmailMessage.headers[{name!r}]")
+        for attachment in self.attachments:
+            # The filename is serialised into a Content-Disposition
+            # header, so it is header-bound like the subject is.
+            _reject_crlf(attachment.filename, "EmailMessage.attachments[].filename")
+            _reject_crlf(
+                attachment.content_type, "EmailMessage.attachments[].content_type"
+            )
+            _reject_crlf(attachment.content_id, "EmailMessage.attachments[].content_id")
 
 
 @dataclass(frozen=True)
@@ -164,23 +193,6 @@ class MessageAddress:
         if self.name:
             return f"{self.name} <{self.email}>"
         return self.email
-
-
-@dataclass(frozen=True)
-class Attachment:
-    """An email attachment.
-
-    Attributes:
-        filename: Suggested filename shown to the recipient.
-        content: Raw bytes of the attachment.
-        content_type: MIME type; defaults to ``application/octet-stream``.
-        content_id: Optional CID for inline embedding (e.g. ``cid:logo``).
-    """
-
-    filename: str
-    content: bytes
-    content_type: str = "application/octet-stream"
-    content_id: str | None = None
 
 
 __all__ = [

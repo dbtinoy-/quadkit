@@ -42,6 +42,12 @@ class BusSubProvider:
             if bus and hasattr(bus, "start"):
                 await bus.start()
 
+    async def teardown(self) -> None:
+        """Stop buses that expose a close() method (the event bus drains first)."""
+        for bus in (self.event_bus, self.command_bus, self.query_bus):
+            if bus and hasattr(bus, "close"):
+                await bus.close()
+
     def set_tracer(self, tracer: object | None) -> None:
         """Wire tracer into the event bus if supported.
 

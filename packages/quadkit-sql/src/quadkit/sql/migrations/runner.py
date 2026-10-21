@@ -10,32 +10,53 @@ from quadkit.contracts.data.sql.migrations import (
     MigrationRunnerProtocol,  # noqa: TC002
 )
 from quadkit.logging import get_logger
-from quadkit.sql.migrations.manager import SimpleMigrationManager
+from quadkit.sql.migrations.manager import AlembicManager, SimpleMigrationManager
 
 logger = get_logger(__name__)
 
 
 class MigrationRunnerAdapter:
-    """Wraps SimpleMigrationManager to satisfy MigrationRunnerProtocol.
+    """Wraps a migration manager to satisfy MigrationRunnerProtocol.
 
     Registered in DatabaseService so that any consumer can resolve
     ``MigrationRunnerProtocol`` from the container without importing
     quadkit-sql internals directly.
 
+    Two manager flavours are supported: :class:`SimpleMigrationManager`
+    (``.sql`` files in a directory) and :class:`AlembicManager` (Alembic
+    revisions). ``get_pending_migrations`` detects the Alembic flavour by the
+    manager's own ``introspector`` and asks it for its pending set, instead of
+    passing a caller-discovered file list Alembic does not use.
+
     Args:
-        manager: The underlying SimpleMigrationManager to delegate to.
+        manager: The underlying migration manager to delegate to.
     """
 
     # Declare protocol compliance without inheriting (structural subtyping).
     __protocol_cls__: type = MigrationRunnerProtocol  # informational only
 
-    def __init__(self, manager: SimpleMigrationManager) -> None:
+    def __init__(self, manager: SimpleMigrationManager | AlembicManager) -> None:
         self._manager = manager
 
     async def run_migrations(self) -> list[str]:
-        """Apply all pending migrations and return list of applied version IDs."""
+        """Apply all pending migrations and return list of applied version IDs.
+
+        Only the file-based manager applies pending migrations in bulk. The
+        Alembic-backed manager exposes ``upgrade()`` instead and has no
+        ``apply_pending_migrations``, so it is refused here rather than failing
+        with a bare ``AttributeError`` deeper in.
+        """
         await self._manager.initialize_migration_table()
-        return await self._manager.apply_pending_migrations()
+        apply_pending = getattr(self._manager, "apply_pending_migrations", None)
+        if apply_pending is None:
+            msg = (
+                "run_migrations() needs a manager that applies pending "
+                "migrations in bulk; the Alembic-backed manager exposes "
+                "upgrade() instead"
+            )
+            raise NotImplementedError(msg)
+        applied: list[str] = await apply_pending()
+        return applied
 
     async def rollback(self, target: str | None = None) -> list[str]:
         """Roll back to *target*, or roll back the most recent migration if None.
@@ -81,9 +102,11 @@ class MigrationRunnerAdapter:
         """
         introspector = getattr(self._manager, "introspector", None)
         if introspector is not None:
-            status = await getattr(self._manager, "get_status")()
+            # Both supported managers (Alembic- and Simple-backed) expose
+            # ``get_status`` once they carry an introspector.
+            status = await self._manager.get_status()  # type: ignore[union-attr]
             return [m.revision for m in status.pending_migrations]
-        migrations_dir = self._manager.migrations_dir
+        migrations_dir = self._manager.migrations_dir  # type: ignore[union-attr]
         if not migrations_dir.exists():
             return []
 

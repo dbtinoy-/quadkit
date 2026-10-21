@@ -271,6 +271,41 @@ def test_system_clock_and_fake_clock() -> None:
     assert default.now().tzinfo == UTC
 
 
+def test_fake_and_system_clocks_conform_to_clock_protocol() -> None:
+    """Both clocks satisfy the contracts protocol the ambient seam is typed on.
+
+    ``quadkit.contracts.core.clock.ClockProtocol`` requires four members —
+    ``now``, ``monotonic``, ``timestamp`` and ``time``. ``timestamp()`` used to
+    be missing here, so ``quadkit.primitives.clock.use(FakeClock(...))`` was
+    accepted and then failed with ``AttributeError`` the first time anything read
+    ``clock.timestamp()``.
+    """
+    from quadkit.contracts.core.clock import ClockProtocol
+    from quadkit.testing.clock import FixedClock
+    from quadkit.testing.fakes.clock import FakeClock, SystemClock
+
+    clocks = (
+        SystemClock(),
+        FakeClock(datetime(2026, 1, 1, tzinfo=UTC)),
+        FixedClock(),
+    )
+    for clock in clocks:
+        assert isinstance(clock, ClockProtocol), type(clock).__name__
+        for member in ("now", "monotonic", "timestamp", "time"):
+            assert hasattr(clock, member), f"{type(clock).__name__}.{member}"
+
+
+def test_fake_clock_can_back_the_ambient_clock_seam() -> None:
+    """Installing a FakeClock through the ambient seam reaches every primitive."""
+    from quadkit.primitives import clock as ambient
+    from quadkit.testing.fakes.clock import FakeClock
+
+    with ambient.use(FakeClock(datetime(2026, 3, 4, 5, 6, 7, tzinfo=UTC))):
+        assert ambient.now() == datetime(2026, 3, 4, 5, 6, 7, tzinfo=UTC)
+        assert ambient.timestamp() == ambient.now().timestamp()
+        assert isinstance(ambient.monotonic(), float)
+
+
 # ---------------------------------------------------------------------------
 # FakeConfig
 # ---------------------------------------------------------------------------

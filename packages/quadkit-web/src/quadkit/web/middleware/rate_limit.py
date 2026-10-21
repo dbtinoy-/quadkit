@@ -15,7 +15,6 @@ import inspect
 from typing import TYPE_CHECKING, Any, Literal
 
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from quadkit.contracts.exceptions import RateLimitError
@@ -30,6 +29,7 @@ from quadkit.web.middleware.rate_limit_strategies import (
 from quadkit.web.middleware.rate_limit_strategies import (
     RateLimiter as RateLimiter,
 )
+from quadkit.web.transport.responses import JSONResponse
 
 if TYPE_CHECKING:
     from quadkit.web.config.rate_limit import RateLimitConfig

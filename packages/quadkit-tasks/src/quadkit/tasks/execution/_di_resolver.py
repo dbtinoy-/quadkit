@@ -64,7 +64,7 @@ async def resolve_handler_dependencies(
 
     try:
         sig = inspect.signature(handler)
-        _log.info("Handler %s signature: %s", original_handler.__name__, sig)
+        _log.debug("Handler %s signature: %s", original_handler.__name__, sig)
     except (ValueError, TypeError) as e:
         _log.error("Failed to get signature for handler %s: %s", handler.__name__, e)
         return list(provided_args), provided_kwargs
@@ -80,7 +80,7 @@ async def resolve_handler_dependencies(
     resolved_args: list[Any] = list(provided_args)
     resolved_kwargs: dict[str, Any] = dict(provided_kwargs)
 
-    _log.info(
+    _log.debug(
         "Handler %s has %d parameters, provided args: %d, provided kwargs: %s",
         original_handler.__name__,
         len(sig.parameters),
@@ -115,16 +115,37 @@ async def resolve_handler_dependencies(
                     _log.debug("Could not find type hint for %s", param_name)
                     continue
             except Exception as e:
-                _log.debug(
-                    "Could not resolve forward reference %s for %s: %s",
-                    annotation,
+                # Not a debug line: the handler will be called without this
+                # argument and dead-letter with "missing N required positional
+                # arguments" on every tick. The usual cause is the type being
+                # imported under ``TYPE_CHECKING`` together with
+                # ``from __future__ import annotations``.
+                _log.warning(
+                    "task_dependency_annotation_unresolvable handler=%s param=%s "
+                    "annotation=%r error=%s — import the type at runtime "
+                    "(not under TYPE_CHECKING) so the container can inject it",
+                    original_handler.__name__,
                     param_name,
+                    annotation,
                     e,
                 )
                 continue
 
+        # A parameter with a default whose annotation is not a class — an
+        # ``Optional[str]`` job argument, a ``list[int] | None`` — is the
+        # job's to pass, not the container's to resolve. Asking the container
+        # for ``str | None`` could never succeed and logged a line per job.
+        if param.default is not inspect.Parameter.empty and not inspect.isclass(
+            annotation
+        ):
+            _log.debug(
+                "Skipping param %s - job argument with a default, not a service",
+                param_name,
+            )
+            continue
+
         # Try to resolve the type annotation
-        _log.info(
+        _log.debug(
             "Attempting to resolve dependency for handler %s: %s (type: %s)",
             original_handler.__name__,
             param_name,
@@ -142,12 +163,24 @@ async def resolve_handler_dependencies(
                     type(resolved).__name__,
                 )
         except Exception as e:
-            _log.info(
-                "Could not resolve dependency %s (type: %s) for handler %s: %s",
-                param_name,
-                annotation,
-                original_handler.__name__,
-                e,
-            )
+            # A required service the container cannot provide will dead-letter
+            # the job; an optional one is a quiet default. Log accordingly
+            # instead of one ``info`` line per parameter per execution.
+            if param.default is inspect.Parameter.empty:
+                _log.warning(
+                    "task_dependency_unresolved handler=%s param=%s annotation=%r error=%s",
+                    original_handler.__name__,
+                    param_name,
+                    annotation,
+                    e,
+                )
+            else:
+                _log.debug(
+                    "Could not resolve optional dependency %s (type: %s) for handler %s: %s",
+                    param_name,
+                    annotation,
+                    original_handler.__name__,
+                    e,
+                )
 
     return resolved_args, resolved_kwargs

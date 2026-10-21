@@ -8,6 +8,40 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class DeliveryMessage:
+    """A channel-neutral message persisted by the notification outbox.
+
+    ``metadata`` carries channel-specific fields (for example, HTML mail
+    content) without coupling the delivery store to a transport package.
+
+    Attributes:
+        channel: Registered delivery channel, such as ``email`` or ``slack``.
+        recipient: Channel-specific destination (email address or webhook URL).
+        subject: Optional subject; channels that do not use one may ignore it.
+        body: Message body.
+        metadata: JSON-compatible channel-specific payload.
+    """
+
+    channel: str
+    recipient: str
+    subject: str = ""
+    body: str = ""
+    metadata: dict[str, Any] = field(default_factory=dict)
+
+    def __post_init__(self) -> None:
+        """Normalize routing fields and isolate the caller's metadata mapping."""
+        channel = self.channel.strip().lower()
+        recipient = self.recipient.strip()
+        if not channel:
+            raise ValueError("DeliveryMessage.channel must not be empty")
+        if not recipient:
+            raise ValueError("DeliveryMessage.recipient must not be empty")
+        object.__setattr__(self, "channel", channel)
+        object.__setattr__(self, "recipient", recipient)
+        object.__setattr__(self, "metadata", dict(self.metadata))
+
+
+@dataclass(frozen=True)
 class SMSMessage:
     """An SMS notification message.
 
@@ -49,4 +83,4 @@ class PushMessage:
     ttl: int | None = None
 
 
-__all__ = ["PushMessage", "SMSMessage"]
+__all__ = ["DeliveryMessage", "PushMessage", "SMSMessage"]

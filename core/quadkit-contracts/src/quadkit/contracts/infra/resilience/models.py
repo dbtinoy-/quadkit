@@ -36,6 +36,12 @@ class RetryConfig:
     # Retry only requests whose HTTP method is idempotent (GET/HEAD/OPTIONS).
     # Defaults to True (safe by default).
     idempotent_methods_only: bool = True
+    # A delay the *server* asked for, read off the exception — an HTTP 429
+    # ``Retry-After``, a partner API's ``retry_after`` field. When it returns
+    # a number the wait is at least that long; the backoff still applies on
+    # top (``max(backoff, advised)``), so an advised 0 does not turn a retry
+    # storm back on. ``None`` means the error carried no advice.
+    retry_after: Callable[[Exception], float | None] | None = None
 
 
 @dataclass(frozen=True)
@@ -46,6 +52,9 @@ class CircuitBreakerConfig:
         failure_threshold: Number of failures before opening the circuit.
         recovery_timeout: Seconds in open state before attempting half-open.
         expected_exception: Exception types that count as failures.
+        failure_if: Predicate narrowing ``expected_exception`` to the
+            instances that mean an outage; the rest are decisions and leave
+            the circuit's health alone.
         success_threshold: Consecutive successes required to close from half-open.
         timeout: Per-call timeout in seconds.
         name: Human-readable identifier for this breaker instance.
@@ -61,6 +70,13 @@ class CircuitBreakerConfig:
     failure_threshold: int = 5
     recovery_timeout: float = 60.0
     expected_exception: tuple[type[Exception], ...] = field(default=(Exception,))
+    # Among the ``expected_exception`` types, which instances mean the
+    # dependency is *failing* — as opposed to answering "no" to this
+    # particular call. An HTTP 503 trips a breaker; a 422 does not, however
+    # many of them arrive. An exception the predicate rejects is re-raised
+    # and counted as neither success nor failure. ``None`` keeps every
+    # expected exception a failure.
+    failure_if: Callable[[Exception], bool] | None = None
     success_threshold: int = 3
     timeout: float = 30.0
     name: str = ""

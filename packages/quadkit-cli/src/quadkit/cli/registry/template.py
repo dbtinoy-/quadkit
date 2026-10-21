@@ -9,7 +9,7 @@ import abc
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, ClassVar
 
-from quadkit.cli.package_names import packages_for, provider_available
+from quadkit.cli.package_names import packages_for
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -43,76 +43,12 @@ class ProjectTemplate(abc.ABC):
         return self.packages.copy()
 
 
-class MinimalTemplate(ProjectTemplate):
-    """Minimal template with just the core framework."""
+class ApiTemplate(ProjectTemplate):
+    """The single project template: REST API with the web framework."""
 
-    name = "minimal"
-    description = "Bare minimum Quadkit application"
-    packages = [
-        "quadkit",
-    ]
-
-    def get_config(self) -> TemplateConfig:
-        return TemplateConfig(
-            name=self.name,
-            description=self.description,
-            packages=self.packages,
-        )
-
-
-class WebAPITemplate(ProjectTemplate):
-    """REST API template."""
-
-    name = "web-api"
-    description = "REST API with web framework"
-    packages = packages_for("web", "sql")
-
-    def get_config(self) -> TemplateConfig:
-        return TemplateConfig(
-            name=self.name,
-            description=self.description,
-            packages=self.packages,
-        )
-
-
-class GraphQLTemplate(ProjectTemplate):
-    """GraphQL API template."""
-
-    name = "graphql"
-    description = "GraphQL API with web framework"
-    packages = packages_for("web", "sql", "graphql")
-
-    def get_config(self) -> TemplateConfig:
-        return TemplateConfig(
-            name=self.name,
-            description=self.description,
-            packages=self.packages,
-        )
-
-
-class WorkerTemplate(ProjectTemplate):
-    """Background worker template."""
-
-    name = "worker"
-    description = "Background job processor"
-    packages = packages_for("sql", "tasks", "queue")
-
-    def get_config(self) -> TemplateConfig:
-        return TemplateConfig(
-            name=self.name,
-            description=self.description,
-            packages=self.packages,
-        )
-
-
-class FullStackTemplate(ProjectTemplate):
-    """Full-stack application template."""
-
-    name = "fullstack"
-    description = "Full application: auth, cache, storage, events, tasks, HTTP, monitoring"
-    packages = packages_for(
-        "web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor"
-    )
+    name = "api"
+    description = "REST API with the web framework"
+    packages = packages_for("web")
 
     def get_config(self) -> TemplateConfig:
         return TemplateConfig(
@@ -151,17 +87,8 @@ class TemplateRegistry:
 
     @classmethod
     def _default_entries(cls) -> tuple[type[ProjectTemplate], ...]:
-        """Return templates supported by installed optional providers."""
-        entries: list[type[ProjectTemplate]] = [MinimalTemplate, WebAPITemplate]
-        optional = (
-            (GraphQLTemplate, ("sql", "graphql")),
-            (WorkerTemplate, ("sql", "tasks", "queue")),
-            (FullStackTemplate, ("web", "sql", "auth", "cache", "storage", "events", "tasks", "http", "monitor")),
-        )
-        for entry, features in optional:
-            if all(provider_available(feature) for feature in features):
-                entries.append(entry)
-        return tuple(entries)
+        """Return the built-in templates (a single one today)."""
+        return (ApiTemplate,)
 
     @classmethod
     def with_defaults(cls) -> TemplateRegistry:
@@ -214,13 +141,9 @@ class ProjectBuilder:
 
 
 __all__ = [
-    "FullStackTemplate",
-    "GraphQLTemplate",
-    "MinimalTemplate",
+    "ApiTemplate",
     "ProjectBuilder",
     "ProjectTemplate",
     "TemplateConfig",
     "TemplateRegistry",
-    "WebAPITemplate",
-    "WorkerTemplate",
 ]

@@ -6,10 +6,23 @@ per-logger level filtering, and deterministic log sampling.
 
 from __future__ import annotations
 
+from collections.abc import Callable, MutableMapping
 from dataclasses import dataclass, field
 import hashlib
 import threading
 from typing import Any
+
+#: A structlog processor that takes and returns a mapping.
+#:
+#: ``structlog.typing.Processor`` is deliberately not used: its return union
+#: also admits ``str``/``bytes``/``tuple``, none of which support the ``.items()``
+#: this module performs on the result. The parameter and return are
+#: ``MutableMapping`` rather than ``dict`` because that is what structlog's own
+#: processors declare -- ``dict`` is invariant, so narrowing here would reject
+#: every real processor, ``CallsiteParameterAdder`` included.
+_MappingProcessor = Callable[
+    [Any, str, MutableMapping[str, Any]], MutableMapping[str, Any]
+]
 
 import structlog
 
@@ -18,6 +31,13 @@ from quadkit.logging.redaction import get_redactor
 
 logger = get_logger(__name__)
 _otel_warned = [False]
+
+#: Sentinel for "the opentelemetry import has not been attempted yet". Kept
+#: distinct from ``None`` (import attempted, not available) so the negative
+#: result is remembered instead of re-searched on every log event.
+_OTEL_UNRESOLVED = object()
+_otel_state: list[Any] = [_OTEL_UNRESOLVED]
+
 from quadkit.logging.types import _LOGLEVEL_TO_INT, LogLevel
 
 # ---------------------------------------------------------------------------
@@ -78,24 +98,37 @@ def _redact_processor(
     return get_redactor().redact_dict(event_dict)
 
 
+def _resolve_otel_trace() -> Any | None:
+    """Return ``opentelemetry.trace`` once, or ``None`` when it is absent.
+
+    Resolution happens once per process and the answer — including "not
+    installed" — is remembered. A failed import is *not* cached by the import
+    system: every retry re-searches ``sys.path`` on disk, which measured as
+    roughly a third of the per-request cost of the health endpoint because
+    this processor runs for every log event. Losing the trace context is a
+    degraded mode, not a reason to stat the filesystem on each log line.
+    """
+    if _otel_state[0] is _OTEL_UNRESOLVED:
+        try:
+            # Dotted import: opentelemetry is a PEP-420 namespace package, so
+            # ``from opentelemetry import trace`` does not type-check against
+            # its stubs; PLR0402 prefers the from-form.
+            import opentelemetry.trace as trace  # noqa: PLR0402
+
+            _otel_state[0] = trace
+        except ImportError:
+            _otel_state[0] = None
+    return _otel_state[0]
+
+
 def _otel_processor(
     logger: Any,
     method_name: str,
     event_dict: dict[str, Any],
 ) -> dict[str, Any]:
     """Inject OpenTelemetry trace and span IDs into the event dict."""
-    try:
-        # Dotted import: opentelemetry is a PEP-420 namespace package, so
-        # ``from opentelemetry import trace`` does not type-check against its
-        # stubs; PLR0402 prefers the from-form.
-        import opentelemetry.trace as trace  # noqa: PLR0402
-
-        span = trace.get_current_span()
-        if span and span.get_span_context().is_valid:
-            ctx = span.get_span_context()
-            event_dict["trace_id"] = format(ctx.trace_id, "032x")
-            event_dict["span_id"] = format(ctx.span_id, "016x")
-    except ImportError:
+    trace = _resolve_otel_trace()
+    if trace is None:
         if not _otel_warned[0]:
             _otel_warned[0] = True
             # No kwargs here: this warning can be the first log call of the
@@ -105,6 +138,13 @@ def _otel_processor(
                 "opentelemetry_not_installed; install opentelemetry-api for "
                 "trace_id/span_id injection into log events"
             )
+        return event_dict
+
+    span = trace.get_current_span()
+    if span and span.get_span_context().is_valid:
+        ctx = span.get_span_context()
+        event_dict["trace_id"] = format(ctx.trace_id, "032x")
+        event_dict["span_id"] = format(ctx.span_id, "016x")
     return event_dict
 
 
@@ -135,7 +175,7 @@ class _NamespacedCallsiteAdder:
     #: Keys structlog's adder may consult on the stdlib-bridge path.
     _PASSTHROUGH = ("_record", "_from_structlog")
 
-    def __init__(self, inner: Any) -> None:
+    def __init__(self, inner: _MappingProcessor) -> None:
         self._inner = inner
 
     def __call__(

@@ -123,7 +123,21 @@ class PasswordResetService:
         return Ok(None)
 
     async def _find_user_by_token(self, token: str) -> Any | None:
-        """Find user by reset token."""
+        """Find user by reset token.
+
+        A store may answer the lookup itself through an optional
+        ``get_user_by_reset_token`` method. Two reasons to prefer it when
+        it exists: the fallback below scans at most 1000 users, so on a
+        larger deployment a valid token simply stops working; and a store
+        that keeps only a digest of the token — which is what a bearer
+        credential at rest should be — cannot be matched by the plaintext
+        comparison here. The store is then responsible for the expiry
+        check and for a constant-time comparison.
+        """
+        store_lookup = getattr(self._store, "get_user_by_reset_token", None)
+        if callable(store_lookup):
+            return await store_lookup(token)
+
         users = await self._store.list_users(skip=0, limit=1000)
 
         for user in users:

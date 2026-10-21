@@ -29,8 +29,9 @@ class TokenExtractor:
 
         Tries multiple sources in order:
         1. Authorization header
-        2. Query parameter
-        3. Cookie
+        2. ``X-Qk-Erp-Token`` (proxies that strip Authorization leave this)
+        3. Query parameter
+        4. Cookie
 
         Args:
             request: HTTP request object
@@ -38,54 +39,48 @@ class TokenExtractor:
         Returns:
             Extracted token or None
         """
-        # Try header first
-        auth_header = request.headers.get(self.config.header_name)
-        if isinstance(auth_header, str):
-            # Log header presence (do not log full token for security)
-            try:
-                short_hdr = (
-                    auth_header.split()[1][:10]
-                    if len(auth_header.split()) > 1
-                    else None
-                )
-            except (IndexError, TypeError):
-                short_hdr = None
-            logger.info(
-                "TokenExtractor.extract_token: header present short=%s",
-                short_hdr,
+        for header_name in (self.config.header_name, "X-Qk-Erp-Token"):
+            auth_header = request.headers.get(header_name)
+            if not isinstance(auth_header, str) or not auth_header.strip():
+                continue
+            # Presence only, at debug: this runs on every request, and no part
+            # of a credential — not even a prefix — belongs in a log line.
+            logger.debug(
+                "TokenExtractor.extract_token: header present name=%s", header_name
             )
-            if auth_header.startswith(f"{self.config.scheme} "):
-                return auth_header[len(f"{self.config.scheme} ") :]
-            if auth_header.startswith("ApiKey "):
-                return auth_header[7:]
-            if (
-                self.config.scheme.lower() == const.DEFAULT_TOKEN_TYPE.lower()
-                and not auth_header.startswith(
-                    f"{const.DEFAULT_TOKEN_TYPE} ",
-                )
-            ):
-                # Allow bare tokens for Bearer scheme
-                return auth_header
+            parsed = self._token_from_header(auth_header)
+            if parsed:
+                return parsed
 
         # Try query parameter
         token = request.query_params.get("token")
         if isinstance(token, str):
-            logger.info(
-                "TokenExtractor.extract_token: token found in query (len=%d)",
-                len(token),
-            )
+            logger.debug("TokenExtractor.extract_token: token found in query")
             return token
 
         # Try cookie
         token = request.cookies.get("access_token")
         if isinstance(token, str):
-            logger.info(
-                "TokenExtractor.extract_token: token found in cookie (len=%d)",
-                len(token),
-            )
+            logger.debug("TokenExtractor.extract_token: token found in cookie")
             return token
 
         logger.debug("TokenExtractor.extract_token: no token found")
+        return None
+
+    def _token_from_header(self, auth_header: str) -> str | None:
+        """Parse a Bearer, ApiKey, or bare token out of one header value."""
+        if auth_header.startswith(f"{self.config.scheme} "):
+            return auth_header[len(f"{self.config.scheme} ") :]
+        if auth_header.startswith("ApiKey "):
+            return auth_header[7:]
+        if (
+            self.config.scheme.lower() == const.DEFAULT_TOKEN_TYPE.lower()
+            and not auth_header.startswith(
+                f"{const.DEFAULT_TOKEN_TYPE} ",
+            )
+        ):
+            # Allow bare tokens for Bearer scheme
+            return auth_header
         return None
 
 

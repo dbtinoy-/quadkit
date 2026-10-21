@@ -60,19 +60,39 @@ class SchemaIntrospector:
         )
 
         pending_migrations: list[str] = []
-        if current_revision and head_rev and current_revision != head_rev:
+        if head_rev and not current_revision:
+            # No ``alembic_version`` row: the database has never been stamped,
+            # so *every* revision on disk is pending. Reporting an empty set
+            # here (the previous behaviour) made a completely unmigrated
+            # database look fully migrated — the migration-status widget and
+            # any deploy gate reading this status both said "0 pending".
+            def _all_pending() -> list[str]:
+                try:
+                    # ``walk_revisions`` yields head → base; report base → head.
+                    return [rev.revision for rev in reversed(list(script.walk_revisions()))]
+                except (AttributeError, TypeError, ValueError, KeyError):
+                    return []
+
+            pending_migrations = await loop.run_in_executor(None, _all_pending)
+        elif current_revision and head_rev and current_revision != head_rev:
 
             def _pending() -> list[str]:
                 try:
+                    # ``iterate_revisions(upper, lower)``: alembic's arguments
+                    # are head-first. Passing the current revision as *upper*
+                    # raised ``RangeNotAncestorError`` — an error this handler
+                    # did not catch — so asking for the status of a partially
+                    # migrated database blew up instead of listing what was
+                    # left to apply.
                     revisions = list(
-                        script.iterate_revisions(current_revision, head_rev),
+                        script.iterate_revisions(head_rev, current_revision),
                     )
                     return [
                         rev.revision
                         for rev in revisions
                         if rev.revision != current_revision
                     ]
-                except (AttributeError, TypeError, ValueError, KeyError):
+                except Exception:  # noqa: BLE001 — status reporting never raises
                     return []
 
             pending_migrations = await loop.run_in_executor(None, _pending)

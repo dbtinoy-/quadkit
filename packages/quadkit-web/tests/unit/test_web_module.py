@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from quadkit.contracts.web import WebRateLimiterProtocol
 from quadkit.di.module import DynamicModule
 from quadkit.web import WebModule
 
@@ -57,3 +58,25 @@ class TestWebModule:
 
     def test_legacy_auto_discover_factory_is_removed(self) -> None:
         assert not hasattr(WebModule, "auto_discover")
+
+class TestRateLimiterExportOwnership:
+    """A module exports what its own providers register.
+
+    `WebModule` declared `WebRateLimiterProtocol` while `RateLimitProvider` —
+    `RateLimitModule`'s provider — was what bound it. The export was therefore
+    unresolvable in an application that used `WebModule` alone (its documented
+    usage), and invisible to consumers in one that
+    also added `RateLimitModule`, whose descriptor exported nothing at all.
+    """
+
+    def test_web_module_does_not_export_a_limiter_it_never_binds(self) -> None:
+        assert WebRateLimiterProtocol not in WebModule.configure().exports
+        assert WebRateLimiterProtocol not in WebModule.stub().exports
+
+    def test_rate_limit_module_exports_the_limiter_it_binds(self) -> None:
+        from quadkit.web.integrations.throttle import RateLimitModule
+
+        descriptor = RateLimitModule.configure(backend="memory")
+
+        assert WebRateLimiterProtocol in descriptor.exports
+        assert descriptor.is_global is True

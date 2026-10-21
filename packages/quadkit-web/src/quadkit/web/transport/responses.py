@@ -13,6 +13,9 @@ from starlette.responses import (
     HTMLResponse as StarletteHTMLResponse,
 )
 from starlette.responses import (
+    JSONResponse as StarletteJSONResponse,
+)
+from starlette.responses import (
     RedirectResponse as StarletteRedirectResponse,
 )
 from starlette.responses import (
@@ -66,7 +69,7 @@ class FastJSONResponse(Response):
         return raw
 
 
-class JSONResponse(FastJSONResponse):
+class JSONResponse(FastJSONResponse, StarletteJSONResponse):
     """JSON response with high performance.
 
     Uses quadkit common JSON utilities for consistent serialization
@@ -75,7 +78,7 @@ class JSONResponse(FastJSONResponse):
     """
 
 
-class HTMLResponse(StarletteHTMLResponse):
+class HTMLResponse(Response, StarletteHTMLResponse):
     """HTML response"""
 
 
@@ -90,7 +93,7 @@ class HTMLContent(str):
     __slots__ = ()
 
 
-class HTMXResponse(StarletteHTMLResponse):
+class HTMXResponse(Response, StarletteHTMLResponse):
     """Convenience HTML response with HTMX-specific headers support.
 
     Example:
@@ -126,15 +129,15 @@ class HTMXResponse(StarletteHTMLResponse):
         super().__init__(content=content, status_code=status_code, headers=headers)
 
 
-class FileResponse(StarletteFileResponse):
+class FileResponse(Response, StarletteFileResponse):
     """File response for serving static files"""
 
 
-class StreamingResponse(StarletteStreamingResponse):
+class StreamingResponse(Response, StarletteStreamingResponse):
     """Streaming response for large files or server-sent events"""
 
 
-class RedirectResponse(StarletteRedirectResponse):
+class RedirectResponse(Response, StarletteRedirectResponse):
     """Redirect response"""
 
 

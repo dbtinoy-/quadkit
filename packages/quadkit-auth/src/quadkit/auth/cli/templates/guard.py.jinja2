@@ -1,6 +1,9 @@
 """{{ guard_name }} authorization guard.
 
-This module provides a custom authorization guard for Quadkit.
+Route guard implementing the guard protocol (``can_activate`` /
+``handle_rejection``); apply with ``@use_guards(...)``. Ships a
+custom check plus role/permission variants — pick the one that
+matches how you authorize.
 """
 
 from __future__ import annotations

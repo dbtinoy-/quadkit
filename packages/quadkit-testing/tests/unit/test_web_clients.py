@@ -32,6 +32,7 @@ class _FakeResponse:
         self._payload = payload if payload is not None else {}
         self.text = text or str(payload)
         self.headers = {"content-type": "application/json", "x-test": "yes"}
+        self.cookies = {"session": "abc123"}
 
     def json(self) -> Any:
         return self._payload
@@ -60,6 +61,11 @@ def _starlette_app() -> Starlette:
     async def text(request: Any) -> PlainTextResponse:
         return PlainTextResponse("hello-web", headers={"X-Plain": "1"})
 
+    async def cookie(request: Any) -> PlainTextResponse:
+        response = PlainTextResponse("ok")
+        response.set_cookie("issued", "yes")
+        return response
+
     async def websocket_endpoint(websocket: Any) -> None:
         await websocket.accept()
         data = await websocket.receive_text()
@@ -72,6 +78,7 @@ def _starlette_app() -> Starlette:
             Route("/echo", echo, methods=["POST", "PUT", "PATCH"]),
             Route("/text", text),
             Route("/echo-delete", echo, methods=["DELETE"]),
+            Route("/cookie", cookie),
             WebSocketRoute("/ws", websocket_endpoint),
         ]
     )
@@ -88,6 +95,7 @@ def test_response_properties() -> None:
     assert response.json == {"a": 1}
     assert response.text == "raw"
     assert response.headers["x-test"] == "yes"
+    assert response.cookies == {"session": "abc123"}
 
 
 def test_assert_status_pass_and_fail() -> None:
@@ -296,3 +304,18 @@ async def test_bed_with_web_provider_instance() -> None:
     provider = WebProvider()
     bed = WebTestBed(provider)
     assert bed.web_provider is provider
+
+
+def test_a_cookie_the_response_set_is_readable() -> None:
+    """An app whose behaviour *is* a cookie has to be assertable.
+
+    Session identity, per-visitor scoping, "these two callers are kept
+    apart" — none of it can be tested through this client if the only way
+    to a cookie is parsing the raw `set-cookie` header, because the
+    underlying response is private.
+    """
+    client = WebTestClient(_starlette_app())
+
+    response = client.get("/cookie")
+
+    assert response.cookies["issued"] == "yes"

@@ -28,6 +28,7 @@ from quadkit.monitor.health import HealthCheckerRegistry, HealthCheckRegistry
 from quadkit.monitor.metrics.collector import (
     MetricsCollectorProtocol as _ConcreteMetricsCollector,
 )
+from quadkit.monitor.metrics.collector import set_default_collector
 from quadkit.monitor.profiling import ProfilingRegistry
 from quadkit.monitor.slo.monitor import SLOMonitor
 from quadkit.monitor.slo.worker import SLOEvaluationWorker
@@ -91,6 +92,9 @@ class _MonitorRegistrationMixin(_MonitorAttrsMixin):
 
         container.singleton(MonitorProvider, lambda: self)
         container.singleton(MetricsCollectorProtocol, lambda: self.metrics_collector)
+        # Make the same instance reachable without the container: HTTP metrics
+        # middleware is constructed by the web layer, not resolved.
+        set_default_collector(self.metrics_collector)
         container.singleton(_ConcreteMetricsCollector, lambda: self.metrics_collector)
         container.singleton(MetricsRecorderProtocol, lambda: self.metrics_collector)
         container.singleton(MetricsFactoryProtocol, lambda: self.metrics_collector)
@@ -143,6 +147,19 @@ class _MonitorRegistrationMixin(_MonitorAttrsMixin):
         await self._discover_backends(container)
 
         await self._discover_backends(container)
+
+        # Collector-backed scrape endpoint. Registered unconditionally so the
+        # documented ``prometheus_metrics_app`` key exists for any app that
+        # configured monitoring; an explicit PrometheusMetricsExporter below
+        # overrides it (a real prometheus_client registry renders richer text
+        # than the collector's fallback exposition).
+        from quadkit.monitor.middleware.prometheus import CollectorMetricsApp
+
+        _collector_ref = self.metrics_collector
+        container.singleton(
+            "prometheus_metrics_app",
+            lambda: CollectorMetricsApp(metrics_collector=_collector_ref),
+        )
 
         # Register optional metrics exporter provided at construction time.
         if self.metrics_exporter is not None:

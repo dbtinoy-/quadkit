@@ -46,23 +46,30 @@ class Controller:
 
                 attr_value = getattr(klass, attr_name, None)
                 if attr_value is not None and hasattr(attr_value, "_route_config"):
-                    route_config = attr_value._route_config
-                    routes.append(
-                        {
-                            "method": route_config["method"],
-                            "path": route_config["path"],
-                            "handler_name": attr_name,
-                            "response_model": route_config.get("response_model"),
-                            "request_model": route_config.get("request_model"),
-                            "status_code": route_config.get("status_code", 200),
-                            "summary": route_config.get("summary"),
-                            "description": route_config.get("description"),
-                            "tags": route_config.get("tags"),
-                            "operation_id": route_config.get("operation_id"),
-                            "responses": route_config.get("responses"),
-                            "deprecated": route_config.get("deprecated", False),
-                        },
-                    )
+                    # One handler may carry several routes: stacking the
+                    # decorators is how an alias is declared. Falls back
+                    # to the single config so a handler decorated by
+                    # older code still registers.
+                    configs = getattr(attr_value, "_route_configs", None) or [
+                        attr_value._route_config
+                    ]
+                    for route_config in configs:
+                        routes.append(
+                            {
+                                "method": route_config["method"],
+                                "path": route_config["path"],
+                                "handler_name": attr_name,
+                                "response_model": route_config.get("response_model"),
+                                "request_model": route_config.get("request_model"),
+                                "status_code": route_config.get("status_code", 200),
+                                "summary": route_config.get("summary"),
+                                "description": route_config.get("description"),
+                                "tags": route_config.get("tags"),
+                                "operation_id": route_config.get("operation_id"),
+                                "responses": route_config.get("responses"),
+                                "deprecated": route_config.get("deprecated", False),
+                            },
+                        )
                     seen_handlers.add(attr_name)
 
         return routes

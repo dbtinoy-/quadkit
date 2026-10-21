@@ -101,8 +101,9 @@ class GraphQLIntegration:
         if playground is None or not playground.enabled:
             return
 
-        from starlette.responses import HTMLResponse
         from starlette.routing import Route
+
+        from quadkit.web.transport.responses import HTMLResponse
 
         async def _playground_endpoint(request: Any) -> Any:
             root_path = request.scope.get("root_path", "") or ""

@@ -20,15 +20,16 @@ Storage format (kept on User.profile['passkeys']):
 - created_at: ISO timestamp
 - sign_count: int  (monotonically increasing per-authenticator counter)
 
-Temporary state for in-progress registration/authentication is kept in a
-short-lived in-memory map (sufficient for single-process dev/staging and for
-unit tests). In production you should replace this with a secure cache (Redis)
-if multi-worker deployments are used.
+Temporary state for in-progress registration/authentication uses an injected
+``CacheBackendProtocol`` when available and a short-lived in-memory map
+otherwise. Multi-worker production deployments must provide a shared cache so
+pending ceremonies are visible across workers.
 """
 
 from __future__ import annotations
 
 import base64
+from copy import deepcopy
 import hashlib
 import hmac
 import secrets
@@ -40,6 +41,8 @@ from quadkit.primitives import clock as ambient_clock
 if TYPE_CHECKING:
     from quadkit.auth.storage.token_store import UserStoreProtocol
     from quadkit.contracts.infra.cache import CacheBackendProtocol
+    from quadkit.contracts.infra.cache.exceptions import CacheError
+    from quadkit.result import Result
 
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -53,11 +56,14 @@ from quadkit.di.decorators import inject
 
 
 class _PendingStore:
-    """Abstract pending store with optional async cache backend.
+    """Store pending ceremony data with an optional QuadKit cache backend.
 
-    If a `cache` object is provided (e.g., provider.cache_service) we use its
-    async `set`, `get`, and `delete` methods. Otherwise fall back to an in-memory
-    dict with TTL semantics suitable for tests and single-process deployments.
+    Cache-backed values use the :class:`CacheBackendProtocol` Result contract;
+    cache errors are raised rather than silently turning a failed write or
+    consume into a missing ceremony. Values are JSON text so byte-returning
+    distributed backends and structured cache implementations share one wire
+    format. Without a backend, an ambient-clock TTL map supports tests and
+    single-process deployments.
     """
 
     def __init__(
@@ -65,52 +71,56 @@ class _PendingStore:
         cache: CacheBackendProtocol | None = None,
     ) -> None:
         self.cache = cache
-        self._store: dict[str, tuple[dict, float]] = {}
+        self._store: dict[str, tuple[dict[str, Any], float]] = {}
 
-    async def set(self, key: str, value: dict, ttl: int = 300) -> None:
-        if self.cache:
-            # Cache backends own their value serialization.  Keep the
-            # payload as a text JSON document so both raw Redis/Memcached
-            # adapters and structured QuadKit cache backends receive a
-            # portable value; passing ``quadkit.serialization.dumps`` bytes
-            # would make the memory backend store a string repr like
-            # ``b'{...}'`` and break the subsequent decode.
+    @staticmethod
+    def _unwrap_cache_result(result: Result[Any, CacheError]) -> Any:
+        """Return a cache result's value or raise its typed cache error."""
+        if result.is_err():
+            raise result.unwrap_err()
+        return result.unwrap()
+
+    async def set(self, key: str, value: dict[str, Any], ttl: int = 300) -> None:
+        if self.cache is not None:
+            # CacheBackendProtocol owns backend transport/encoding. JSON text
+            # keeps these small, JSON-safe ceremony records portable through
+            # byte-oriented Redis as well as in-memory cache implementations.
             payload = json.dumps_str(value)
-            await self.cache.set(key, payload, ttl)
-        else:
-            now = ambient_clock.monotonic()
-            self._store[key] = (value, now + ttl)
+            result = await self.cache.set(key, payload, ttl=ttl)
+            self._unwrap_cache_result(result)
+            return
 
-    async def get(self, key: str) -> dict | None:
-        if self.cache:
-            get_result = await self.cache.get(key)
-            raw = (
-                get_result.unwrap()
-                if hasattr(get_result, "is_ok") and get_result.is_ok()
-                else get_result
-                if get_result
-                else None
-            )
+        now = ambient_clock.monotonic()
+        self._store[key] = (deepcopy(value), now + ttl)
+
+    async def get(self, key: str) -> dict[str, Any] | None:
+        if self.cache is not None:
+            result = await self.cache.get(key)
+            raw = self._unwrap_cache_result(result)
             if raw is None:
                 return None
             if isinstance(raw, (bytes, bytearray)):
-                raw = raw.decode("utf-8")
-            return json.loads(raw) if isinstance(raw, str) else raw  # type: ignore[return-value]
-        v = self._store.get(key)
-        if not v:
+                raw = bytes(raw).decode("utf-8")
+            value = json.loads(raw) if isinstance(raw, str) else raw
+            if not isinstance(value, dict):
+                raise TypeError("Pending cache payload must be a JSON object")
+            return value
+
+        entry = self._store.get(key)
+        if entry is None:
             return None
-        value, expiry = v
-        now = ambient_clock.monotonic()
-        if now > expiry:
+        value, expiry = entry
+        if ambient_clock.monotonic() >= expiry:
             del self._store[key]
             return None
-        return value
+        return deepcopy(value)
 
     async def delete(self, key: str) -> None:
-        if self.cache:
-            await self.cache.delete(key)
-        elif key in self._store:
-            del self._store[key]
+        if self.cache is not None:
+            result = await self.cache.delete(key)
+            self._unwrap_cache_result(result)
+            return
+        self._store.pop(key, None)
 
 
 @inject

@@ -27,6 +27,9 @@ class CQRSController(Controller):
 
     Example::
 
+        from quadkit.serialization.domain import json_serialize
+        from quadkit.web import JSONResponse
+
         class OrderController(CQRSController):
             @post("/orders")
             async def create_order(self, request: Request) -> JSONResponse:
@@ -38,7 +41,7 @@ class CQRSController(Controller):
             async def get_order(self, request: Request) -> JSONResponse:
                 order_id = request.path_params["order_id"]
                 result = await self.dispatch_query(GetOrderQuery(order_id=order_id))
-                return JSONResponse(result.to_dict())
+                return JSONResponse(json_serialize(result))
     """
 
     def __init__(

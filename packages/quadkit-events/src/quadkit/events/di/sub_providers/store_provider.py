@@ -89,7 +89,7 @@ class StoreSubProvider:
         """Register stores into the DI container."""
         from typing import cast
 
-        from quadkit.contracts.events import EventStoreProtocol
+        from quadkit.contracts.events import EventStoreProtocol, SnapshotStoreProtocol
         from quadkit.events.stores import (
             AbstractEventStore,
             AbstractSnapshotStore,
@@ -101,6 +101,14 @@ class StoreSubProvider:
             container.singleton(cast("Any", EventStoreProtocol), self.event_store)
         if self.snapshot_store:
             container.singleton(cast("Any", AbstractSnapshotStore), self.snapshot_store)
+            # The protocol, not just the abstract base: `EventsModule.configure`
+            # exports `SnapshotStoreProtocol`, so a consumer that injects it —
+            # the documented way to read snapshots outside this package — must
+            # find a binding. It was registered under `AbstractSnapshotStore`
+            # and `SnapshotManager` only, which made the exported protocol
+            # unresolvable (`QK_ERR_DI_004`) while the store itself sat in the
+            # container.
+            container.singleton(cast("Any", SnapshotStoreProtocol), self.snapshot_store)
         if self.snapshot_manager:
             container.singleton(cast("Any", SnapshotManager), self.snapshot_manager)
 

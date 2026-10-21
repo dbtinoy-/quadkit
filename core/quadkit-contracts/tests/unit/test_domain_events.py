@@ -177,8 +177,9 @@ class TestDomainEventFromDict:
             "sequence_number": 1,
         }
         event = TestEvent.from_dict(data)
-        # aggregate_id is stored as string (from_dict passes it through as-is)
-        assert event.aggregate_id == str(agg_id)
+        # The field is typed UUID | None; a value that travelled as text
+        # (to_dict, JSON, an outbox table) comes back as the UUID it was.
+        assert event.aggregate_id == agg_id
         assert event.aggregate_type == "TestAggregate"
         assert event.actor_id == "user-123"
         assert event.sequence_number == 1
@@ -263,3 +264,24 @@ class TestDomainEventSubclass:
         # This test documents the behavior
         assert "order_id" not in result
         assert "total" not in result
+
+
+def test_from_dict_is_the_inverse_of_to_dict_for_the_base_fields() -> None:
+    """A round trip through JSON (an outbox table, a log) rebuilds the same event."""
+    from dataclasses import dataclass
+    from datetime import datetime
+    from uuid import UUID
+
+    @dataclass(init=False, frozen=True)
+    class Happened(DomainEvent):
+        product_ids: tuple[int, ...] = ()
+
+    original = Happened(product_ids=(3, 7))
+    rebuilt = Happened.from_dict(original.to_dict())
+
+    assert isinstance(rebuilt.event_id, UUID)
+    assert rebuilt.event_id == original.event_id
+    assert isinstance(rebuilt.occurred_at, datetime)
+    assert rebuilt.occurred_at == original.occurred_at
+    assert tuple(rebuilt.product_ids) == (3, 7)
+    assert rebuilt.event_type == "Happened"

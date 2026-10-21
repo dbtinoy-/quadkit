@@ -2,19 +2,15 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from quadkit.auth.authn.oauth2 import (
+    OAuth2IdentityProvider,
     QuadkitConnectResponse,
     QuadkitConnectSession,
-    OAuth2AuthProvider,
-    OAuth2Manager,
-    OAuth2IdentityProvider,
-    OAuth2UserInfo,
 )
-
 
 
 class TestOAuth2IdentityProvider:
@@ -57,24 +53,36 @@ class TestQuadkitConnectSession:
         mock_response = MagicMock()
         mock_response.status = 200
         mock_response.headers = {"content-type": "application/json"}
-        self.mock_http_client.get.return_value = mock_response
+        self.mock_http_client.request.return_value = mock_response
 
         response = await self.session.get("https://example.com/api")
         assert isinstance(response, QuadkitConnectResponse)
         assert response.status_code == 200
+        self.mock_http_client.request.assert_awaited_once_with(
+            "GET",
+            "https://example.com/api",
+            headers={},
+        )
 
     @pytest.mark.asyncio
     async def test_request_post(self):
         """Test POST request"""
         mock_response = MagicMock()
         mock_response.status = 201
-        self.mock_http_client.post.return_value = mock_response
+        self.mock_http_client.request.return_value = mock_response
 
         response = await self.session.post(
-            "https://example.com/api", data={"key": "value"},
+            "https://example.com/api",
+            data={"key": "value"},
         )
         assert isinstance(response, QuadkitConnectResponse)
         assert response.status_code == 201
+        self.mock_http_client.request.assert_awaited_once_with(
+            "POST",
+            "https://example.com/api",
+            headers={},
+            data={"key": "value"},
+        )
 
 
 class TestQuadkitConnectResponse:
@@ -121,5 +129,3 @@ class TestQuadkitConnectResponse:
         """Test raise for status"""
         self.response.raise_for_status()
         # Should not raise for 200 status
-
-

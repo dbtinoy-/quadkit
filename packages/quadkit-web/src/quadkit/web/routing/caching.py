@@ -29,9 +29,13 @@ import hashlib
 from typing import Any, TypeVar
 
 from starlette.requests import Request
+
+# boundary-catch: handlers may hand back a raw starlette response; quadkit's
+# family subclasses it, so this isinstance accepts both shapes.
 from starlette.responses import Response
 
 from quadkit.logging import get_logger
+from quadkit.web.transport.responses import Response as QuadkitResponse
 
 logger = get_logger(__name__)
 
@@ -169,7 +173,7 @@ def etag(fn: F) -> F:
         if request is not None:
             client_etag = request.headers.get("If-None-Match", "")
             if client_etag and _etag_matches(client_etag, etag_value):
-                return Response(status_code=304, headers={"ETag": etag_value})
+                return QuadkitResponse(status_code=304, headers={"ETag": etag_value})
 
         return result
 

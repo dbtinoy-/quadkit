@@ -33,8 +33,11 @@ the process observes the same mapping.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import dataclasses
-from typing import TYPE_CHECKING, Any
+from typing import Any
+
+from starlette.responses import Response as StarletteResponse
 
 from quadkit.web.errors.mapping import (
     _ERROR_STATUS_REGISTRY,
@@ -43,8 +46,11 @@ from quadkit.web.errors.mapping import (
     register_error_status,
 )
 
-if TYPE_CHECKING:
-    from starlette.responses import Response
+ErrorBodyRenderer = Callable[[Any, int, Any | None], Any]
+
+#: App-level error renderers, keyed by the exception type they handle.
+#: The nearest type in the error's MRO wins, independent of registration order.
+_ERROR_BODY_RENDERER_REGISTRY: dict[type[Exception], ErrorBodyRenderer] = {}
 
 
 def _serialize_details(value: Any) -> Any:
@@ -82,15 +88,23 @@ class ResultResponseMapper:
     | other ``DomainError``    | 400 (client fault) |
     | non-domain error         | 500 (server fault) |
 
-    Use :meth:`register` to override the status for a specific error type.
+    Use :meth:`register` to override the status and optionally attach an
+    app-specific body renderer for a specific error type.
     """
 
-    def to_response(self, result: Any, success_status: int = 200) -> Response:
+    def to_response(
+        self,
+        result: Any,
+        success_status: int = 200,
+        *,
+        request: Any | None = None,
+    ) -> StarletteResponse:
         """Convert a Result to an HTTP response.
 
         Args:
             result: The ``Result[T, E]`` object to map.
             success_status: HTTP status code for Ok results (default 200).
+            request: Optional request context passed to a registered error renderer.
 
         Returns:
             A :class:`~quadkit.web.transport.responses.JSONResponse` with
@@ -102,38 +116,79 @@ class ResultResponseMapper:
         if hasattr(result, "is_ok") and callable(result.is_ok):
             if result.is_ok():
                 return JSONResponse(content=result.unwrap(), status_code=success_status)
-            return self.error_to_response(result.unwrap_err())
+            return self.error_to_response(result.unwrap_err(), request=request)
 
         return JSONResponse(content={"error": "Invalid result object"}, status_code=400)
 
     @classmethod
-    def register(cls, error_type: type[Exception], status_code: int) -> None:
-        """Register a custom error type → HTTP status mapping.
+    def register(
+        cls,
+        error_type: type[Exception],
+        status_code: int,
+        *,
+        body_renderer: ErrorBodyRenderer | None = None,
+    ) -> None:
+        """Register a custom error status and, optionally, a body renderer.
 
-        Custom registrations take precedence over defaults (inserted at front).
+        Custom status registrations take precedence over defaults (inserted at
+        the front). A body renderer receives ``(error, status_code, request)``
+        and may return either a JSON-serializable body or a Starlette Response.
+        When multiple renderers match an error, the nearest type in its MRO
+        wins; an unmatched error keeps the default RFC 7807 body.
 
         Args:
             error_type: The exception class to match.
-            status_code: HTTP status code to return.
+            status_code: HTTP status code to return when the error does not
+                provide its own ``status_code`` attribute.
+            body_renderer: Optional app-specific error body renderer. Returning
+                a Response allows an app to preserve response headers or media
+                types alongside its body; returning data lets the mapper apply
+                the resolved status as JSON.
         """
         register_error_status(error_type, status_code)
+        if body_renderer is not None:
+            _ERROR_BODY_RENDERER_REGISTRY[error_type] = body_renderer
 
     @classmethod
-    def error_to_response(cls, error: Any) -> Response:
+    def error_to_response(
+        cls, error: Any, request: Any | None = None
+    ) -> StarletteResponse:
         """Convert a domain error to a JSON HTTP response.
 
         Args:
             error: The error value from ``Result.unwrap_err()``.
+            request: Optional request context passed to a registered renderer.
 
         Returns:
-            A :class:`~quadkit.web.transport.responses.JSONResponse` with the
-            appropriate status code and a structured body.
+            The response returned by a custom renderer, or a
+            :class:`~quadkit.web.transport.responses.JSONResponse` with the
+            appropriate status code and a structured RFC 7807 body.
         """
+
+        # keep the starlette base here: user handlers may legitimately return a
+        # raw starlette response; quadkit's family subclasses it, so this
+        # isinstance still catches both shapes.
+        from starlette.responses import Response as StarletteResponse
 
         from quadkit.web.errors.problem_detail import ProblemDetail
         from quadkit.web.transport.responses import JSONResponse
 
         status = get_status_for_error(error) if isinstance(error, Exception) else 400
+
+        if isinstance(error, Exception):
+            renderer = next(
+                (
+                    _ERROR_BODY_RENDERER_REGISTRY[error_type]
+                    for error_type in type(error).__mro__
+                    if error_type in _ERROR_BODY_RENDERER_REGISTRY
+                ),
+                None,
+            )
+            if renderer is not None:
+                rendered = renderer(error, status, request)
+                if isinstance(rendered, StarletteResponse):
+                    return rendered
+                return JSONResponse(content=rendered, status_code=status)
 
         if isinstance(error, Exception):
             pd = ProblemDetail.from_exception(

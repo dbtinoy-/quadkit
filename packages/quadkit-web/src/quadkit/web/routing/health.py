@@ -4,12 +4,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
-from starlette.responses import JSONResponse, Response
-
 from quadkit.contracts.core import HealthStatus
 from quadkit.logging import get_logger
 from quadkit.web import constants as const
 from quadkit.web.routing.health_checks import WebHealthChecker
+from quadkit.web.transport.responses import JSONResponse, Response
 
 if TYPE_CHECKING:
     from starlette.requests import Request

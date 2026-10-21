@@ -348,6 +348,13 @@ async def validate_and_merge_request(
                     data[name] = body_json
                 elif name in body_json:
                     data[name] = body_json[name]
+        # No body at all (an empty POST) with one DTO parameter: validate the
+        # DTO against ``{}``. A DTO whose fields all default — "open the till
+        # with no float" — then binds; one with required fields reports
+        # *those fields* as missing, which is a better answer than "Input
+        # should be a dictionary".
+        elif body_json is None and len(body_field_names) == 1:
+            data[body_field_names[0]] = {}
         # Body is not a dict (e.g. list or literal), but we have body fields
         # If only one body field, map body to it
         elif len(body_field_names) == 1:
@@ -388,12 +395,23 @@ async def validate_and_merge_request(
             elif pydantic_errors is None:
                 pydantic_errors = []
 
+            # A single body DTO is the whole JSON document to the client:
+            # the handler's parameter name (``body``, ``data``) is an
+            # implementation detail and must not lead the field path.
+            whole_body = body_field_names[0] if len(body_field_names) == 1 else None
             for err in pydantic_errors:
-                field = ".".join(str(loc) for loc in err.get("loc", []))
+                loc = [str(part) for part in err.get("loc", [])]
+                if whole_body is not None and loc and loc[0] == whole_body:
+                    loc = loc[1:]
+                field = ".".join(loc)
+                message = str(err.get("msg", "Invalid value"))
+                # pydantic prefixes a validator's own ValueError with
+                # "Value error, "; the validator already said what it meant.
+                message = message.removeprefix("Value error, ")
                 qk_errors.append(
                     FieldError(
                         field=field,
-                        message=err.get("msg", "Invalid value"),
+                        message=message,
                         code=err.get("type", "invalid"),
                     )
                 )

@@ -14,9 +14,9 @@ from typing import (
     get_type_hints,
 )
 
-from quadkit.domain.models.coercion import coerce_and_build, resolve_type_hints
+from quadkit.domain.models.coercion import coerce_and_build
 from quadkit.identity import ambient as identity_ambient
-from quadkit.primitives.typing import type_allows_none
+from quadkit.primitives.typing import resolve_type_hints, type_allows_none
 
 # Infrastructure imports (new locations)
 from quadkit.serialization.domain import (
@@ -116,6 +116,113 @@ def _convert_pydantic_fields_for_dataclass(cls: type) -> None:
             setattr(cls, attr_name, _dc.field(default=value.default, metadata=meta))
 
 
+_GUARD_DONE_ATTR = "_quadkit_guard_done"
+
+
+def run_field_guard(model: Any) -> None:
+    """Coerce and validate a dataclass-built model, once per instance.
+
+    ``@dataclass`` regenerates ``__init__`` on the subclass, so
+    ``DomainModel.__init__`` — the only place scalar coercion, ``Field(...)``
+    constraints and field validators ran — never executed for the documented
+    pattern::
+
+        @dataclass
+        class Product(DomainModel):
+            name: str = Field(default="", min_length=3)
+
+    A ``Field(min_length=3)`` there was documentation rather than a check, and
+    an ISO timestamp handed to the constructor stayed a string. Dataclasses
+    always call ``__post_init__``, so the guard is installed there (see
+    ``_install_field_guard``) and this function is what runs.
+
+    Idempotent by instance marker: ``DomainModel.__init__`` does this work
+    itself and then calls ``__post_init__``, so it marks the instance first.
+
+    Args:
+        model: The instance to coerce and validate in place.
+    """
+    if getattr(model, _GUARD_DONE_ATTR, False):
+        return
+    object.__setattr__(model, _GUARD_DONE_ATTR, True)
+
+    cls = type(model)
+    dc_fields = getattr(cls, "__dataclass_fields__", None)
+    if not dc_fields:
+        return
+
+    try:
+        type_hints = cls._cached_type_hints or resolve_type_hints(cls)
+    except (NameError, AttributeError, TypeError):
+        type_hints = {}
+
+    field_validators = getattr(cls, "_field_validators", None) or {}
+    values: dict[str, Any] = {}
+    for fname, f in dc_fields.items():
+        if not hasattr(model, fname):
+            continue
+        current = getattr(model, fname)
+        value = current
+
+        # `mode="before"` runs on the raw value: `@dataclass` has already
+        # assigned it, but coercion has not touched it yet, and a validator that
+        # declares the storage shape of a column (an epoch integer, a JSON
+        # document in a Text column) has to see that raw value.
+        # `DomainModel.__init__` dispatches the same mode the same way, and the
+        # two paths have to agree: one model, one behaviour.
+        for mode, vfn in field_validators.get(fname, []):
+            if mode == "before":
+                value = vfn(cls, value)
+
+        value = _coerce_value(fname, value, type_hints, f)
+        if value is not current:
+            object.__setattr__(model, fname, value)
+        values[fname] = value
+
+    cls._validate_field_constraints(dc_fields, values)
+
+    for fname, fval in list(values.items()):
+        for mode, vfn in field_validators.get(fname, []):
+            if mode == "after":
+                new_val = vfn(cls, fval)
+                if new_val is not None:
+                    object.__setattr__(model, fname, new_val)
+                    values[fname] = new_val
+
+    # ``getattr(..., None)`` is ``Any | None``, so the default has to be applied
+    # before the ``.get`` rather than inside it.
+    model_validators = getattr(cls, "_model_validators", None) or {}
+    for validator_fn in model_validators.get("after", []):
+        result = validator_fn(model)
+        if result is not None and result is not model:
+            for attr_k, attr_v in result.__dict__.items():
+                object.__setattr__(model, attr_k, attr_v)
+
+
+def _install_field_guard(cls: type) -> None:
+    """Chain :func:`run_field_guard` onto the class's ``__post_init__``.
+
+    ``__post_init__`` is the one hook a generated ``__init__`` always calls, so
+    it is where a ``@dataclass`` subclass gets the same coercion and validation
+    a ``DomainModel``-initialised model does. A user-defined ``__post_init__``
+    is preserved and runs after the guard.
+
+    Args:
+        cls: The subclass being created.
+    """
+    existing = cls.__dict__.get("__post_init__")
+    if getattr(existing, "_quadkit_field_guard", False):
+        return
+
+    def __post_init__(self: Any) -> None:  # noqa: N807 — the hook name is fixed by dataclasses
+        run_field_guard(self)
+        if existing is not None:
+            existing(self)
+
+    __post_init__._quadkit_field_guard = True  # type: ignore[attr-defined]
+    cls.__post_init__ = __post_init__  # type: ignore[attr-defined]
+
+
 class DomainModel:
     """Mixin providing dataclass-like helpers for easy serialization.
 
@@ -154,6 +261,10 @@ class DomainModel:
         # repeated get_type_hints() calls on every __init__ invocation.
         hints = resolve_type_hints(cls)
         cls._cached_type_hints = hints if hints else None
+
+        # `@dataclass` replaces `__init__`, so the coercion, constraint and
+        # validator work below has to be reachable from the generated one.
+        _install_field_guard(cls)
 
     @staticmethod
     def _ensure_dataclass(target_cls: type) -> None:
@@ -237,6 +348,9 @@ class DomainModel:
         for k in extra_keys:
             object.__setattr__(self, k, kwargs.pop(k))
 
+        # The guard has already run on this path; the marker keeps the chained
+        # `__post_init__` from repeating (and re-applying) the same work.
+        object.__setattr__(self, _GUARD_DONE_ATTR, True)
         if hasattr(self, "__post_init__"):
             self.__post_init__()
 
@@ -270,9 +384,13 @@ class DomainModel:
                 val = _coerce_value(fname, val, type_hints, f)
                 values[fname] = val
             elif f.default is not MISSING:
-                values[fname] = f.default
+                # Coerced like a provided value: the guard path (a generated
+                # `__init__` followed by `__post_init__`) coerces whatever the
+                # default left on the instance, so this path has to as well or
+                # the two disagree about a defaulted field's type.
+                values[fname] = _coerce_value(fname, f.default, type_hints, f)
             elif f.default_factory is not MISSING:
-                values[fname] = f.default_factory()
+                values[fname] = _coerce_value(fname, f.default_factory(), type_hints, f)
             elif fname == "id":
                 values[fname] = None
             else:
@@ -314,7 +432,18 @@ class DomainModel:
         dc_fields: dict[str, Any],
         values: dict[str, Any],
     ) -> None:
-        """Validate field values against metadata constraints."""
+        """Validate field values against metadata constraints.
+
+        **A default is not exempt.** ``name: str = Field(default="", min_length=3)``
+        is a contradiction the *declaration* contains, and the framework answers
+        it by refusing to construct the model — for a caller who omits the field
+        exactly as for one who passes the same value. Silently accepting the
+        default would let a constraint the model documents be violated by the
+        value the model itself supplies, which is how a `ge=0` counter ends up
+        negative in production. The failure is loud and points at the
+        declaration, and the two construction paths agree on it because both
+        check whatever value the field ended up holding.
+        """
         for fname, f in dc_fields.items():
             meta = getattr(f, "metadata", None)
             if not meta:

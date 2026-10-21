@@ -1,6 +1,8 @@
-"""WebSocket Handler for {{ name }}.
+"""Convention followed: **WebSocket handler pattern** — one class per
+socket lifecycle (connect, message, disconnect); room-keyed broadcast
+keeps the fan-out next to the handlers.
 
-This module defines a WebSocket handler for real-time {{ snake_name }} communication.
+WebSocket handler for real-time {{ snake_name }} communication.
 """
 
 from __future__ import annotations

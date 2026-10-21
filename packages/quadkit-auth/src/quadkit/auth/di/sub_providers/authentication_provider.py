@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import contextlib
-import inspect
 import secrets
 from typing import TYPE_CHECKING, Annotated, Any, cast
 
@@ -144,20 +143,22 @@ def _resolve_default_cache_sync(container: Any) -> Any:
 
     Auth boots before cache providers, so this runs lazily via
     ``set_blacklist_resolver``.  Returns ``None`` while no cache backend
-    is registered (or when only async resolution is available); the
-    blacklist manager treats ``None`` as "no durable store yet".
+    is registered; the blacklist manager treats ``None`` as "no durable
+    store yet" and asks again on the next revocation.
+
+    The container's ``resolve`` is a coroutine on every Quadkit container,
+    so the awaitable is **returned** for the (async) blacklist to await —
+    an earlier revision returned ``None`` in that case, which meant no
+    application ever got a durable blacklist through this path.
     """
     if container is None or not hasattr(container, "resolve"):
         return None
     try:
-        from quadkit.contracts.cache import CacheBackendProtocol
+        from quadkit.contracts.infra.cache import CacheBackendProtocol
 
-        resolved = container.resolve(CacheBackendProtocol)
+        return container.resolve(CacheBackendProtocol)
     except Exception:  # noqa: BLE001 — cache subsystem may not exist yet
         return None
-    if inspect.isawaitable(resolved):
-        return None
-    return resolved
 
 
 class AuthenticationProvider(Provider):

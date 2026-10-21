@@ -2,16 +2,19 @@ from __future__ import annotations
 
 from typing import Any
 
-from starlette.responses import HTMLResponse, JSONResponse
-
 from quadkit.contracts.web import ResponseFactoryProtocol, ResponseProtocol
+from quadkit.web.transport.responses import FastJSONResponse, HTMLResponse
 
 
 class StarletteResponseAdapter(ResponseFactoryProtocol):
-    """Implementation of ResponseFactoryProtocol using Starlette responses.
+    """Implementation of ResponseFactoryProtocol using quadkit responses.
 
-    This class name uses *Adapter* instead of *Factory* to comply with
-    naming guidelines that prohibit "factory" and "facade".
+    The returned objects are the framework's own response family
+    (:class:`FastJSONResponse`/:class:`HTMLResponse` — starlette subclasses),
+    so JSON payloads serialize through ``quadkit.serialization`` (orjson
+    when installed, native datetime/UUID/dataclass support). The class
+    name keeps *Adapter* instead of *Factory* to comply with naming
+    guidelines that prohibit "factory" and "facade".
     """
 
     def json(
@@ -20,8 +23,8 @@ class StarletteResponseAdapter(ResponseFactoryProtocol):
         status_code: int = 200,
         headers: dict[str, str] | None = None,
     ) -> ResponseProtocol:
-        """Create a JSON response."""
-        return JSONResponse(  # type: ignore[return-value]
+        """Create a JSON response (datetime/UUID payloads serialize natively)."""
+        return FastJSONResponse(  # type: ignore[return-value]
             content=content,
             status_code=status_code,
             headers=headers,
@@ -47,7 +50,7 @@ class StarletteResponseAdapter(ResponseFactoryProtocol):
         headers: dict[str, str] | None = None,
     ) -> ResponseProtocol:
         """Create a redirect response."""
-        from starlette.responses import RedirectResponse
+        from quadkit.web.transport.responses import RedirectResponse
 
         return RedirectResponse(  # type: ignore[return-value]
             url=url,

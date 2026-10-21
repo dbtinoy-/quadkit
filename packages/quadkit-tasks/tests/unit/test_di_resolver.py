@@ -203,3 +203,92 @@ class TestResolveDependencies:
         # and unresolvable; 'svc' resolved
         assert args == [1]
         assert kwargs.get("svc") is svc
+
+
+class _RecordingLogger:
+    def __init__(self) -> None:
+        self.calls: list[tuple[str, str]] = []
+
+    def _record(self, level: str, msg: str, *args: Any, **kwargs: Any) -> None:
+        self.calls.append((level, (msg % args) if args else msg))
+
+    def debug(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._record("debug", msg, *args)
+
+    def info(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._record("info", msg, *args)
+
+    def warning(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._record("warning", msg, *args)
+
+    def error(self, msg: str, *args: Any, **kwargs: Any) -> None:
+        self._record("error", msg, *args)
+
+
+class TestUnresolvableForwardReference:
+    """A TYPE_CHECKING-only annotation is a loud warning, not a debug line."""
+
+    @pytest.mark.asyncio
+    async def test_type_checking_only_annotation_warns_and_names_the_param(self) -> None:
+        from quadkit.tasks.execution._di_resolver import resolve_handler_dependencies
+
+        # Simulate ``from __future__ import annotations`` + a name that only
+        # exists under TYPE_CHECKING: the hint is a string nothing can
+        # resolve at runtime.
+        async def handler(channel: "OnlyUnderTypeChecking") -> None:  # noqa: F821, UP037
+            pass
+
+        log = _RecordingLogger()
+        container = _FakeContainer({_Svc: _Svc()})
+        _, kwargs = await resolve_handler_dependencies(
+            handler, (), {}, container, logger_instance=log
+        )
+
+        assert "channel" not in kwargs
+        warnings = [m for level, m in log.calls if level == "warning"]
+        assert warnings, "the swallowed NameError must surface as a warning"
+        text = " ".join(warnings)
+        assert "task_dependency_annotation_unresolvable" in text
+        assert "param=channel" in text
+        assert "TYPE_CHECKING" in text
+
+
+class TestResolverIsQuietInSteadyState:
+    """A healthy job must not produce five info lines per execution.
+
+    Found by reading a production log: every scheduled tick printed the
+    handler signature, its parameter count, one "attempting" line per
+    parameter and one "could not resolve" line for every optional job
+    argument such as ``since: str | None = None`` — a line the container
+    could never have satisfied.
+    """
+
+    @pytest.mark.asyncio
+    async def test_a_healthy_handler_logs_nothing_above_debug(self) -> None:
+        from quadkit.tasks.execution._di_resolver import resolve_handler_dependencies
+
+        async def handler(account_id: int, repo: _Repo, *, since: str | None = None) -> None:
+            pass
+
+        log = _RecordingLogger()
+        container = _FakeContainer({_Repo: _Repo()})
+        _, kwargs = await resolve_handler_dependencies(handler, (7,), {}, container, logger_instance=log)
+
+        assert isinstance(kwargs["repo"], _Repo)
+        assert "since" not in kwargs, "a job argument with a default is the job's, not the container's"
+        assert all(level == "debug" for level, _ in log.calls), log.calls
+        assert not any(t is not _Repo and t == (str | None) for t in container.resolved), "str | None was never asked of the container"
+
+    @pytest.mark.asyncio
+    async def test_a_required_service_the_container_lacks_is_a_warning(self) -> None:
+        from quadkit.tasks.execution._di_resolver import resolve_handler_dependencies
+
+        async def handler(repo: _Repo) -> None:
+            pass
+
+        log = _RecordingLogger()
+        _, kwargs = await resolve_handler_dependencies(handler, (), {}, _FakeContainer(), logger_instance=log)
+
+        assert "repo" not in kwargs
+        warnings = [m for level, m in log.calls if level == "warning"]
+        assert warnings and "task_dependency_unresolved" in warnings[0] and "param=repo" in warnings[0]

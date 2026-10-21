@@ -6,9 +6,9 @@ import tempfile
 
 import pytest
 
+from quadkit.contracts.infra.storage import UploadOptions
 from quadkit.storage.backends.local import LocalDriver
 from quadkit.storage.exceptions import StorageError, StorageFileNotFoundError
-from quadkit.contracts.infra.storage import UploadOptions
 
 
 class TestLocalDriver:
@@ -99,6 +99,14 @@ class TestLocalDriver:
         assert info.content_type == "text/custom"
         assert info.metadata == {"author": "test", "version": "1.0"}
 
+        persisted = await driver.info("options.txt")
+        assert persisted.content_type == "text/custom"
+        assert persisted.metadata == {"author": "test", "version": "1.0"}
+        listing = [item async for item in driver.list()]
+        assert [(item.path, item.content_type, item.metadata) for item in listing] == [
+            ("options.txt", "text/custom", {"author": "test", "version": "1.0"})
+        ]
+
     @pytest.mark.asyncio
     async def test_path_security(self, driver):
         """Test path traversal protection"""
@@ -108,6 +116,9 @@ class TestLocalDriver:
 
         with pytest.raises(StorageError):
             await driver.download("../../etc/passwd")
+
+        with pytest.raises(StorageError):
+            await driver.upload(".quadkit-metadata/forged.json", b"not a user object")
 
     @pytest.mark.asyncio
     async def test_exists(self, driver):
@@ -125,6 +136,7 @@ class TestLocalDriver:
 
         await driver.delete("delete_me.txt")
         assert not await driver.exists("delete_me.txt")
+        assert [item async for item in driver.list()] == []
 
     @pytest.mark.asyncio
     async def test_delete_nonexistent(self, driver):
@@ -168,7 +180,7 @@ class TestLocalDriver:
     async def test_stream_nonexistent(self, driver):
         """Test streaming nonexistent file"""
         with pytest.raises(StorageFileNotFoundError):
-            async for chunk in driver.stream("nonexistent.txt"):
+            async for _chunk in driver.stream("nonexistent.txt"):
                 pass
 
     @pytest.mark.asyncio
@@ -256,7 +268,6 @@ class TestLocalDriver:
     @pytest.mark.asyncio
     async def test_health_check_nonexistent_directory(self, driver, temp_dir):
         """Test health check with nonexistent directory"""
-        import os
 
         nonexistent_dir = temp_dir / "nonexistent"
 
@@ -317,7 +328,7 @@ class TestLocalDriver:
     async def test_directory_traversal_prevention(self, driver):
         """Test directory traversal is prevented"""
         # The code at lines 59-66 catches path traversal
-        with pytest.raises(Exception):  # StorageError
+        with pytest.raises(StorageError):
             await driver._get_full_path("../outside")
 
     @pytest.mark.asyncio

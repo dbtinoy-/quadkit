@@ -19,9 +19,8 @@ from quadkit.cli.registry.config import (
     validate_config,
 )
 from quadkit.cli.scaffold import (
-    TEMPLATE_ALIASES,
-    TEMPLATES,
     _TEMPLATE_SPECS,
+    TEMPLATES,
     component_packages,
     render_project,
     resolve_template,
@@ -33,26 +32,15 @@ from quadkit.cli.scaffold_package import render_package
 class TestScaffoldTemplates:
     def test_template_names(self) -> None:
         names = template_names()
-        assert set(names) == set(TEMPLATES)
-        assert "minimal" in names
-
-    def test_aliases_track_their_target_template(self) -> None:
-        names = set(template_names())
-        for alias, target in TEMPLATE_ALIASES.items():
-            assert (alias in names) is (target in TEMPLATES)
-
-    def test_gated_template_names_its_missing_providers(self) -> None:
-        gated = sorted(name for name in _TEMPLATE_SPECS if name not in TEMPLATES)
-        if not gated:
-            pytest.skip("this install provides every template")
-        with pytest.raises(ValueError, match="provider package"):
-            resolve_template(gated[0])
+        assert set(names) == set(TEMPLATES) == set(_TEMPLATE_SPECS)
+        assert names == ["api"]
 
     def test_resolve_template(self) -> None:
-        spec = resolve_template("web-api")
-        assert spec.name == "web-api"
-        assert "sql" in spec.features
-        assert "quadkit-sql" in spec.dependencies
+        spec = resolve_template("api")
+        assert spec.name == "api"
+        assert "web" in spec.features
+        assert "quadkit-web" in spec.dependencies
+        assert "uvicorn" in spec.dependencies
 
     def test_resolve_unknown_template(self) -> None:
         with pytest.raises(ValueError, match="Unknown template"):
@@ -65,9 +53,9 @@ class TestScaffoldTemplates:
 
 
 class TestRenderProject:
-    def test_render_minimal(self, tmp_path: Path) -> None:
+    def test_render_api(self, tmp_path: Path) -> None:
         target = tmp_path / "proj"
-        created = render_project("minimal", "my-app", target)
+        created = render_project("api", "my-app", target)
         assert created
         pyproject = target / "pyproject.toml"
         assert pyproject.exists()
@@ -88,22 +76,43 @@ class TestRenderProject:
         target.mkdir()
         (target / "keep.txt").write_text("x", encoding="utf-8")
         with pytest.raises(ValueError, match="not empty"):
-            render_project("minimal", "p", target)
+            render_project("api", "p", target)
 
     def test_render_force_overwrites(self, tmp_path: Path) -> None:
         target = tmp_path / "proj"
         target.mkdir()
         (target / "keep.txt").write_text("x", encoding="utf-8")
-        created = render_project("minimal", "p", target, force=True)
+        created = render_project("api", "p", target, force=True)
         assert created
         assert (target / "keep.txt").exists()  # foreign files untouched
 
-    def test_render_fullstack_has_all_components(self, tmp_path: Path) -> None:
+    def test_render_api_has_the_web_feature(self, tmp_path: Path) -> None:
         target = tmp_path / "proj"
-        render_project("fullstack", "big-app", target)
+        render_project("api", "big-app", target)
         text = (target / "src" / "big_app" / "app.py").read_text()
-        # web feature present in fullstack
-        assert "web" in TEMPLATES["fullstack"].features or "web" in text
+        assert "web" in TEMPLATES["api"].features
+        assert "WebModule" in text
+
+    def test_render_api_composition_root_has_builders(self, tmp_path: Path) -> None:
+        target = tmp_path / "proj"
+        render_project("api", "shop-api", target)
+        text = (target / "src" / "shop_api" / "app.py").read_text()
+        assert "def build_modules() -> list[object]:" in text
+        assert "def build_providers() -> list[Provider]:" in text
+        assert "def create_app(config: QuadkitConfig | None = None)" in text
+        assert '"build_modules", "build_providers"' in text
+        assert "    return []\n" in text
+        compile(text, "app.py", "exec")
+
+    def test_render_api_docstring_has_no_stray_blank_lines(
+        self, tmp_path: Path
+    ) -> None:
+        target = tmp_path / "proj"
+        render_project("api", "shop-api", target)
+        text = (target / "src" / "shop_api" / "app.py").read_text()
+        docstring = text.split('"""')[1]
+        assert "\n\n\n" not in docstring
+        assert "Convention followed: **Composition root**" in docstring
 
     def test_unknown_template_rejected(self, tmp_path: Path) -> None:
         with pytest.raises(ValueError, match="Unknown template"):

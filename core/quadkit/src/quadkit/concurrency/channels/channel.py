@@ -65,6 +65,12 @@ class BoundedChannel(Generic[T]):
         )
         self._closed = False
         self._lock = asyncio.Lock()
+        #: Set whenever something a waiting receiver cares about happened:
+        #: an item arrived or the channel closed. Receivers clear it before
+        #: they wait. They never dequeue from a helper task, so an item is
+        #: either in the queue or in the consumer's hands — there is no tick
+        #: in between where ``is_empty`` lies.
+        self._wakeup = asyncio.Event()
 
     async def send(self, item: T) -> None:
         """Send an item, blocking if the channel is full.
@@ -91,6 +97,7 @@ class BoundedChannel(Generic[T]):
             # full, but that means the item was never actually enqueued.
             with suppress(asyncio.QueueFull):
                 self._queue.put_nowait(wrapped)
+                self._wakeup.set()
             raise
         except asyncio.QueueFull:
             msg = "Channel is full"
@@ -98,6 +105,7 @@ class BoundedChannel(Generic[T]):
                 msg,
                 capacity=self.capacity,
             ) from None
+        self._wakeup.set()
 
     def send_nowait(self, item: T) -> None:
         """Send an item without blocking.
@@ -128,6 +136,7 @@ class BoundedChannel(Generic[T]):
         except asyncio.QueueFull:
             msg = "Channel is full"
             raise ChannelFullError(msg, capacity=self.capacity) from None
+        self._wakeup.set()
 
     async def receive(self) -> T:
         """Receive an item, blocking if the channel is empty.
@@ -138,28 +147,39 @@ class BoundedChannel(Generic[T]):
         Raises:
             ChannelClosedError: If the channel is closed and empty.
         """
-        try:
-            wrapped: _ContextualItem[T] = await self._queue.get()
-        except asyncio.CancelledError:
-            # If cancelled after the queue internally dequeued an item,
-            # put it back so it is not lost.  get_nowait will raise
-            # QueueEmpty if nothing was actually dequeued yet.
-            try:
-                item_back = self._queue.get_nowait()
-                self._queue.put_nowait(item_back)
-            except asyncio.QueueEmpty:
-                pass
-            raise
-        except asyncio.QueueEmpty:
-            if self._closed:
-                msg = "Channel is closed"
-                raise ChannelClosedError(msg) from None
-            raise
+        wrapped = await self._next_item()
         # Restore sender's context variables so OTel trace spans and other
         # context state are propagated to the consumer.
         for var, value in wrapped.ctx.items():
             var.set(value)
         return wrapped.item
+
+    async def _next_item(self) -> _ContextualItem[T]:
+        """Dequeue the next wrapped item, or raise once closed and drained.
+
+        The hot path — an item is already queued — is a plain
+        ``get_nowait``. Only an empty channel waits, and it waits on one
+        wake-up that both :meth:`send` and :meth:`close` raise. Without the
+        close half, ``close()`` could not end an ``async for`` over an empty
+        channel, and every consumer loop would outlive the thing it consumed.
+
+        The dequeue itself is always synchronous in the consumer's own task.
+        Pulling the item inside a helper task would open a window where the
+        queue is already empty but the consumer has not resumed yet — a
+        caller polling ``is_empty`` (the event bus's ``flush``) would
+        conclude the work was done one tick before it started.
+        """
+        while True:
+            try:
+                return self._queue.get_nowait()
+            except asyncio.QueueEmpty:
+                if self._closed:
+                    msg = "Channel is closed"
+                    raise ChannelClosedError(msg) from None
+            # Nothing queued and not closed: both facts were read without an
+            # intervening await, so clearing here cannot swallow a wake-up.
+            self._wakeup.clear()
+            await self._wakeup.wait()
 
     def receive_nowait(self) -> T:
         """Receive an item without blocking.
@@ -183,9 +203,15 @@ class BoundedChannel(Generic[T]):
         return wrapped.item
 
     async def close(self) -> None:
-        """Close the channel. Remaining items can still be received."""
+        """Close the channel. Remaining items can still be received.
+
+        Receivers blocked on an empty channel are woken and get
+        :class:`ChannelClosedError` (``StopAsyncIteration`` under
+        ``async for``), so a consumer loop ends when its producer does.
+        """
         async with self._lock:
             self._closed = True
+            self._wakeup.set()
 
     @property
     def is_closed(self) -> bool:

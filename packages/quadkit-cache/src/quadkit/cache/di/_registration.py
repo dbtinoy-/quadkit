@@ -136,7 +136,7 @@ class _CacheRegistrationMixin:
                     and resolve_backend_type(backend_config) == BackendType.REDIS
                     and backend_config.redis_url
                 ):
-                    store = RedisStateStore(  # type: ignore[abstract]
+                    store = RedisStateStore(
                         url=backend_config.redis_url,
                         prefix=backend_config.key_prefix,
                     )

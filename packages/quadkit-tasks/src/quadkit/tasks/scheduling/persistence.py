@@ -19,6 +19,7 @@ from dataclasses import asdict
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from quadkit.contracts.data.sql.database import provider_dialect
 from quadkit.logging import get_logger
 import quadkit.serialization as json
 from quadkit.tasks.dialect import translate_placeholders
@@ -229,7 +230,7 @@ class DatabaseSchedulerStore:
 
     def _sql(self, sql: str) -> str:
         """Translate ``?`` placeholders to the provider dialect style."""
-        dialect = str(getattr(self._db, "name", "sqlite"))
+        dialect = provider_dialect(self._db)
         return translate_placeholders(sql, dialect)
 
     async def _ensure_table(self) -> None:

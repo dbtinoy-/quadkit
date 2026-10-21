@@ -1,4 +1,8 @@
-"""{{ class_name }} task module.{% if doc %}
+"""{{ class_name }} task module.
+
+Background work: enqueue through the task provider or fire on the
+cron schedule. The provider owns retries, timeouts and concurrency;
+this module owns the work itself.{% if doc %}
 
 {{ doc }}{% endif %}"""
 

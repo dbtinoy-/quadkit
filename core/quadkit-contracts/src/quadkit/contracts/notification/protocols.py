@@ -10,7 +10,38 @@ if TYPE_CHECKING:
     from quadkit.contracts.core.result import Result
     from quadkit.contracts.mailer.types import MessageDeliveryReceipt
     from quadkit.contracts.notification.errors import NotificationError
-    from quadkit.contracts.notification.types import PushMessage, SMSMessage
+    from quadkit.contracts.notification.types import (
+        DeliveryMessage,
+        PushMessage,
+        SMSMessage,
+    )
+
+
+@runtime_checkable
+class DeliveryChannelProtocol(Protocol):
+    """Structural contract for a channel used by the durable delivery worker."""
+
+    @property
+    def channel(self) -> str:
+        """Canonical channel name used in persisted delivery messages."""
+        ...
+
+    async def send(
+        self, message: DeliveryMessage
+    ) -> Result[MessageDeliveryReceipt, NotificationError]:
+        """Deliver one queued message through this channel."""
+        ...
+
+
+@runtime_checkable
+class DeliveryDispatcherProtocol(Protocol):
+    """Structural contract for dispatching a queued message by channel."""
+
+    async def send(
+        self, message: DeliveryMessage
+    ) -> Result[MessageDeliveryReceipt, NotificationError]:
+        """Dispatch a message through the registered channel implementation."""
+        ...
 
 
 @runtime_checkable
@@ -78,4 +109,9 @@ class PushChannelProtocol(Protocol):
         ...
 
 
-__all__ = ["PushChannelProtocol", "SMSChannelProtocol"]
+__all__ = [
+    "DeliveryChannelProtocol",
+    "DeliveryDispatcherProtocol",
+    "PushChannelProtocol",
+    "SMSChannelProtocol",
+]

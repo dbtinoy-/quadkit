@@ -1,4 +1,9 @@
-"""GraphQL schema module for {{ class_name }}.{% if doc %}
+"""GraphQL schema module for {{ class_name }}.
+
+Strawberry type + create/update/filter inputs + ``Query`` (list, get,
+relay connection) + ``Mutation`` (create, update, delete). Resolvers
+carry ``# @INTENT`` markers: delegate to the domain service from
+``info.context`` and delete the stubbed returns.{% if doc %}
 
 {{ doc }}{% endif %}"""
 
@@ -140,8 +145,10 @@ class Query:
         # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
-        # items = await service.list(limit=first or 20, offset=0)
-        # return [{{ class_name }}Type(id=str(i.id), ...) for i in items]
+        # result = await service.list(limit=first or 20, offset=0)
+        # # services answer Result; an empty Err arm answers as GraphQL's empty list
+        # items = result.unwrap_or([])
+        # return [{{ class_name }}Type(id=str(i["id"]), ...) for i in items]
         return []
 
     @strawberry.field(description="Get a single {{ singular_name }} by ID")
@@ -157,15 +164,16 @@ class Query:
             id: The {{ singular_name }} ID.
 
         Returns:
-            The {{ resource_name }} or None if not found.
+            The {{ resource_name }}; ``None`` when the service's Err arm
+            answers absence (GraphQL renders the Err arm as ``null``).
         """
         # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
         # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
-        # item = await service.get(id)
-        # if item:
-        #     return {{ class_name }}Type(id=str(item.id), ...)
+        # result = await service.get(id)  # Result — absence is a value, never probed
+        # item = result.to_optional()     # Err arm -> None
+        # return {{ class_name }}Type(id=str(item["id"]), ...) if item is not None else None
         return None
 
     @strawberry.relay.connection(
@@ -228,8 +236,9 @@ class Mutation:
         # Example:
         # service = info.context["service"]
         # data = input.__dict__
-        # item = await service.create(data)
-        # return {{ class_name }}Type(id=str(item.id), ...)
+        # result = await service.create(data)  # Result — the created row, or the Err arm
+        # item = result.unwrap()
+        # return {{ class_name }}Type(id=str(item["id"]), ...)
         return {{ class_name }}Type(
             id=strawberry.ID("1"),
             {% for field in fields[:3] %}
@@ -252,10 +261,16 @@ class Mutation:
             input: The updated data.
 
         Returns:
-            The updated {{ resource_name }} or None if not found.
+            The updated {{ resource_name }}; ``None`` on the Err arm
+            (absence answers as GraphQL ``null``).
         """
         # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
         # @TODO: Implement with service
+        # Example:
+        # service = info.context["service"]
+        # result = await service.update(id, input.__dict__)  # Result
+        # item = result.to_optional()
+        # return {{ class_name }}Type(id=str(item["id"]), ...) if item is not None else None
         return None
 
     @strawberry.mutation(description="Delete {{ singular_name }} by ID")
@@ -271,13 +286,14 @@ class Mutation:
             id: The {{ singular_name }} ID.
 
         Returns:
-            True if deleted successfully.
+            True if deleted; the Err arm answers False.
         """
         # @INTENT: Resolve this field by delegating to the domain service in the GraphQL context.
         # @TODO: Implement with service
         # Example:
         # service = info.context["service"]
-        # return await service.delete(id)
+        # result = await service.delete(id)  # Result — absence is a value
+        # return result.is_ok()
         return True
 
 

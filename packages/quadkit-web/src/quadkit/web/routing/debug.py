@@ -4,9 +4,8 @@ import hmac
 import ipaddress
 from typing import TYPE_CHECKING, Any, cast
 
-from starlette.responses import JSONResponse
-
 from quadkit.logging import get_logger
+from quadkit.web.transport.responses import JSONResponse
 
 if TYPE_CHECKING:
     from quadkit.web.di.provider import WebProvider

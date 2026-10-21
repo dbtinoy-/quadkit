@@ -11,24 +11,30 @@ from quadkit.contracts.cli.generators import resolve_options
 CONTROLLER_OPS: tuple[str, ...] = ("create", "get", "list", "update", "delete")
 
 
-def _web_exceptions(ops: dict[str, bool]) -> list[str]:
-    """Return the web exception symbols the rendered controller needs.
+def _contract_errors(ops: dict[str, bool]) -> list[str]:
+    """Return the contracts exception symbols the rendered controller needs.
 
     Keeping the import list derived from the selected operations avoids
     emitting unused imports (and the lint failures that follow) when a
-    controller is generated with a reduced operation set.
+    controller is generated with a reduced operation set. Handlers return
+    ``Result[T, E]`` over these domain errors (Convention: Result +
+    ProblemDetail); ``DomainError`` is the base of the controller's
+    request-shape error, ``NotFoundError`` the missing-row error.
 
     Args:
         ops: Resolved per-operation render flags.
 
     Returns:
         Sorted-by-declaration exception names to import from
-        ``quadkit.web.exceptions``; empty when none are required.
+        ``quadkit.contracts.exceptions``; empty when none are required.
     """
     needed: list[str] = []
     if ops["create"] or ops["update"]:
-        needed.append("BadRequestError")
-    if ops["get"] or ops["update"] or ops["delete"]:
+        needed.append("DomainError")
+    if ops["list"] or ops["get"] or ops["update"] or ops["delete"]:
+        # list signs its envelope Result[..., NotFoundError] too (2026-10-21,
+        # owner): one return shape per controller, and a future failing arm
+        # lands where the type already points.
         needed.append("NotFoundError")
     return needed
 
@@ -75,7 +81,10 @@ class ControllerGenerator(GeneratorBase):
                 "ops": selected_ops,
                 "ops_enabled": [op for op in CONTROLLER_OPS if selected_ops[op]],
                 "write_ops": bool(selected_ops["create"] or selected_ops["update"]),
-                "web_exceptions": _web_exceptions(selected_ops),
+                "contract_errors": _contract_errors(selected_ops),
+                # 2026-10-21 (owner): including `list` — every HTTP verb is
+                # Result-shaped, so every controller imports the toolkit.
+                "needs_result": any(selected_ops.values()),
                 # Sibling component packages differ by project structure:
                 # ``repositories`` in structured layouts, ``app.repositories``
                 # in minimal ones, ``app.modules.<feature>.repositories`` in

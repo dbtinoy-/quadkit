@@ -44,21 +44,50 @@ class SessionProvider(Provider):
     async def register(self, container: ContainerRegistrarProtocol) -> None:
         """Register :class:`SessionManagerImpl` as a singleton.
 
+        The manager is built through a factory so an application can bind
+        its own :class:`~quadkit.auth.storage.session_store.SessionStore`
+        — a SQL or Redis backend — and have it picked up here. The store is
+        resolved at first use rather than at registration time, because a
+        host application's providers may register after this one; the same
+        deferral :class:`~quadkit.auth.di.sub_providers.mfa_provider.MFAProvider`
+        uses for ``UserStoreProtocol``.
+
+        Without a bound store the manager falls back to
+        :class:`~quadkit.auth.storage.in_memory_stores.InMemorySessionStore`,
+        which does not survive a restart and cannot be shared between
+        workers — right for development, wrong for a deployment.
+
         Args:
             container: The DI container registrar.
         """
         max_sessions: int | None = None
-        session_store: SessionStore = InMemorySessionStore()
 
         if self._config is not None:
             max_sessions = getattr(self._config, "max_sessions_per_user", None)
 
-        session_manager = SessionManagerImpl(
-            session_store=session_store,
-            max_sessions_per_user=max_sessions,
-        )
-        container.singleton(SessionManagerImpl, session_manager)
-        container.singleton(AuthSessionManagerProtocol, session_manager)
+        # One manager behind both bindings: two factories would build two
+        # managers, and a session created through one would be invisible
+        # to the other.
+        built: dict[str, SessionManagerImpl] = {}
+
+        async def build_session_manager(resolver: Any) -> SessionManagerImpl:
+            from quadkit.auth.storage.session_store import SessionStore as _SessionStore
+
+            if "manager" in built:
+                return built["manager"]
+            session_store: SessionStore | None = None
+            resolve_optional = getattr(resolver, "resolve_optional", None)
+            if callable(resolve_optional):
+                session_store = await resolve_optional(_SessionStore)
+            manager = SessionManagerImpl(
+                session_store=session_store or InMemorySessionStore(),
+                max_sessions_per_user=max_sessions,
+            )
+            built["manager"] = manager
+            return manager
+
+        container.singleton(SessionManagerImpl, factory=build_session_manager)
+        container.singleton(AuthSessionManagerProtocol, factory=build_session_manager)
         logger.debug(
             "session_provider.registered",
             max_sessions_per_user=max_sessions

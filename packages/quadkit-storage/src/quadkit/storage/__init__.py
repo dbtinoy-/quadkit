@@ -113,7 +113,35 @@ def __getattr__(name: str) -> Any:
 
 
 def __dir__() -> list[str]:
-    return [*list(_LAZY_IMPORTS.keys()), "__version__"]
+    return [*_LAZY_IMPORTS, "__version__"]
 
 
-__all__ = [*list(_LAZY_IMPORTS.keys()), "__version__"]
+# Written out rather than derived from ``_LAZY_IMPORTS``. A computed
+# ``__all__`` is invisible to a type checker: under ``no_implicit_reexport``
+# every consumer of ``from quadkit.storage import LocalDriver`` is told the
+# attribute is not exported, and the only workarounds available to them are
+# a per-module error suppression or an import of the private backend path —
+# both of which couple application code to this package's internals.
+# ``test_public_api.py`` asserts this list stays equal to the lazy map, so
+# the two cannot drift.
+__all__ = [
+    "AzureDriver",
+    "BlobStoreProtocol",
+    "FileDeletedEvent",
+    "FileDownloadedEvent",
+    "FileInfo",
+    "FileUploadedEvent",
+    "GCSDriver",
+    "LocalDriver",
+    "MemoryDriver",
+    "NamedStorageConfig",
+    "ObjectDeletedHook",
+    "ObjectStoredHook",
+    "S3Driver",
+    "StorageConfig",
+    "StorageModule",
+    "StorageProvider",
+    "UploadOptions",
+    "Uploadable",
+    "__version__",
+]

@@ -17,7 +17,7 @@ import html
 import linecache
 import sys
 import traceback
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from quadkit.web.errors.html_page_templates import (
     _h,
@@ -25,9 +25,7 @@ from quadkit.web.errors.html_page_templates import (
     _render_frames,
     _render_kv,
 )
-
-if TYPE_CHECKING:
-    from starlette.responses import HTMLResponse
+from quadkit.web.transport.responses import HTMLResponse
 
 _STATUS_LABELS: dict[int, str] = {
     400: "Bad Request",
@@ -199,8 +197,6 @@ class DebugHtmlErrorRenderer:
         Returns:
             An ``HTMLResponse`` with full debug information.
         """
-        from starlette.responses import HTMLResponse
-
         status_label = _STATUS_LABELS.get(status_code, "Error")
         exc_type = type(exc).__name__
         exc_msg = html.escape(str(exc)) if str(exc) else "(no message)"

@@ -270,10 +270,14 @@ def register_middleware_registries(
 
     middleware_registry = MiddlewareRegistry()
     middleware_registry.register_middleware(DIScopeMiddleware)
-    for middleware_cls in provider.middleware:
-        cls = (
-            middleware_cls if isinstance(middleware_cls, type) else type(middleware_cls)
-        )
+    for entry in provider.middleware:
+        # Starlette-style ``(cls, kwargs)`` entries must be unwrapped to the
+        # class they name. Taking ``type(entry)`` registered all of them as
+        # ``tuple``, so the registry's duplicate check collapsed the whole
+        # user stack into a single entry and the admin view of "the active
+        # middleware pipeline" showed one middleware where the app runs many.
+        candidate = entry[0] if isinstance(entry, tuple) and entry else entry
+        cls = candidate if isinstance(candidate, type) else type(candidate)
         middleware_registry.register_middleware(cls)
     container.singleton(MiddlewareRegistry, middleware_registry)
     container.singleton(

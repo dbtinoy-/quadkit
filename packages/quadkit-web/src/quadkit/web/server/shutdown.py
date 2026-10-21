@@ -74,7 +74,7 @@ class GracefulShutdownManager:
 
     async def serve_503_during_drain(self, request: Any) -> Any:
         """Return a 503 response during drain period."""
-        from starlette.responses import JSONResponse
+        from quadkit.web.transport.responses import JSONResponse
 
         return JSONResponse(
             content={

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-monitor"
-version = "0.0.44"
+version = "0.0.45"
 description = "Monitoring and observability for Quadkit Framework - Health checks, metrics, and system monitoring"
 readme = "README.md"
 requires-python = ">=3.11"

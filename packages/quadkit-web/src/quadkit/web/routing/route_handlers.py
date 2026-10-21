@@ -64,7 +64,8 @@ def _wrap_script_handler(fn: Callable[..., Any]) -> Callable[..., Any]:
     Return values: dict/list → JSONResponse, None → 204, (body, status) tuple
     """
     from starlette.requests import Request
-    from starlette.responses import JSONResponse, Response
+
+    from quadkit.web.transport.responses import JSONResponse, Response
 
     sig = inspect.signature(fn)
     params = list(sig.parameters.values())

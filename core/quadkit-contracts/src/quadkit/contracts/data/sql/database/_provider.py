@@ -76,9 +76,18 @@ class DatabaseProviderProtocol(Protocol):
     ) -> QueryResult:
         """Execute a SELECT query.
 
+        A statement that returns no rows (DDL, ``PRAGMA``, a data-modifying
+        statement without ``RETURNING``) is not an error: it succeeds with an
+        empty row list. The framework's stores issue ``CREATE TABLE IF NOT
+        EXISTS`` through this method when they provision their own table, and
+        an implementation that treats "no result set" as failure makes that
+        provisioning unusable.
+
         Args:
             sql: SQL query string.
-            params: Query parameters.
+            params: Query parameters. JSON-shaped values (``dict``/``list``)
+                are encoded for binding — see
+                :func:`~quadkit.contracts.data.sql.database.encode_bind_value`.
             **kwargs: Additional options.
 
         Returns:
@@ -93,6 +102,12 @@ class DatabaseProviderProtocol(Protocol):
         **kwargs: Any,
     ) -> InsertResult:
         """Execute an INSERT operation.
+
+        JSON-shaped values in *data* (``dict``/``list``) are encoded to JSON
+        text before binding, matching the ``JSONB``/``TEXT`` columns the
+        framework's stores declare. Relational drivers cannot bind a Python
+        container, so an implementation that passes one through fails at the
+        driver — silently, when the caller does not inspect ``success``.
 
         Args:
             table: Table name.
@@ -114,6 +129,9 @@ class DatabaseProviderProtocol(Protocol):
     ) -> UpdateResult:
         """Execute an UPDATE operation.
 
+        JSON-shaped values in *data* and *where_params* are encoded for
+        binding, as in :meth:`execute_insert`.
+
         Args:
             table: Table name.
             data: Column-value updates.
@@ -134,6 +152,9 @@ class DatabaseProviderProtocol(Protocol):
         **kwargs: Any,
     ) -> DeleteResult:
         """Execute a DELETE operation.
+
+        JSON-shaped values in *where_params* are encoded for binding, as in
+        :meth:`execute_insert`.
 
         Args:
             table: Table name.

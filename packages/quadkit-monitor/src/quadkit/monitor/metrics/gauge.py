@@ -4,6 +4,7 @@ from collections import deque
 import time
 
 from quadkit.contracts.observability.metrics import MetricProtocol
+from quadkit.monitor.metrics.series import SeriesKey, series_key
 from quadkit.monitor.types import MetricValue
 
 MAX_METRIC_VALUES = 10_000
@@ -23,6 +24,7 @@ class Gauge(MetricProtocol):
         self.labels = labels or {}
         self._values: deque[MetricValue] = deque(maxlen=MAX_METRIC_VALUES)
         self._value = 0.0
+        self._series: dict[SeriesKey, float] = {}
 
     @property
     def name(self) -> str:
@@ -42,6 +44,7 @@ class Gauge(MetricProtocol):
         self._values.append(
             MetricValue(self.name, self._value, combined_labels, time.time()),
         )
+        self._series[series_key(combined_labels)] = self._value
 
     def set(self, value: float, labels: dict[str, str] | None = None) -> None:
         """Alias for :meth:`record` — delegates to the canonical implementation."""
@@ -66,7 +69,17 @@ class Gauge(MetricProtocol):
     def get_value(self) -> float:
         return self._value
 
+    def get_series(self) -> dict[SeriesKey, float]:
+        """Return the latest value of every label set recorded so far.
+
+        Returns:
+            Mapping of canonical label key (sorted ``(name, value)`` pairs)
+            to the most recent value recorded under that label set.
+        """
+        return dict(self._series)
+
     def reset(self) -> None:
         """Reset the gauge to zero and clear the observation history."""
         self._value = 0.0
         self._values.clear()
+        self._series.clear()

@@ -48,7 +48,7 @@ class AbstractSnapshotStore(ABC):
         snapshot = await store.get_latest("order-123")
         if snapshot:
             order = Order.from_snapshot(snapshot.state)
-            events = await event_store.read("order-123", start=snapshot.version)
+            events = await event_store.read("order-123", from_version=snapshot.version)
     """
 
     # M-14: accept a Snapshot object (preferred API)

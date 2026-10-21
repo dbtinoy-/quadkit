@@ -20,10 +20,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol, runtime_checkable
 
-from starlette.responses import JSONResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
 from quadkit.logging import get_logger
+from quadkit.web.transport.responses import JSONResponse
 
 logger = get_logger(__name__)
 

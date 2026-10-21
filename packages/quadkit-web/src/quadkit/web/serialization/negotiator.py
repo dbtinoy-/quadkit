@@ -14,7 +14,7 @@ from quadkit.web.serialization.serializers import (
 
 if TYPE_CHECKING:
     from starlette.requests import Request as StarletteRequest
-    from starlette.responses import Response
+    from starlette.responses import Response as StarletteResponse
 
 
 class ContentNegotiator:
@@ -111,7 +111,7 @@ class ContentNegotiator:
         self,
         data: Any,
         request: StarletteRequest,
-    ) -> Response:
+    ) -> StarletteResponse:
         """Serialize data based on Accept header."""
         serializer = self.negotiate(request)
         return await serializer.serialize(data, request)

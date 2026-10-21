@@ -43,9 +43,7 @@ class HttpSideProvider(Provider):
 
     async def register(self, container: ContainerRegistrarProtocol) -> None:
         config = (
-            self.config
-            if isinstance(self.config, HttpSideConfig)
-            else HttpSideConfig()
+            self.config if isinstance(self.config, HttpSideConfig) else HttpSideConfig()
         )
         container.singleton(HttpSideConfig, config)
         container.singleton(UpstreamController, UpstreamController)

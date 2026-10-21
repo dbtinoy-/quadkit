@@ -178,10 +178,10 @@ vulnerabilities privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/
 
 ## Stability
 
-Version `0.0.44` in the `0.x` series, released in lockstep with the
+Version `0.0.45` in the `0.x` series, released in lockstep with the
 other four distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-testing==0.0.44`) or a tight range
-(`>=0.0.44,<0.1.0`). Full policy:
+1.0 — pin an exact version (`quadkit-testing==0.0.45`) or a tight range
+(`>=0.0.45,<0.1.0`). Full policy:
 [stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
 
 ## Links

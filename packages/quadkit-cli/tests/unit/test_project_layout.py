@@ -21,9 +21,7 @@ from typer.testing import CliRunner
 from quadkit.cli.commands.new import app as new_app
 from quadkit.cli.scaffold import render_project, template_names
 
-_TEMPLATES = tuple(
-    name for name in ("api", "web-api", "full") if name in template_names()
-)
+_TEMPLATES = tuple(template_names())
 
 
 @pytest.fixture
@@ -44,7 +42,7 @@ class TestScaffoldedTree:
                 "project",
                 "my-app",
                 "--template",
-                "web-api",
+                "api",
                 "--directory",
                 str(temp_dir),
             ],
@@ -67,7 +65,7 @@ class TestScaffoldedTree:
                 "project",
                 "my-app",
                 "--template",
-                "web-api",
+                "api",
                 "--directory",
                 str(temp_dir),
             ],
@@ -113,7 +111,7 @@ class TestScaffoldedTree:
                 "project",
                 "my-app",
                 "--template",
-                "web-api",
+                "api",
                 "--directory",
                 str(temp_dir),
             ],
@@ -170,8 +168,8 @@ class TestScaffoldedTree:
 
 @pytest.fixture
 def project(temp_dir: Path) -> Path:
-    """A rendered web-api project."""
-    render_project("web-api", "my-platform", Path(temp_dir) / "my-platform")
+    """A rendered api project."""
+    render_project("api", "my-platform", Path(temp_dir) / "my-platform")
     return Path(temp_dir) / "my-platform"
 
 

@@ -1,6 +1,9 @@
 """{{ guard_name }} authentication guard.
 
-Generated scaffold — implement the credential check below.
+Answers 'who is calling': extracts the credential from the request
+headers and turns it into a principal. (Whether they *may* is the
+policy layer's question.) Implement :meth:`authenticate` against
+your identity provider.
 """
 
 from __future__ import annotations

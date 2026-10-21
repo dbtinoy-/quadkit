@@ -298,30 +298,30 @@ class ObjectMapperImpl:
             A new instance of *dest_type*.
 
         Raises:
-            MappingExecutionError: If validation fails or strict mode is enabled
-                and required fields are missing.
+            MappingExecutionError: If validation fails, if ``config.strict`` is
+                enabled and required fields are missing, or if
+                ``config.ignore_unknown`` is disabled and the source carries a
+                field the destination does not declare.
         """
         source_data = _extract_fields(source)
-
-        # Pydantic v2 models report their typed fields via model_fields, not
-        # via __init__ type hints (which only expose the synthetic *data* param).
-        if hasattr(dest_type, "model_fields"):
-            hints = {
-                name: field.annotation
-                for name, field in dest_type.model_fields.items()  # type: ignore[attr-defined]
-            }
-        else:
-            hints = get_type_hints(dest_type.__init__)
-            hints.pop("return", None)
+        hints = _destination_field_types(dest_type)
+        lookup = _field_lookup(hints, case_sensitive=self._config.case_sensitive)
 
         # perform a deep/nested mapping: if a field value itself appears to be
         # an object and the destination field type is a class with a registered
         # mapping, the mapper will be invoked recursively.
         matched: dict[str, Any] = {}
+        unknown: list[str] = []
         for k, v in source_data.items():
-            if k not in hints:
+            if k.startswith("_"):
+                # Private bookkeeping (SQLAlchemy's `_sa_instance_state`,
+                # dataclass internals) is never a mapped field.
                 continue
-            dest_hint = hints[k]
+            dest_name = lookup.get(k if self._config.case_sensitive else k.lower())
+            if dest_name is None:
+                unknown.append(k)
+                continue
+            dest_hint = hints[dest_name]
             # unwrap Annotated if needed
             if get_origin(dest_hint) is Annotated:
                 dest_hint = get_args(dest_hint)[0]
@@ -332,13 +332,14 @@ class ObjectMapperImpl:
             # if a direct mapping is registered for the value's type → dest_hint,
             # use it. this handles both simple and recursive mappings.
             if self._registry.has(type(value), dest_hint):
-                matched[k] = self.map(value, dest_hint)
+                matched[dest_name] = self.map(value, dest_hint)
                 continue
 
             # otherwise, attempt a shallow recursive auto-map for nested objects
             # when the destination hint appears to be a dataclass or similar.
             if (
                 value is not None
+                and dest_hint is not Any
                 and isinstance(dest_hint, type)
                 and not isinstance(value, dest_hint)
                 and hasattr(dest_hint, "__dataclass_fields__")
@@ -348,7 +349,15 @@ class ObjectMapperImpl:
                 except Exception as exc:  # noqa: BLE001  # pragma: no cover - best effort
                     logger.debug("auto_map_type_conversion_failed", error=str(exc))
 
-            matched[k] = value
+            matched[dest_name] = value
+
+        # `ignore_unknown=False` turns a shape mismatch into a failure: silently
+        # dropping the field is how a rename on one side of the mapping goes
+        # unnoticed until the value is missing in production.
+        if unknown and not self._config.ignore_unknown:
+            raise MappingExecutionError(
+                f"Source fields not declared by {dest_type.__name__}: {sorted(unknown)}"
+            )
 
         # Strict mode: check for missing required fields
         if self._config.strict:
@@ -441,16 +450,87 @@ class ObjectMapperImpl:
     def map_or_auto(self, source: S, dest_type: type[D]) -> D:
         """Use a registered mapping if available, otherwise auto-map.
 
+        ``MappingConfig.auto_map`` decides whether the fallback is allowed: with
+        ``auto_map=False`` an unregistered pair raises ``MappingNotFoundError``
+        like :meth:`map` does, so a misspelled pair fails loudly instead of
+        shape-matching a destination that happens to share field names.
+
         Args:
             source: The source object.
             dest_type: The target type.
 
         Returns:
             A new instance of *dest_type*.
+
+        Raises:
+            MappingNotFoundError: If no mapping is registered and
+                ``config.auto_map`` is disabled.
         """
         if self._registry.has(type(source), dest_type):
             return self.map(source, dest_type)
+        if not self._config.auto_map:
+            from quadkit.mapping.exceptions import MappingNotFoundError
+
+            raise MappingNotFoundError(type(source), dest_type)
         return self.auto_map(source, dest_type)
+
+
+def _field_lookup(hints: dict[str, Any], *, case_sensitive: bool) -> dict[str, str]:
+    """Return a source-key → destination-field-name index.
+
+    Args:
+        hints: Destination field name → declared type.
+        case_sensitive: Whether ``Name`` and ``name`` are the same field.
+
+    Returns:
+        The lookup table. In case-sensitive mode it maps each name to itself.
+    """
+    return (
+        {name: name for name in hints}
+        if case_sensitive
+        else {name.lower(): name for name in hints}
+    )
+
+
+def _destination_field_types(dest_type: type[Any]) -> dict[str, Any]:
+    """Return the declared field types of a mapping destination.
+
+    Three destination shapes have to be recognised:
+
+    * a Pydantic v2 model, which reports its typed fields via ``model_fields``
+      (its ``__init__`` only exposes the synthetic ``*data*`` parameter);
+    * a ``@dataclass`` — including ``quadkit.domain.DomainModel`` — whose
+      generated ``__init__`` carries the class's annotations as *strings* under
+      ``from __future__ import annotations``. Evaluating them with
+      ``get_type_hints(dest_type.__init__)`` raises ``NameError`` for the
+      ``TYPE_CHECKING`` import style, and the mapping then fails before it
+      starts. ``resolve_type_hints`` is the resolver that survives it — the same
+      one the coercion engine uses, because the two must agree on what a field
+      is;
+    * any other class, where ``__init__`` annotations are the only hints
+      available.
+
+    Args:
+        dest_type: The destination type of a mapping.
+
+    Returns:
+        A mapping of field name → declared type. Empty when nothing can be
+        resolved, which leaves construction to the destination itself.
+    """
+    model_fields = getattr(dest_type, "model_fields", None)
+    if model_fields is not None:
+        return {name: field.annotation for name, field in model_fields.items()}
+
+    if dataclasses.is_dataclass(dest_type):
+        from quadkit.primitives.typing import resolve_type_hints
+
+        declared = resolve_type_hints(dest_type)
+        names = [f.name for f in dataclasses.fields(dest_type)]
+        return {name: declared.get(name, Any) for name in names}
+
+    hints = get_type_hints(dest_type.__init__)
+    hints.pop("return", None)
+    return hints
 
 
 def _extract_fields(obj: Any) -> dict[str, Any]:

@@ -7,7 +7,9 @@ from typing import Any
 from quadkit.contracts.events import (
     CommandBusProtocol,
     EventBusProtocol,
+    EventStoreProtocol,
     QueryBusProtocol,
+    SnapshotStoreProtocol,
 )
 from quadkit.di.module import DynamicModule, Module, module
 
@@ -72,6 +74,16 @@ class EventsModule(Module):
                 EventBusProtocol,
                 CommandBusProtocol,
                 QueryBusProtocol,
+                # The store protocols come from the same provider but are
+                # consumed outside it: the admin contributor's live-events
+                # widget resolves `EventStoreProtocol`, projections read
+                # snapshots, and a feature module that appends to the stream
+                # needs the log too. Leaving them out of the export list made
+                # a consumer fail with QK_ERR_MOD_005 while the provider had
+                # the instance registered — the module advertised the bus but
+                # not the log it appends to.
+                EventStoreProtocol,
+                SnapshotStoreProtocol,
                 ProjectionManager,
                 SagaManagerProtocol,
                 EventsAdminContributor,
@@ -141,7 +153,13 @@ class EventsModule(Module):
         return DynamicModule(
             module=cls,
             providers=[EventsProvider()],
-            exports=[EventBusProtocol, CommandBusProtocol, QueryBusProtocol],
+            exports=[
+                EventBusProtocol,
+                CommandBusProtocol,
+                QueryBusProtocol,
+                EventStoreProtocol,
+                SnapshotStoreProtocol,
+            ],
         )
 
 

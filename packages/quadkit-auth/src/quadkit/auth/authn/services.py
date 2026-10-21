@@ -13,6 +13,7 @@ from quadkit.auth.authn.security import (
     PasswordPolicy,
 )
 from quadkit.auth.events import (
+    PasswordChanged,
     UserLockedOut,
     UserLoggedIn,
     UserLoginFailed,
@@ -353,6 +354,71 @@ class AuthenticationService:
         if self._activity_tracker is not None:
             self._activity_tracker.record_failed_login()
         return Err(InvalidCredentialsError())
+
+    async def change_user_password(
+        self,
+        user_id: str,
+        current_password: str,
+        new_password: str,
+    ) -> Result[None, InvalidCredentialsError | PasswordPolicyError]:
+        """Change a user's password after verifying the current password.
+
+        This lives on ``AuthenticationService`` so applications that use the
+        provider's composed password hasher keep the same Argon2id-default plus
+        bcrypt-legacy behaviour for both login and password changes.
+        """
+        from quadkit.result import Err, Ok
+
+        user = await self.user_store.get_user_by_id(user_id)
+        creds = await self.user_store.get_credentials(user_id) if user else None
+        if (
+            not user
+            or not user.is_active
+            or not creds
+            or not creds.hashed_password
+            or not await self._password_hasher.verify(
+                current_password, creds.hashed_password
+            )
+        ):
+            return Err(InvalidCredentialsError("Current password is incorrect"))
+
+        try:
+            self.password_policy.validate(new_password)
+        except ValueError as exc:
+            return Err(PasswordPolicyError(str(exc)))
+
+        if getattr(self.password_policy, "prevent_reuse", False):
+            history_size = getattr(self.password_policy, "history_size", 5)
+            recent_hashes = [
+                value
+                for value in [creds.hashed_password, *creds.previous_hashes]
+                if value
+            ]
+            for old_hash in recent_hashes[: history_size + 1]:
+                if await self._password_hasher.verify(new_password, old_hash):
+                    return Err(
+                        PasswordPolicyError(
+                            "New password must not match recent passwords"
+                        )
+                    )
+
+        new_hash = await self._password_hasher.hash(new_password)
+        previous_hashes = (
+            [creds.hashed_password, *creds.previous_hashes]
+            if creds.hashed_password
+            else list(creds.previous_hashes)
+        )
+        history_size = getattr(self.password_policy, "history_size", 5)
+        previous_hashes = [value for value in previous_hashes if value][:history_size]
+        await self.user_store.update_credentials(
+            UserCredentials(
+                user_id=user_id,
+                hashed_password=new_hash,
+                previous_hashes=previous_hashes,
+            )
+        )
+        self._emit(PasswordChanged(user_id=user_id))
+        return Ok(None)
 
     async def _rehash_password_if_needed(
         self,

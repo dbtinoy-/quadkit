@@ -26,8 +26,9 @@ class CSRFConfig(BaseConfig):
         token_length: Length of the generated CSRF token in bytes.
         token_ttl: Lifetime in seconds for synchronizer-mode tokens stored in cache.
         excluded_paths: URL path prefixes exempt from CSRF validation for
-            cookie-less requests; cookie-bearing requests on these paths are
-            still validated.
+            requests that do not carry the CSRF cookie; requests that do carry
+            it are still validated. Unrelated cookies do not disable the
+            exemption.
         exclude_content_types: ``Content-Type`` values that bypass CSRF validation.
         exclude_auth_schemes: Authorization header schemes that bypass CSRF validation.
         secret_key: HMAC secret used to sign and verify CSRF tokens.
@@ -54,8 +55,10 @@ class CSRFConfig(BaseConfig):
     )
     excluded_paths: list[str] = Field(
         default_factory=list,
-        description="URL path prefixes exempt from CSRF validation for cookie-less "
-        "requests; cookie-bearing requests on these paths are still validated.",
+        description="URL path prefixes exempt from CSRF validation for requests "
+        "that do not carry the CSRF cookie; requests carrying it are still "
+        "validated. Unrelated cookies (session, affinity, …) do not disable the "
+        "exemption.",
     )
     exclude_content_types: list[str] = Field(
         default_factory=list,

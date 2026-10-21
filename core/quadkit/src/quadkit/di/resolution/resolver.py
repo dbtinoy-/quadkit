@@ -187,6 +187,26 @@ class ServiceResolver:
 
             return instance
 
+    async def resolve_optional(self, service_type: Any) -> Any | None:
+        """Resolve a service, returning ``None`` when it is not registered.
+
+        ``ContainerResolverProtocol`` has declared this method all along, and
+        the container implements it, but the resolver handed to provider
+        factories did not: a provider asking for an optional dependency had to
+        pair ``has()`` with ``resolve()`` and hope nothing moved in between.
+        Absent means absent — a registered service whose construction raises
+        still raises.
+
+        Args:
+            service_type: The type to resolve.
+
+        Returns:
+            The resolved instance, or ``None`` when nothing is registered for it.
+        """
+        if not self.can_resolve(service_type):
+            return None
+        return await self.resolve(service_type)
+
     async def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
         """Create a service instance from its descriptor."""
         impl = descriptor.implementation

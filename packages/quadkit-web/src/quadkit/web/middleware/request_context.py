@@ -24,7 +24,7 @@ from quadkit.primitives.context import (
     create_default_context,
 )
 from quadkit.web.middleware._headers import get_header, sanitize_request_id
-from quadkit.web.middleware.tracing import load_trace_to_context
+from quadkit.web.middleware.tracing import inject_traceparent, load_trace_to_context
 
 
 class RequestContextMiddleware:
@@ -99,6 +99,14 @@ class RequestContextMiddleware:
             if message["type"] == "http.response.start":
                 msg_headers = list(message.get("headers", []))
                 msg_headers.append((self.header_name, request_id.encode()))
+                # Tracing propagation is two-way: the inbound ``traceparent``
+                # was loaded into the request context (and the context minted a
+                # server span for it) above. Without echoing ours back, a caller
+                # cannot correlate its spans with ours — and the tracing
+                # utility that renders the header had no caller at all.
+                traceparent = inject_traceparent()
+                if traceparent:
+                    msg_headers.append((b"traceparent", traceparent.encode()))
                 message["headers"] = msg_headers
             await send(message)
 

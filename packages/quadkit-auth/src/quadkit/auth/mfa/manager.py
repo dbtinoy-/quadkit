@@ -13,7 +13,7 @@ from __future__ import annotations
 import dataclasses
 import hashlib
 import secrets
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Protocol
 
 from quadkit.auth.authn.mfa import (
     generate_backup_codes,
@@ -33,6 +33,31 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 
+class PendingSetupStore(Protocol):
+    """Where a staged TOTP enrollment lives between setup and completion.
+
+    The default is a dict on the manager, which is correct for a single
+    process and wrong the moment a second worker exists: the browser that
+    started enrollment on worker A completes it on worker B and is told
+    its setup token is unknown. An application that runs more than one
+    worker supplies a shared implementation — SQL, Redis — and the staged
+    secret survives the hop.
+    """
+
+    async def save(self, token: str, payload: dict[str, Any], expires_at: int) -> None:
+        """Persist a staged enrollment under *token*."""
+        ...
+
+    async def pop(self, token: str) -> dict[str, Any] | None:
+        """Return and delete the staged enrollment, or ``None``.
+
+        Single-use: an implementation must delete the record even when the
+        caller goes on to reject the code, so a staged secret cannot be
+        used as a window to brute-force the authenticator.
+        """
+        ...
+
+
 @inject
 class MFAManager:
     """Manages Multi-Factor Authentication (TOTP + backup codes) for users.
@@ -50,6 +75,7 @@ class MFAManager:
         self,
         user_store: UserStoreProtocol,
         config: MFAConfig | None = None,
+        pending_store: PendingSetupStore | None = None,
     ) -> None:
         self.user_store = user_store
         from quadkit.auth.config import MFAConfig as _MFAConfig
@@ -61,6 +87,7 @@ class MFAManager:
         # deployments that need cross-worker enrollment should wrap the manager
         # with a shared UserStore/cache implementation.
         self._pending_setups: dict[str, dict[str, Any]] = {}
+        self._pending_store = pending_store
 
     def _prune_pending_setups(self, now: int | None = None) -> None:
         """Remove expired staged enrollment records."""
@@ -106,13 +133,17 @@ class MFAManager:
         )
         setup_token = secrets.token_urlsafe(32)
         expires_at = int(ambient_clock.timestamp()) + max(30, int(ttl_seconds))
-        self._pending_setups[setup_token] = {
+        pending = {
             "user_id": user_id,
             "secret": secret,
             "backup_codes": backup_codes,
             "backup_hashes": hash_backup_codes(backup_codes),
             "expires_at": expires_at,
         }
+        if self._pending_store is not None:
+            await self._pending_store.save(setup_token, pending, expires_at)
+        else:
+            self._pending_setups[setup_token] = pending
         return {
             "setup_token": setup_token,
             "secret": secret,
@@ -134,11 +165,16 @@ class MFAManager:
         incorrect.  The setup token is consumed on every completion attempt
         so failed flows cannot be brute-forced indefinitely.
         """
-        self._prune_pending_setups()
-        pending = self._pending_setups.pop(str(setup_token), None)
+        if self._pending_store is not None:
+            pending = await self._pending_store.pop(str(setup_token))
+        else:
+            self._prune_pending_setups()
+            pending = self._pending_setups.pop(str(setup_token), None)
         if not pending or pending.get("user_id") != user_id:
             return None
-        if not verify_totp(str(pending["secret"]), str(code), window=self.config.totp.valid_window):
+        if not verify_totp(
+            str(pending["secret"]), str(code), window=self.config.totp.valid_window
+        ):
             return None
 
         user = await self.user_store.get_user_by_id(user_id)

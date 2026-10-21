@@ -79,6 +79,7 @@ EXPECTED_MODULE_EXPORTS: dict[str, list[str]] = {
         "RawSQL",
         "ReadOnlyMapperProtocol",
         "SQLDialect",
+        "SchemaInitializableProtocol",
         "SchemaManagerProtocol",
         "TransactionManagerProtocol",
         "UnitOfWorkProtocol",
@@ -100,6 +101,9 @@ EXPECTED_MODULE_EXPORTS: dict[str, list[str]] = {
         "SchemaManagerProtocol",
         "TransactionManagerProtocol",
         "UpdateResult",
+        "encode_bind_value",
+        "encode_bind_values",
+        "provider_dialect",
     ],
     "quadkit.contracts.data.sql.query_log": [
         "QueryLogEntry",

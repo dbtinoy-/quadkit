@@ -7,17 +7,18 @@ over the defaults.
 
 from __future__ import annotations
 
-from quadkit import serialization as json
 from typing import Any
 
 import pytest
 
+from quadkit import serialization as json
 from quadkit.contracts.exceptions.domain import (
     NotFoundError,
     PermissionDeniedError,
     ValidationError,
 )
 from quadkit.web.routing.result_bridge import (
+    _ERROR_BODY_RENDERER_REGISTRY,
     _ERROR_STATUS_REGISTRY,
     ResultResponseMapper,
     error_status,
@@ -35,10 +36,13 @@ def _restore_registry() -> Any:
     This prevents custom registrations from leaking between tests since
     ``_ERROR_STATUS_REGISTRY`` is a module-level mutable list.
     """
-    snapshot = list(_ERROR_STATUS_REGISTRY)
+    status_snapshot = list(_ERROR_STATUS_REGISTRY)
+    renderer_snapshot = dict(_ERROR_BODY_RENDERER_REGISTRY)
     yield
     _ERROR_STATUS_REGISTRY.clear()
-    _ERROR_STATUS_REGISTRY.extend(snapshot)
+    _ERROR_STATUS_REGISTRY.extend(status_snapshot)
+    _ERROR_BODY_RENDERER_REGISTRY.clear()
+    _ERROR_BODY_RENDERER_REGISTRY.update(renderer_snapshot)
 
 
 # ---------------------------------------------------------------------------
@@ -48,6 +52,18 @@ def _restore_registry() -> Any:
 
 class _PaymentDeclinedError(Exception):
     """Fictitious domain error used only in these tests."""
+
+
+class _BaseRenderedError(Exception):
+    """Base class used to pin renderer specificity."""
+
+    status_code = 409
+
+
+class _SpecificRenderedError(_BaseRenderedError):
+    """Specific error whose renderer must win over its base class."""
+
+    status_code = 418
 
 
 # ---------------------------------------------------------------------------
@@ -172,3 +188,39 @@ class TestResultResponseMapperCustomRegistration:
         errors = body["errors"]
         assert len(errors) == 1
         assert errors[0]["field"] == "email"
+
+    def test_nearest_registered_body_renderer_wins_and_receives_request(self) -> None:
+        """An app renderer overrides RFC 7807 and a subclass beats its base."""
+        calls: list[str] = []
+        request = object()
+
+        def render_specific(
+            error: Exception, status: int, context: Any | None
+        ) -> dict[str, Any]:
+            calls.append("specific")
+            assert isinstance(error, _SpecificRenderedError)
+            assert status == 418
+            assert context is request
+            return {"error": "specific renderer"}
+
+        def render_base(
+            error: Exception, status: int, context: Any | None
+        ) -> dict[str, Any]:
+            calls.append("base")
+            return {"error": "base renderer"}
+
+        # Registering the base last must not mask the more specific renderer.
+        ResultResponseMapper.register(
+            _SpecificRenderedError, 418, body_renderer=render_specific
+        )
+        ResultResponseMapper.register(
+            _BaseRenderedError, 409, body_renderer=render_base
+        )
+
+        response = ResultResponseMapper.error_to_response(
+            _SpecificRenderedError("specific failure"), request=request
+        )
+
+        assert response.status_code == 418
+        assert json.loads(response.body) == {"error": "specific renderer"}
+        assert calls == ["specific"]

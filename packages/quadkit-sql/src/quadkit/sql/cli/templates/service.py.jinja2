@@ -1,4 +1,12 @@
-"""{{ class_name }} service.
+"""Convention followed: **Service pattern** — domain logic behind a
+small class the provider binds; controllers call the service, never
+the provider. Writes commit through the unit of work, reads go
+straight through. Handlers that can fail on *expected* domain
+outcomes (a row that is not there) return ``Result[T, E]``
+(Convention: **Result + ProblemDetail**) instead of ``None``: the
+web layer's Result bridge renders ``Err(NotFoundError)`` as a
+404 RFC-9457 ``ProblemDetail``. Infra faults (a dead connection) stay
+on the throw path — they are not domain outcomes.
 
 Application service for {{ resource_name }} backed by the SQL unit of work.
 """
@@ -8,9 +16,14 @@ from __future__ import annotations
 from typing import Any
 
 from quadkit.contracts import DatabaseProviderProtocol
-from quadkit.logging import get_logger
+{% if not exceptions_first_party %}from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union != not_found_error %}, {{ service_error_union }}{% endif %}
+{% endif %}from quadkit.logging import get_logger
+from quadkit.result import Err, Ok, Result
 from quadkit.sql.unit_of_work import SimpleUnitOfWork
+{% if exceptions_first_party %}
 
+from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union != not_found_error %}, {{ service_error_union }}{% endif %}
+{% endif %}
 logger = get_logger(__name__)
 
 
@@ -42,41 +55,72 @@ class {{ class_name }}Service:
         """
         self._provider = provider
 
-    async def create(self, data: dict[str, Any]) -> dict[str, Any]:
+    async def create(
+        self, data: dict[str, Any]
+    ) -> Result[dict[str, Any], {{ service_error_union }}]:
         """Persist a new ``{{ table_name }}`` row.
 
         Args:
             data: Row values{% if fields %} (keys: {% for field in fields %}{{ field.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
 
         Returns:
-            The persisted row data.
+            ``Ok(row)`` — the persisted row data. Writes that cannot
+            legitimately fail still answer with the service's union so every
+            consumer chains: ``get(...).map(...)`` and
+            ``create(...).and_then(...)`` share one shape.
         """
         async with SimpleUnitOfWork(self._provider) as uow:
             uow.register_new({{ entity_class_name }}(**data))
             await uow.commit()
         logger.info("{{ snake_name }}_created", table="{{ table_name }}")
-        return data
+        return Ok(data)
 
-    async def get(self, entity_id: Any) -> dict[str, Any] | None:
+    async def get(
+        self, entity_id: Any
+    ) -> Result[dict[str, Any], {{ service_error_union }}]:
         """Fetch a ``{{ table_name }}`` row by primary key.
 
         Args:
             entity_id: Primary key value.
 
         Returns:
-            The row as a dict, or ``None`` when not found.
+            ``Ok(row)`` when the row exists, ``Err(...)`` when it
+            does not — absence is an expected outcome, so it travels as a
+            value, never as ``None``.
         """
         result = await self._provider.execute_query(
             "SELECT * FROM {{ table_name }} WHERE id = ?",
             params=[entity_id],
         )
-        return result.rows[0] if result.rows else None
+        if not result.rows:
+            return Err(
+                {{ not_found_error }}(f"{{ table_name }} row not found with id: {entity_id}")
+            )
+        return Ok(result.rows[0])
+
+    async def update(
+        self, entity_id: Any, data: dict[str, Any]
+    ) -> Result[dict[str, Any], {{ service_error_union }}]:
+        """Merge *data* into one ``{{ table_name }}`` row by primary key.
+
+        The row being gone is the same expected outcome as ``get`` — the
+        Err arm comes straight through — so the write happens only for a
+        row that answered ``Ok``.
+        """
+        existing = await self.get(entity_id)
+        if existing.is_err():
+            return Err(existing.unwrap_err())
+        async with SimpleUnitOfWork(self._provider) as uow:
+            uow.register_dirty({{ entity_class_name }}(id=entity_id, **data))
+            await uow.commit()
+        logger.info("{{ snake_name }}_updated", table="{{ table_name }}")
+        return Ok(data)
 
     async def list(
         self,
         limit: int = 100,
         offset: int = 0,
-    ) -> list[dict[str, Any]]:
+    ) -> Result[list[dict[str, Any]], {{ service_error_union }}]:
         """List ``{{ table_name }}`` rows with pagination.
 
         Args:
@@ -84,21 +128,32 @@ class {{ class_name }}Service:
             offset: Number of rows to skip.
 
         Returns:
-            The matching rows.
+            ``Ok(rows)``. An empty page is a value, and its uniform arm
+            keeps reads chainable with the outcome-bearing methods.
         """
         result = await self._provider.execute_query(
             "SELECT * FROM {{ table_name }} LIMIT ? OFFSET ?",
             params=[limit, offset],
         )
-        return result.rows
+        return Ok(result.rows)
 
-    async def delete(self, entity_id: Any) -> None:
+    async def delete(
+        self, entity_id: Any
+    ) -> Result[bool, {{ service_error_union }}]:
         """Delete a ``{{ table_name }}`` row by primary key.
+
+        The existence check travels as the ``Err`` arm: deleting a missing
+        row answers ``Err`` (the bridge renders 404), a real
+        delete answers ``Ok(True)``.
 
         Args:
             entity_id: Primary key value.
         """
+        existing = await self.get(entity_id)
+        if existing.is_err():
+            return Err(existing.unwrap_err())
         async with SimpleUnitOfWork(self._provider) as uow:
             uow.register_deleted({{ entity_class_name }}(id=entity_id))
             await uow.commit()
         logger.info("{{ snake_name }}_deleted", table="{{ table_name }}")
+        return Ok(True)

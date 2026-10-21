@@ -94,11 +94,14 @@ class TestScalarCoercion:
     def test_uuid_invalid_returns_original(self) -> None:
         assert coerce_field_value("u", "not-a-uuid", {"u": UUID}, None) == "not-a-uuid"
 
-    def test_id_field_uuid_heuristic(self) -> None:
+    def test_id_field_keeps_declared_type(self) -> None:
+        # A field named `id` used to be turned into a `UUID` whenever the string
+        # parsed as one, *even when the annotation said `str`* — so
+        # `Model.model_validate(row)["id"] == row["id"]` was False for every
+        # uuid4 id, and `install.plugin_id == plugin.id` compared a str to a
+        # UUID. The declared type wins now; `id: UUID` still coerces above.
         uid = "123e4567-e89b-12d3-a456-426614174000"
-        result = coerce_field_value("id", uid, {"id": str}, None)
-        assert isinstance(result, UUID)
-        # Non-UUID id strings pass through
+        assert coerce_field_value("id", uid, {"id": str}, None) == uid
         assert coerce_field_value("id", "plain-id", {"id": str}, None) == "plain-id"
 
     def test_datetime_from_iso(self) -> None:

@@ -8,24 +8,13 @@ import pytest
 
 from quadkit.contracts.events.protocols import (
     AggregateFactoryProtocol,
-    CommandBusProtocol,
-    CommandHandlerProtocol,
-    DomainEventPublisherProtocol,
-    EventBusProtocol,
-    EventHandlerProtocol,
-    EventMiddlewareProtocol,
     EventReplayProtocol,
     EventSourcedReadRepositoryProtocol,
     EventSourcedRepositoryProtocol,
     EventStoreProtocol,
-    IntegrationEventProtocol,
-    MultiEventHandlerProtocol,
     ProjectionProtocol,
     PubSubProtocol,
-    QueryBusProtocol,
-    QueryHandlerProtocol,
     SnapshotStoreProtocol,
-    WebhookSignatureVerifierProtocol,
 )
 
 
@@ -118,37 +107,72 @@ class TestEventReplayProtocol:
 
 
 class TestSnapshotStoreProtocol:
-    """Tests for SnapshotStoreProtocol."""
+    """Tests for SnapshotStoreProtocol.
+
+    The protocol describes the object API the framework's stores actually
+    expose (`save_snapshot`/`get_latest`/`get_by_version`/
+    `delete_old_snapshots`/`close`), so these tests exercise that shape: a
+    tuple-based store is *not* a ``SnapshotStoreProtocol``, which is what the
+    container's registration-time conformance check relies on.
+    """
 
     @pytest.mark.asyncio
-    async def test_has_save_method(self) -> None:
-        """Test protocol has save async method."""
+    async def test_has_save_snapshot_method(self) -> None:
+        """Test protocol has save_snapshot async method."""
 
         class Store:
-            async def save(
-                self, aggregate_id: str, snapshot: Any, version: int
-            ) -> None:
+            async def save_snapshot(self, snapshot: Any) -> None:
                 pass
 
         store = Store()
-        await store.save("agg-1", {"state": "test"}, 1)
+        await store.save_snapshot({"version": 1})
 
     @pytest.mark.asyncio
-    async def test_has_load_method(self) -> None:
-        """Test protocol has load async method."""
+    async def test_has_get_latest_method(self) -> None:
+        """Test protocol has get_latest async method."""
 
         class Store:
-            async def load(self, aggregate_id: str) -> tuple[Any, int] | None:
-                return ({"state": "test"}, 1)
+            async def get_latest(self, aggregate_id: str) -> Any | None:
+                return {"aggregate_id": aggregate_id, "version": 1}
 
         store = Store()
-        result = await store.load("agg-1")
+        result = await store.get_latest("agg-1")
         assert result is not None
 
     def test_is_runtime_checkable(self) -> None:
         """Test protocol is runtime checkable."""
 
         class Store:
+            async def save_snapshot(self, snapshot: Any) -> None:
+                pass
+
+            async def get_latest(self, aggregate_id: str) -> Any | None:
+                return None
+
+            async def get_by_version(
+                self, aggregate_id: Any, version: int
+            ) -> Any | None:
+                return None
+
+            async def delete_old_snapshots(
+                self, aggregate_id: Any, keep_count: int = 3
+            ) -> int:
+                return 0
+
+            async def close(self) -> None:
+                pass
+
+        assert isinstance(Store(), SnapshotStoreProtocol)
+
+    def test_a_tuple_api_store_is_not_conforming(self) -> None:
+        """The pre-migration tuple shape must fail the conformance check.
+
+        A store exposing ``save``/``load`` is exactly what the container has to
+        reject at registration (`QK_ERR_DI_007`): binding it would satisfy the
+        type checker while leaving every caller that reads snapshots broken.
+        """
+
+        class TupleStore:
             async def save(
                 self, aggregate_id: str, snapshot: Any, version: int
             ) -> None:
@@ -157,7 +181,7 @@ class TestSnapshotStoreProtocol:
             async def load(self, aggregate_id: str) -> tuple | None:
                 return None
 
-        assert isinstance(Store(), SnapshotStoreProtocol)
+        assert not isinstance(TupleStore(), SnapshotStoreProtocol)
 
 
 class TestEventSourcedReadRepositoryProtocol:

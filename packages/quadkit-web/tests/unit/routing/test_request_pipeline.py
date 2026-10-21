@@ -135,3 +135,56 @@ class TestRequestPipeline:
         assert result is expected_response
         serializer.serialize.assert_awaited_once()
         container.resolve.assert_not_called()
+
+
+class TestGuardRejectionAnswers:
+    """``GuardProtocol.handle_rejection`` was in the contract and ignored by the pipeline.
+
+    A guard that can say *why* in the application's own problem-detail
+    shape must be allowed to; one that cannot still gets the generic 403.
+    """
+
+    @pytest.fixture
+    def context(self):
+        req = MagicMock(spec=Request)
+        req.state = MagicMock()
+        req.query_params = {}
+        req.path_params = {}
+
+        async def handler():
+            return {"status": "ok"}
+
+        return WebExecutionContext(
+            request=req,
+            handler=handler,
+            route_metadata={"sig_info": {"sig": inspect.signature(handler), "hints": {}}},
+        )
+
+    @pytest.mark.asyncio
+    async def test_a_guard_with_handle_rejection_answers_in_its_own_words(self, context):
+        from starlette.responses import JSONResponse
+
+        class ScopeGuard:
+            async def can_activate(self, ctx):
+                return False
+
+            async def handle_rejection(self, ctx):
+                return JSONResponse({"type": "urn:app:scope-required", "status": 403}, status_code=403)
+
+        response = await RequestPipeline(guards=[ScopeGuard()]).execute(context)
+        assert response.status_code == 403
+        assert loads(response.body)["type"] == "urn:app:scope-required"
+
+    @pytest.mark.asyncio
+    async def test_a_rejection_that_is_not_a_response_falls_back_to_the_generic_403(self, context):
+        class Vague:
+            async def can_activate(self, ctx):
+                return False
+
+            async def handle_rejection(self, ctx):
+                return None
+
+        from quadkit.web.exceptions import ForbiddenError
+
+        with pytest.raises(ForbiddenError):
+            await RequestPipeline(guards=[Vague()]).execute(context)

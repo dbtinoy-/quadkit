@@ -1,5 +1,8 @@
 """{{ class_name }} middleware module.
 
+Plain ASGI middleware: wraps the downstream app and intercepts
+``scope``/``receive``/``send``. Register it with the web provider so it
+composes into the middleware stack.
 {% if doc %}
 {{ doc }}
 {% endif %}

@@ -6,7 +6,6 @@ from collections.abc import Callable
 from typing import Any, cast
 
 from starlette.applications import Starlette
-from starlette.responses import JSONResponse
 
 from quadkit.contracts.core import (
     HealthCheckResult,
@@ -36,6 +35,7 @@ from quadkit.web.middleware.manager import WebMiddlewareManager
 from quadkit.web.routing.controllers import Controller
 from quadkit.web.routing.manager import WebRouterManager
 from quadkit.web.routing.router import Router
+from quadkit.web.transport.responses import JSONResponse
 
 # Optional external server - imported lazily to avoid dependency issues
 # Only needed when run_server() is called

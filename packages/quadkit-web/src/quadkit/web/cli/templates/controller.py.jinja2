@@ -1,4 +1,15 @@
-"""{{ class_name }} controller module.
+"""Convention followed: **Controller pattern** — stateless HTTP adapters;
+handlers stay thin: parse the request, delegate to ``self.repo``,
+serialize the answer. Every handler returns ``Result[T, E]``
+(Convention: **Result + ProblemDetail**): the repository returns blocked
+outcomes as ``Err`` values (R6: absence is a value, never ``None``), the
+controller maps the ``Ok`` arm through to a body, and the Result bridge
+renders any ``Err`` as RFC-9457 ``ProblemDetail``. A handler never probes
+a call result (``is None``, truthiness) — one representation per outcome.
+Even the infallible ``list`` is Result-shaped (its envelope is ``Ok(...)``)
+so one HTTP verb set has exactly one return shape.
+
+{{ class_name }} controller module.
 {% if doc %}
 {{ doc }}
 {% endif %}
@@ -7,41 +18,45 @@ CRUD methods ({{ ops_enabled | join('/') }}) in your DI provider.
 {% if ops['create'] or ops['update'] %}
 Request bodies are validated through the generated Pydantic DTOs
 (``{{ class_name }}Create`` / ``{{ class_name }}Update``) so field types and
-required-ness are enforced before the repository sees them.
+required-ness are enforced before the repository sees them; a body that
+is malformed or fails validation answers 400 as
+``Err(Invalid{{ class_name }}Error)``.
 {% endif %}"""
 from __future__ import annotations
 
 from typing import Any
 
+from quadkit.serialization.domain import json_serialize
 {% if write_ops %}from pydantic import ValidationError
 from starlette.requests import Request
+{% endif %}{% if contract_errors %}from quadkit.contracts.exceptions import {{ contract_errors | join(', ') }}
+{% endif %}{% if needs_result %}from quadkit.result import Err, Ok, Result
 {% endif %}from quadkit.web import Controller{% if ops['create'] %}, post{% endif %}{% if ops['list'] or ops['get'] %}, get{% endif %}{% if ops['update'] %}, put{% endif %}{% if ops['delete'] %}, delete{% endif %}
-{% if web_exceptions %}from quadkit.web.exceptions import {{ web_exceptions | join(', ') }}
-{% endif %}# resolves against the app source root (src/{{ repository_module }} by default)
+# resolves against the app source root (src/{{ repository_module }} by default)
 {% if write_ops %}from {{ models_module }}.{{ model_name }} import {{ class_name }}Create, {{ class_name }}Update
 {% endif %}from {{ repository_module }}.{{ model_name }}_repository import {{ class_name }}Repository
 
+{% if write_ops %}
+class Invalid{{ class_name }}Error(DomainError):
+    """The request body is not a usable {{ class_name }}.
 
-def _to_dict(item: Any) -> dict[str, Any]:
-    """Serialize a repo result to a JSON-safe dict."""
-    if isinstance(item, dict):
-        return item
-    if hasattr(item, "to_dict"):
-        return item.to_dict()
-    if hasattr(item, "__dict__"):
-        return dict(vars(item))
-    return {"value": item}
+    Request-shape fault — malformed JSON or failed DTO validation — not a
+    domain rule. ``DomainError`` answers 400 by default, so no
+    ``ResultResponseMapper.register`` call is needed.
+    """
+
+{% endif %}
 {% if write_ops %}
 
-async def _read_body(request: Request) -> dict[str, Any]:
-    """Parse and shallow-validate the JSON request body."""
+async def _read_body(request: Request) -> Result[dict[str, Any], Invalid{{ class_name }}Error]:
+    """Parse the JSON request body, or the 400 problem as ``Err``."""
     try:
         data: Any = await request.json()
-    except Exception as exc:
-        raise BadRequestError("Invalid JSON body") from exc
+    except Exception:
+        return Err(Invalid{{ class_name }}Error("Invalid JSON body"))
     if not isinstance(data, dict) or not data:
-        raise BadRequestError("Request body must be a non-empty JSON object")
-    return data
+        return Err(Invalid{{ class_name }}Error("Request body must be a non-empty JSON object"))
+    return Ok(data)
 {% endif %}
 
 class {{ class_name }}Controller(Controller):
@@ -55,63 +70,55 @@ class {{ class_name }}Controller(Controller):
     async def list(
         self,
         limit: int = 20,
-    ) -> dict[str, Any]:
+    ) -> Result[dict[str, Any], NotFoundError]:
         items = await self.repo.list(limit=limit)
-        return {
-            "items": [_to_dict(item) for item in items],
+        return Ok({
+            "items": [json_serialize(item) for item in items],
             "limit": limit,
-        }
+        })
 {% endif %}{% if ops['get'] %}
     @get("/{{ resource_path }}/{item_id}")
-    async def get(self, item_id: str) -> dict[str, Any]:
+    async def get(self, item_id: str) -> Result[dict[str, Any], NotFoundError]:
         item = await self.repo.get(item_id)
-        if item is None:
-            raise NotFoundError(
-                f"{{ class_name }} not found with id: {item_id}"
-            )
-        return _to_dict(item)
+        return item.map(json_serialize)
 {% endif %}{% if ops['create'] %}
     @post("/{{ resource_path }}", status_code=201)
-    async def create(self, request: Request) -> dict[str, Any]:
-        data = await _read_body(request)
+    async def create(self, request: Request) -> Result[dict[str, Any], Invalid{{ class_name }}Error]:
+        body = await _read_body(request)
+        if body.is_err():
+            return body
         try:
-            payload = {{ class_name }}Create(**data)
+            payload = {{ class_name }}Create(**body.unwrap())
         except ValidationError as exc:
-            raise BadRequestError(
-                f"Invalid {{ class_name }} payload: {exc}"
-            ) from exc
+            return Err(
+                Invalid{{ class_name }}Error(f"Invalid {{ class_name }} payload: {exc}")
+            )
         created = await self.repo.create(payload.model_dump(mode="json"))
-        return _to_dict(created)
+        return Ok(json_serialize(created))
 {% endif %}{% if ops['update'] %}
     @put("/{{ resource_path }}/{item_id}")
     async def update(
         self,
         item_id: str,
         request: Request,
-    ) -> dict[str, Any]:
-        data = await _read_body(request)
+    ) -> Result[dict[str, Any], Invalid{{ class_name }}Error | NotFoundError]:
+        body = await _read_body(request)
+        if body.is_err():
+            return body
         try:
-            payload = {{ class_name }}Update(**data)
+            payload = {{ class_name }}Update(**body.unwrap())
         except ValidationError as exc:
-            raise BadRequestError(
-                f"Invalid {{ class_name }} payload: {exc}"
-            ) from exc
+            return Err(
+                Invalid{{ class_name }}Error(f"Invalid {{ class_name }} payload: {exc}")
+            )
         updated = await self.repo.update(
             item_id,
             payload.model_dump(mode="json", exclude_unset=True),
         )
-        if updated is None:
-            raise NotFoundError(
-                f"{{ class_name }} not found with id: {item_id}"
-            )
-        return _to_dict(updated)
+        return updated.map(json_serialize)
 {% endif %}{% if ops['delete'] %}
     @delete("/{{ resource_path }}/{item_id}")
-    async def delete(self, item_id: str) -> dict[str, str]:
+    async def delete(self, item_id: str) -> Result[dict[str, str], NotFoundError]:
         deleted = await self.repo.delete(item_id)
-        if not deleted:
-            raise NotFoundError(
-                f"{{ class_name }} not found with id: {item_id}"
-            )
-        return {"message": "{{ class_name }} deleted"}
+        return deleted.map(lambda _done: {"message": "{{ class_name }} deleted"})
 {%- endif %}

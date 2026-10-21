@@ -153,7 +153,7 @@ class FilterPipeline:
 
             renderer = DebugHtmlErrorRenderer()
             if renderer.should_render(request):
-                return renderer.render(exc, request, status_code=500)  # type: ignore[return-value]
+                return renderer.render(exc, request, status_code=500)
 
         # The last-resort response uses the same RFC 7807 media type as every
         # other filter: a client that keys on `application/problem+json` sees

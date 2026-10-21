@@ -187,6 +187,49 @@ class TestStoreSubProvider:
 
         assert len(container.bindings) > 0
 
+    def test_register_binds_the_snapshot_protocol_it_exports(self) -> None:
+        """`SnapshotStoreProtocol` must be bound, not only the abstract base.
+
+        `EventsModule.configure()` exports the protocol, so a consumer that
+        injects it reads this binding. Registering the store under
+        `AbstractSnapshotStore` and `SnapshotManager` alone left the exported
+        protocol unresolvable (`QK_ERR_DI_004`) while the store sat in the
+        container — and nothing noticed, because no test and no consumer in
+        the package resolved the protocol.
+        """
+        from quadkit.contracts.events import SnapshotStoreProtocol
+        from quadkit.events.stores import InMemorySnapshotStore
+
+        sub = StoreSubProvider(EventsConfig())
+        snapshot_store = InMemorySnapshotStore()
+        sub.snapshot_store = snapshot_store
+        container = _DummyContainer()
+
+        sub.register(container)
+
+        bound = container.bindings[SnapshotStoreProtocol]
+        assert bound is snapshot_store
+        # Conformance matters: the container rejects a non-conforming binding
+        # at registration (QK_ERR_DI_007), so this is what makes the export
+        # resolvable in a real container.
+        assert isinstance(bound, SnapshotStoreProtocol)
+
+    @pytest.mark.asyncio
+    async def test_memory_backend_registers_a_conforming_snapshot_store(self) -> None:
+        """The full setup → register path with the memory backend."""
+        from quadkit.contracts.events import SnapshotStoreProtocol
+
+        sub = StoreSubProvider(EventsConfig())
+        await sub.setup(None)
+        container = _DummyContainer()
+
+        sub.register(container)
+
+        assert SnapshotStoreProtocol in container.bindings
+        assert isinstance(
+            container.bindings[SnapshotStoreProtocol], SnapshotStoreProtocol
+        )
+
 
 class TestHandlerSubProvider:
     """Tests for HandlerSubProvider."""

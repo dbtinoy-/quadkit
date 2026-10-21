@@ -225,22 +225,32 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
         if dataclasses.is_dataclass(ftype) and isinstance(val, dict):
             return ftype(**val)
 
-        # UUID coercion
+        # UUID coercion — only for a field whose declared type *is* UUID.
+        # The `fname == "id"` fallback used to fire on any annotated type, so a
+        # model declaring `id: str` got a `UUID` object back while
+        # `identity.generate_for` and every id column answer strings: the
+        # annotation said one thing and the instance held another.
         if ftype is UUID and isinstance(val, str):
             return UUID(val)
-        if fname == "id" and isinstance(val, str):
-            try:
-                return UUID(val)
-            except ValueError:
-                return val
 
         # datetime coercion
         if ftype is datetime.datetime and isinstance(val, str):
             return datetime.datetime.fromisoformat(val)
 
+        # date coercion — a DATE column round-tripped through JSON arrives as
+        # "2026-10-14", and a `date` field that keeps the string is a type lie
+        # that only surfaces later (`.isoformat()`, comparisons, SQL binding).
+        if ftype is datetime.date and isinstance(val, str):
+            return datetime.date.fromisoformat(val)
+
         # Enum coercion
         if issubclass(ftype, Enum) and isinstance(val, str | int):
             return ftype(val)
+
+        # str from scalar — pydantic's lax mode ("42" for name: str), which is
+        # what `model_validate` promised before it delegated here.
+        if ftype is str and isinstance(val, bool | int | float):
+            return str(val)
 
         # int coercion from str
         if ftype is int and isinstance(val, str):

@@ -8,6 +8,7 @@ simple-type detection, model construction, and per-handler model caching.
 from __future__ import annotations
 
 from functools import lru_cache
+import sys
 from typing import Any, get_args, get_origin
 
 from quadkit.domain import DomainModel
@@ -49,11 +50,37 @@ def _cached_get_type_hints_for_handler(handler: Any) -> dict[str, Any]:
     try:
         return get_type_hints(handler, globalns=globalns) or {}
     except (NameError, AttributeError, TypeError):
-        # Fallback: try the unwrapped target directly
+        pass
+    try:
+        return get_type_hints(target) or {}
+    except (NameError, AttributeError, TypeError):
+        pass
+    # One unresolvable name — typically ``request: Request`` imported under
+    # TYPE_CHECKING in an application module — must not cost every *other*
+    # parameter its type: before this, the body DTO beside it was then
+    # "assumed DI" and the request failed with a 500. Resolve what can be
+    # resolved, one annotation at a time; leave the rest as strings.
+    return _resolve_hints_individually(target, globalns)
+
+
+def _resolve_hints_individually(target: Any, globalns: Any) -> dict[str, Any]:
+    import typing
+
+    raw = getattr(target, "__annotations__", None) or {}
+    module = sys.modules.get(getattr(target, "__module__", "") or "")
+    localns = dict(vars(module)) if module is not None else dict(globalns or {})
+    resolved: dict[str, Any] = {}
+    for name, annotation in raw.items():
+        if not isinstance(annotation, str):
+            resolved[name] = annotation
+            continue
         try:
-            return get_type_hints(target) or {}
-        except (NameError, AttributeError, TypeError):
-            return {}
+            resolved[name] = typing._eval_type(  # type: ignore[attr-defined]
+                typing.ForwardRef(annotation), globalns, localns
+            )
+        except Exception:  # noqa: BLE001 — leave an unresolvable name as the string it was
+            resolved[name] = annotation
+    return resolved
 
 
 _SIMPLE_TYPES = {str, int, float, bool}

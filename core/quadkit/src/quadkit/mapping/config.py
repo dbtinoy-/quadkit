@@ -27,7 +27,25 @@ class MappingConfig(BaseConfig):
     )
     auto_map: bool = Field(
         default=True,
-        description="Fall back to auto-mapping when no explicit mapper is registered.",
+        description=(
+            "Fall back to auto-mapping in map_or_auto() when no explicit mapper "
+            "is registered."
+        ),
+    )
+    ignore_unknown: bool = Field(
+        default=True,
+        description=(
+            "Drop source fields the destination does not declare. Set False to "
+            "raise MappingExecutionError instead, so a shape mismatch on either "
+            "side of the mapping fails loudly."
+        ),
+    )
+    case_sensitive: bool = Field(
+        default=True,
+        description=(
+            "Match source keys to destination fields case-sensitively. Set "
+            "False to match `Name` to `name`."
+        ),
     )
 
 

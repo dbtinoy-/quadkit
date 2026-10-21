@@ -178,51 +178,88 @@ def _app_py(
     :func:`quadkit.builder.gen.modular.composition.emit_app`, and the two
     are asserted byte-identical. Two composition roots that drift is the
     failure this shape exists to prevent.
+
+    ``spec.providers`` carries the app-root registration providers as
+    ``(module, class_name)`` pairs. ``quadkit new`` passes none and the
+    root renders an empty ``build_providers``; the playground passes one
+    per emitted provider file, so nothing the scaffold generated stays
+    unwired. The spec's ``description`` is catalog copy for
+    ``pyproject.toml``/``README.md`` and stays out of this file — the two
+    sides pass different descriptions, so rendering it would fork the
+    byte-identity this shape exists to protect.
     """
     features = spec.features
-    notes = "\n".join("\n".join(textwrap.wrap(note, width=88)) for note in spec.notes)
     web_discover = [f"{package_name}.{root}" for root in ("controllers", "modules")]
     imports = [
         "from quadkit.app import Application",
         "from quadkit.config import QuadkitConfig",
+        "from quadkit.di import Provider",
     ]
     if "web" in features:
         imports.append(f"from {module_for('web')} import WebModule")
     if "graphql" in features:
         imports.append(f"from {module_for('graphql')} import GraphQLModule")
-    local_imports = [
-        f"from {package_name}.infrastructure import infrastructure_modules",
-        f"from {package_name}.modules import MODULES",
-    ]
-    lines = [
-        "    application.add_modules(",
-        "        [",
-        "            *infrastructure_modules(),",
+    local_imports = [f"from {module} import {cls}" for module, cls in spec.providers]
+    local_imports.extend(
+        [
+            f"from {package_name}.infrastructure import infrastructure_modules",
+            f"from {package_name}.modules import MODULES",
+        ]
+    )
+    module_items = [
+        "        *infrastructure_modules(),",
     ]
     if "graphql" in features:
-        lines.append("            GraphQLModule.configure(),")
-    lines.append("            *MODULES,")
+        module_items.append("        GraphQLModule.configure(),")
+    module_items.append("        *MODULES,")
     if "web" in features:
         web_lines = _web_configure_lines(web_discover)
         web_lines[-1] = f"{web_lines[-1]},"
-        lines.extend(f"            {line}" for line in web_lines)
-    lines.append("        ]")
-    lines.append("    )")
+        module_items.extend(f"        {line}" for line in web_lines)
+    if spec.providers:
+        providers_body = (
+            "    return [\n"
+            + "".join(f"        {cls}(),\n" for _, cls in spec.providers)
+            + "    ]"
+        )
+    else:
+        providers_body = "    return []"
     imports.sort()
     local_imports.sort()
     import_lines = "\n".join(imports) + "\n\n" + "\n".join(local_imports)
+    # The docstring is assembled from paragraphs so an empty note list
+    # leaves no stray blank lines (it used to render ``\n\n\n``).
+    paragraphs = [
+        (
+            "Convention followed: **Composition root** — one file knows how "
+            "modules,\nproviders and controllers fit; "
+            "``create_app(config=...)`` is the injection\nseam."
+        ),
+        f"{project_name} composition root.",
+    ]
+    paragraphs.extend("\n".join(textwrap.wrap(note, width=88)) for note in spec.notes)
+    docstring = '"""' + "\n\n".join(paragraphs) + '\n"""'
 
-    return f'''"""{project_name} - composition root.
-
-{notes}
-"""
+    return f"""{docstring}
 from __future__ import annotations
 
 {import_lines}
 
 
-def create_app(config: "QuadkitConfig | None" = None) -> "Application":
-    """Create the application in ``CREATED`` state (not yet started).
+def build_modules() -> list[object]:
+    \"\"\"Declarative capabilities — zero configuration arguments needed.\"\"\"
+    return [
+{chr(10).join(module_items)}
+    ]
+
+
+def build_providers() -> list[Provider]:
+    \"\"\"Imperative services owned by this application.\"\"\"
+{providers_body}
+
+
+def create_app(config: QuadkitConfig | None = None) -> Application:
+    \"\"\"Create the application in ``CREATED`` state (not yet started).
 
     Args:
         config: Optional pre-loaded config.  When ``None`` the framework
@@ -230,16 +267,20 @@ def create_app(config: "QuadkitConfig | None" = None) -> "Application":
 
     Returns:
         The bootable application instance.
-    """
+    \"\"\"
     application = Application(name="{project_name}", config=config)
-{chr(10).join(lines)}
+    application.add_modules(build_modules())
+    application.add_providers(build_providers())
     return application
 
 
+# ``[tool.quadkit] module`` names *this object*: ``quadkit dev`` boots
+# ``{package_name}.app:app``, so the root exposes the instance, not only
+# the factory.
 app = create_app()
 
-__all__ = ["app", "create_app"]
-'''
+__all__ = ["app", "build_modules", "build_providers", "create_app"]
+"""
 
 
 def _controller_module(project_name: str) -> str:

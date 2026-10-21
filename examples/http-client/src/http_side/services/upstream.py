@@ -12,9 +12,8 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
-    from quadkit.http.client.http_client import HTTPClient
-
     from http_side.mock.upstream import MockUpstream
+    from quadkit.http.client.http_client import HTTPClient
 
 
 class UpstreamService:

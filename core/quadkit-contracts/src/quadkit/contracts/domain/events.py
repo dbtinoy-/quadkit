@@ -75,7 +75,23 @@ class DomainEvent:
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> DomainEvent:
-        return cls(**data)
+        """Rebuild an event from :meth:`to_dict` output.
+
+        The inverse of ``to_dict`` for the base fields it stringified: a
+        UUID that travelled as text comes back as a UUID, a timestamp as a
+        datetime. Anything else is handed to the constructor unchanged, so
+        a round trip through an outbox table or a JSON log yields an event
+        that compares field-for-field with the one that was stored.
+        """
+        values = dict(data)
+        for name in ("event_id", "aggregate_id"):
+            value = values.get(name)
+            if isinstance(value, str):
+                values[name] = UUID(value)
+        occurred_at = values.get("occurred_at")
+        if isinstance(occurred_at, str):
+            values["occurred_at"] = datetime.fromisoformat(occurred_at)
+        return cls(**values)
 
     def for_aggregate(self, aggregate_id: UUID, aggregate_type: str) -> DomainEvent:
         return replace(

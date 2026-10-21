@@ -219,6 +219,22 @@ class FlagManagerProtocol(Protocol):
         """
         ...
 
+    async def get_all_definitions(self) -> dict[str, Any]:
+        """Return every known flag definition without evaluating it.
+
+        Unlike :meth:`get_all_flags`, this *describes* the flag set — type,
+        description, default ``enabled`` state — instead of evaluating it, so a
+        debug UI, admin panel or feature-gate view does not have to invent
+        evaluation reasons for definitions it never asked to evaluate.
+
+        Returns:
+            Mapping of flag key to its definition. The value type is ``Any``
+            because the reference implementation returns ``the optional provider module``
+            ``Flag`` objects and ``quadkit-contracts`` has no flag-definition
+            model of its own — it must not import one from a layer above it.
+        """
+        ...
+
 
 __all__ = [
     "FlagManagerProtocol",

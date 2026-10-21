@@ -4,17 +4,11 @@ from typing import Any, ClassVar
 
 import pytest
 
-from quadkit.cli.registry import presets as presets_module
 from quadkit.cli.registry.presets import (
-    FullStackPreset,
-    GraphQLPreset,
-    MicroservicePreset,
-    MinimalPreset,
+    ApiPreset,
     Preset,
     PresetDefinition,
     PresetRegistry,
-    WebAPIPreset,
-    WorkerPreset,
 )
 
 
@@ -24,14 +18,7 @@ class TestPresetDefinition:
             PresetDefinition()  # type: ignore[abstract]
 
     def test_built_in_presets_carry_name_description_and_packages(self) -> None:
-        for preset_class in (
-            MinimalPreset,
-            WebAPIPreset,
-            GraphQLPreset,
-            WorkerPreset,
-            FullStackPreset,
-            MicroservicePreset,
-        ):
+        for preset_class in (ApiPreset,):
             preset = preset_class().get_preset()
             assert isinstance(preset, Preset)
             assert preset.name == preset_class.name
@@ -39,15 +26,14 @@ class TestPresetDefinition:
             assert preset.packages == preset_class.packages
 
     def test_get_preset_returns_independent_copies(self) -> None:
-        first = MinimalPreset().get_preset()
-        second = MinimalPreset().get_preset()
+        first = ApiPreset().get_preset()
+        second = ApiPreset().get_preset()
 
-        first.packages.append("quadkit-web")
+        first.packages.append("quadkit-auth")
         first.config["web"] = {"port": 1}
 
-        assert "quadkit-web" not in second.packages
-        assert second.config == {}
-        assert MinimalPreset.packages == ["quadkit"]
+        assert "quadkit-auth" not in second.packages
+        assert second.config["web"]["port"] == 8000
 
 
 class TestPresetRegistry:
@@ -56,23 +42,23 @@ class TestPresetRegistry:
 
         assert registry.get_all() == {}
         assert registry.get_choices() == []
-        assert registry.get("minimal") is None
+        assert registry.get("api") is None
 
     def test_register_and_get(self) -> None:
         registry = PresetRegistry()
-        registry.register(MinimalPreset)
+        registry.register(ApiPreset)
 
-        preset = registry.get("minimal")
+        preset = registry.get("api")
 
         assert preset is not None
-        assert preset.name == "minimal"
-        assert registry.get_choices() == ["minimal"]
+        assert preset.name == "api"
+        assert registry.get_choices() == ["api"]
 
     def test_register_overwrites_same_name(self) -> None:
         registry = PresetRegistry()
 
-        class _CustomMinimal(PresetDefinition):
-            name = "minimal"
+        class _CustomApi(PresetDefinition):
+            name = "api"
             description = "custom"
             packages: ClassVar[list[str]] = ["quadkit-web"]
             config: ClassVar[dict[str, Any]] = {}
@@ -85,36 +71,17 @@ class TestPresetRegistry:
                     config=self.config.copy(),
                 )
 
-        registry.register(MinimalPreset)
-        registry.register(_CustomMinimal)
+        registry.register(ApiPreset)
+        registry.register(_CustomApi)
 
-        preset = registry.get("minimal")
+        preset = registry.get("api")
 
-        assert registry.get_choices() == ["minimal"]
+        assert registry.get_choices() == ["api"]
         assert preset is not None
         assert preset.description == "custom"
 
-    def test_with_defaults_registers_the_installed_presets(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(presets_module, "provider_available", lambda _f: True)
-
+    def test_with_defaults_registers_the_single_preset(self) -> None:
         registry = PresetRegistry.with_defaults()
 
-        assert registry.get_choices() == [
-            "minimal",
-            "web-api",
-            "graphql",
-            "worker",
-            "fullstack",
-            "microservice",
-        ]
-
-    def test_optional_presets_need_their_providers(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        monkeypatch.setattr(presets_module, "provider_available", lambda _f: False)
-
-        registry = PresetRegistry.with_defaults()
-
-        assert registry.get_choices() == ["minimal", "web-api"]
+        assert registry.get_choices() == ["api"]
+        assert registry.get("api") is not None

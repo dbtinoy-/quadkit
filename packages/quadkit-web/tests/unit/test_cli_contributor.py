@@ -113,3 +113,30 @@ def test_web_generator_defaults(name: str, default_output_dir: str) -> None:
     assert definitions[name].default_output_dir == default_output_dir
     assert definitions[name].contributor == "web"
     assert definitions[name].category == "web"
+
+
+def test_resource_forwards_the_op_selection_to_the_controller(tmp_path) -> None:
+    """A resource is a controller, so a subset of ops must reach it.
+
+    ``ControllerGenerator`` has rendered a subset since it learned ``ops``;
+    ``ResourceGenerator`` delegates to it but forwarded only ``fields_str``,
+    so a resource was always the full five handlers however few the caller
+    asked for. Callers had no way to tell, because the argument was accepted
+    and dropped rather than rejected.
+    """
+    ResourceGenerator(output_dir=tmp_path).generate(
+        "order", fields_str="title:str", ops=["create"], force=True
+    )
+
+    controller = (tmp_path / "controllers" / "order_controller.py").read_text()
+
+    assert "async def create" in controller
+    for absent in ("async def get", "async def list", "async def update",
+                   "async def delete"):
+        assert absent not in controller, f"{absent} rendered despite ops=['create']"
+
+@pytest.mark.parametrize("ops", [1, ["create", object()], {"create": True}])
+def test_resource_rejects_malformed_op_selection(tmp_path, ops: object) -> None:
+    """The CLI-facing ``**kwargs`` boundary must not forward untyped values."""
+    with pytest.raises(TypeError, match="ops must be a string or a collection of strings"):
+        ResourceGenerator(output_dir=tmp_path).generate("order", ops=ops)

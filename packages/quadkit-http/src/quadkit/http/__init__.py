@@ -35,7 +35,12 @@ __path__ = __import__("pkgutil").extend_path(__path__, __name__)
 from quadkit.http.constants import __version__ as __version__
 
 if TYPE_CHECKING:
-    from quadkit.http.client import BaseURLHTTPClient, HTTPClient, StreamContext, StreamResponse
+    from quadkit.http.client import (
+        BaseURLHTTPClient,
+        HTTPClient,
+        StreamContext,
+        StreamResponse,
+    )
     from quadkit.http.config import (
         ConnectionPoolConfig,
         HTTPClientConfig,

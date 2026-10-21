@@ -38,7 +38,7 @@ Requires **Python >= 3.11**.
 There is no code to write — the product is the command line:
 
 ```bash
-# Create a new project (template defaults to web-api); the package
+# Create a new project (single `api` template); the package
 # inside is my_api/ with app.py exposing create_app()
 quadkit new project my-api
 cd my-api
@@ -111,10 +111,10 @@ review release notes on upgrade. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.44` in the `0.x` series, released in lockstep with the
+Version `0.0.45` in the `0.x` series, released in lockstep with the
 other four distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-cli==0.0.44`) or a tight range
-(`>=0.0.44,<0.1.0`). Full policy:
+1.0 — pin an exact version (`quadkit-cli==0.0.45`) or a tight range
+(`>=0.0.45,<0.1.0`). Full policy:
 [stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
 
 ## Links

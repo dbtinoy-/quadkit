@@ -65,6 +65,13 @@ Also available by default:
 - → http://localhost:8000/docs — generated OpenAPI docs (Swagger UI;
   `/redoc` and `/openapi.json` too)
 
+## build in the browser
+
+[Quadkit Playground](https://playground.oridecon.dev) is the hosted visual
+builder for that same stack: draw framework-shaped nodes — entities, auth,
+jobs, routes — on a canvas, then generate and download a real standalone
+Quadkit project. One-way codegen, nothing to install locally.
+
 ## why quadkit?
 
 Quadkit is a kit of **13 published packages**, installed à la carte: eleven

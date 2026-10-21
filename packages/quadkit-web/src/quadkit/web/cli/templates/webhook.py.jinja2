@@ -1,6 +1,9 @@
 """{{ webhook_name }} webhook handler.
 
-This module provides a webhook handler for processing incoming webhook events.
+Verifies the sender signature, validates the payload, and dispatches
+to per-``event_type`` handlers registered with :meth:`register_handler`.
+Wire the ``{{ webhook_name_snake }}_webhook_handler`` ASGI function as a
+route to receive calls.
 """
 
 from __future__ import annotations
@@ -14,8 +17,8 @@ from collections.abc import Mapping
 {% endfor %}
 from pydantic import BaseModel, ConfigDict, Field
 from quadkit.serialization import JSONDecodeError, loads
+from quadkit.web import JSONResponse
 from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 logger = logging.getLogger(__name__)
 
@@ -186,6 +189,12 @@ async def {{ webhook_name_snake }}_webhook_handler(request: Request) -> JSONResp
     """ASGI handler for {{ webhook_name }} webhooks.
 
     This can be used as a route handler in your application.
+
+    Domain rules above this function should return ``Result[T, E]``; the
+    webhook handler is the transport boundary, so its job is to turn the
+    outcome into a response object. The response is quadkit's
+    ``FastJSONResponse`` — datetime/UUID/dataclass values serialize
+    natively through ``quadkit.serialization``.
 
     Args:
         request: The ASGI request.

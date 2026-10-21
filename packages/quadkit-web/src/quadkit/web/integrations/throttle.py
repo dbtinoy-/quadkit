@@ -214,8 +214,17 @@ class RateLimitModule:
         class _RateLimitModuleClass:
             pass
 
+        from quadkit.contracts.web import WebRateLimiterProtocol
+
         return DynamicModule(
             module=_RateLimitModuleClass,
             providers=[rate_provider],
             is_global=True,
+            # Exported here and not from `WebModule`: a module exports what its
+            # own providers register. `WebModule` declared this protocol while
+            # `RateLimitProvider` — this module's provider — was the thing that
+            # bound it, so the export was unresolvable in an app that used
+            # `WebModule` alone (the documented usage) and invisible in one that
+            # added this module, whose descriptor exported nothing at all.
+            exports=[WebRateLimiterProtocol],
         )

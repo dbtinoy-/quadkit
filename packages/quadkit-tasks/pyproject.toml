@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-tasks"
-version = "0.0.44"
+version = "0.0.45"
 description = "Background task processing for Quadkit Framework - Scheduling, workers, and job queues"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -180,6 +180,11 @@ workspace = true
 workspace = true
 
 [tool.pytest.ini_options]
+# Every other package in the workspace runs pytest-asyncio in auto mode; this
+# one did not, so its two async widget-registration tests were collected as
+# sync functions and failed with "async def functions are not natively
+# supported" — a green-looking suite that never ran them.
+asyncio_mode = "auto"
 addopts = ["--cov=quadkit.tasks", "--cov-report=html", "--cov-report=term", "--cov-fail-under=78"]
 testpaths = ["tests"]
 markers = [

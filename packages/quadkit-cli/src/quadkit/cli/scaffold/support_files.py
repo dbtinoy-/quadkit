@@ -99,22 +99,36 @@ def _readme(
 
 
 def _env_example(project_name: str) -> str:
+    # One commented line per key application.yaml ships (the mirror rule):
+    # uncomment only where a deployment overrides the file's default.
     return f"""# Quadkit environment overrides (QK_<SECTION>__<FIELD> syntax).
-# Copy to .env and uncomment what you need.
+# Each line mirrors a key application.yaml ships with the same value —
+# copy to .env and uncomment what you need; leave the rest commented.
 
 # QK_APP_NAME={project_name}
 # QK_DEBUG=false
 # QK_ENV=development
 
-# Web server (web.server)
+# Web server (web.server.host / web.server.port)
 # QK_WEB__SERVER__HOST=127.0.0.1
 # QK_WEB__SERVER__PORT=8000
 
-# Database URL (the configured database provider)
+# Datasource (sql.backend.url / sql.pool)
 # QK_SQL__BACKEND__URL=sqlite:///./dev.db
+# QK_SQL__POOL__MIN_SIZE=1
+# QK_SQL__POOL__MAX_SIZE=5
 
-# Auth secret — set a real value before deploying with auth enabled
+# Auth secrets (auth.secret_key / auth.token.secret_key) — the yaml ships
+# development placeholders; set real values before deploying
 # QK_AUTH__SECRET_KEY=change-me-in-production
+# QK_AUTH__TOKEN__SECRET_KEY=change-me-in-production
+
+# Logging (logging.level / logging.json_format)
+# QK_LOGGING__LEVEL=INFO
+# QK_LOGGING__JSON_FORMAT=false
+
+# Health endpoint (health.include_details)
+# QK_HEALTH__INCLUDE_DETAILS=true
 """
 
 

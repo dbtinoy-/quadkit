@@ -128,15 +128,10 @@ if TYPE_CHECKING:
         TasksInspector,
     )
     from quadkit.cli.registry.presets import (
-        FullStackPreset,
-        GraphQLPreset,
-        MicroservicePreset,
-        MinimalPreset,
+        ApiPreset,
         Preset,
         PresetDefinition,
         PresetRegistry,
-        WebAPIPreset,
-        WorkerPreset,
     )
     from quadkit.cli.registry.provider import (
         AdminProvider,
@@ -200,15 +195,11 @@ if TYPE_CHECKING:
         get_telemetry_status,
     )
     from quadkit.cli.registry.template import (
-        FullStackTemplate,
-        GraphQLTemplate,
-        MinimalTemplate,
+        ApiTemplate,
         ProjectBuilder,
         ProjectTemplate,
         TemplateConfig,
         TemplateRegistry,
-        WebAPITemplate,
-        WorkerTemplate,
     )
     from quadkit.cli.registry.version import (
         VersionInfo,

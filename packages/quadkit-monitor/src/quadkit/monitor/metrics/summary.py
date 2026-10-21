@@ -4,6 +4,7 @@ from collections import deque
 import time
 
 from quadkit.contracts.observability.metrics import MetricProtocol
+from quadkit.monitor.metrics.series import SeriesKey, series_key
 from quadkit.monitor.types import MetricValue
 
 MAX_METRIC_VALUES = 10_000
@@ -23,6 +24,7 @@ class Summary(MetricProtocol):
         self.labels = labels or {}
         self._values: deque[MetricValue] = deque(maxlen=MAX_METRIC_VALUES)
         self._observations: deque[float] = deque(maxlen=MAX_METRIC_VALUES)
+        self._series_observations: dict[SeriesKey, deque[float]] = {}
 
     @property
     def name(self) -> str:
@@ -42,6 +44,9 @@ class Summary(MetricProtocol):
         self._values.append(
             MetricValue(self.name, float(value), combined_labels, time.time()),
         )
+        self._series_observations.setdefault(
+            series_key(combined_labels), deque(maxlen=MAX_METRIC_VALUES)
+        ).append(float(value))
 
     def observe(
         self,
@@ -54,7 +59,17 @@ class Summary(MetricProtocol):
     def get_observations(self) -> list[float]:
         return list(self._observations)
 
+    def get_series_observations(self) -> dict[SeriesKey, list[float]]:
+        """Return the observations recorded for every label set.
+
+        Returns:
+            Mapping of canonical label key (sorted ``(name, value)`` pairs)
+            to that label set's observations.
+        """
+        return {key: list(values) for key, values in self._series_observations.items()}
+
     def reset(self) -> None:
         """Clear all observations and values for metric rotation."""
         self._observations.clear()
         self._values.clear()
+        self._series_observations.clear()
