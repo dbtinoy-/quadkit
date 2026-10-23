@@ -15,7 +15,7 @@ into any service. The `@cacheable` decorator provides cache-aside logic with
 automatic key generation and Result support.
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

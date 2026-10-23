@@ -13,7 +13,7 @@
 
 - [ ] Tests added/updated and passing locally
 - [ ] Docs updated if any public behaviour changed (docs pages are CI-validated)
-- [ ] No references to packages outside the five public distributions
+- [ ] No references to packages outside the public distributions
 - [ ] Breaking changes called out below (stable APIs need a deprecation first)
 
 ## Breaking changes

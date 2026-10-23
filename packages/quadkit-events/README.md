@@ -15,7 +15,7 @@ Use `EventsModule.configure()` to register the event system and dispatch command
 or subscribe to events via decorators.
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-http"
-version = "0.0.45"
+version = "0.0.46"
 description = "Outbound HTTP client for the Quadkit Framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -23,8 +23,8 @@ classifiers = [
     "Framework :: AsyncIO",
     "Typing :: Typed",
 ]
-authors = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
-maintainers = [{ name = "Quadkit Framework Team", email = "team@quadkit.dev" }]
+authors = [{ name = "Quadkit Framework Team", email = "hello@oridecon.dev" }]
+maintainers = [{ name = "Quadkit Framework Team", email = "hello@oridecon.dev" }]
 
 dependencies = [
     "quadkit-contracts>=0.0.2",
@@ -35,9 +35,9 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://dbtinoy-.github.io/quadkit"
+Homepage = "https://oridecon.dev"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://dbtinoy-.github.io/quadkit"
+Documentation = "https://oridecon.dev/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 

@@ -47,7 +47,7 @@ def format_cycle_error(cycle: list[str]) -> str:
         f"  1. Extract shared types into a separate module\n"
         f"  2. Remove the circular import from one side\n"
         f"\n"
-        f"Reference: {DOCS_BASE_URL}/modules#cycles"
+        f"Reference: {DOCS_BASE_URL}/fundamentals/modules/"
     )
 
 
@@ -88,7 +88,7 @@ def format_missing_import_error(
         f"  1. Add {missing_name} to your create_app() via app.add_module()\n"
         f"  2. Or remove {missing_name} from {module_name}.imports\n"
         f"\n"
-        f"Reference: {DOCS_BASE_URL}/modules#imports"
+        f"Reference: {DOCS_BASE_URL}/fundamentals/modules/"
     )
 
 
@@ -192,7 +192,7 @@ def format_visibility_error(
         f"    2. Make the exporting module global with @module(is_global=True)\n"
         f"    3. Depend on a service that is already exported\n"
         f"\n"
-        f"  Reference: {DOCS_BASE_URL}/modules#visibility"
+        f"  Reference: {DOCS_BASE_URL}/fundamentals/modules/"
     )
 
 
@@ -232,7 +232,7 @@ def format_duplicate_module_error(
         f"  1. Remove one of the add_module() calls\n"
         f"  2. Or merge the configurations into a single configure() call\n"
         f"\n"
-        f"Reference: {DOCS_BASE_URL}/modules#configuration"
+        f"Reference: {DOCS_BASE_URL}/fundamentals/modules/"
     )
 
 

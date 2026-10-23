@@ -49,4 +49,4 @@ The framework follows these security practices across the codebase:
 
 See the security guides on the documentation site for secure
 configuration guidance and the full vulnerability-reporting process:
-https://dbtinoy-.github.io/quadkit/security/
+https://oridecon.dev/quadkit/getting-started/configuration/

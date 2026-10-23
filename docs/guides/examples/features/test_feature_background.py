@@ -19,7 +19,7 @@ class MailController(Controller):
     @get("/send")
     async def send(self) -> tuple[dict, BackgroundTasks]:
         tasks = BackgroundTasks()
-        tasks.add(_deliver, "hello@quadkit.dev")
+        tasks.add(_deliver, "hello@oridecon.dev")
         return {"queued": True, "task_count": len(tasks)}, tasks
 
 
@@ -44,4 +44,4 @@ async def test_background_tasks_run_after_the_response():
         assert response.status_code == 200
         assert response.json == {"queued": True, "task_count": 1}
 
-    assert delivered == ["hello@quadkit.dev"]
+    assert delivered == ["hello@oridecon.dev"]

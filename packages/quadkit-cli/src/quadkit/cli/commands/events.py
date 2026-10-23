@@ -201,4 +201,4 @@ def replay(
         "  [cyan]await bus.replay(event_type='UserCreated', since=start_time)[/cyan]"
     )
     out.print()
-    out.print(f"See: {DOCS_BASE_URL}/events/replay")
+    out.print(f"See: {DOCS_BASE_URL}/packages/events/quadkit-events/docs/guide/")

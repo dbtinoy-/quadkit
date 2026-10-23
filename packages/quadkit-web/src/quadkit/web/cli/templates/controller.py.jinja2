@@ -80,7 +80,7 @@ class {{ class_name }}Controller(Controller):
     @get("/{{ resource_path }}/{item_id}")
     async def get(self, item_id: str) -> Result[dict[str, Any], NotFoundError]:
         item = await self.repo.get(item_id)
-        return item.map(json_serialize)
+        return item.map_sync(json_serialize)
 {% endif %}{% if ops['create'] %}
     @post("/{{ resource_path }}", status_code=201)
     async def create(self, request: Request) -> Result[dict[str, Any], Invalid{{ class_name }}Error]:
@@ -115,10 +115,10 @@ class {{ class_name }}Controller(Controller):
             item_id,
             payload.model_dump(mode="json", exclude_unset=True),
         )
-        return updated.map(json_serialize)
+        return updated.map_sync(json_serialize)
 {% endif %}{% if ops['delete'] %}
     @delete("/{{ resource_path }}/{item_id}")
     async def delete(self, item_id: str) -> Result[dict[str, str], NotFoundError]:
         deleted = await self.repo.delete(item_id)
-        return deleted.map(lambda _done: {"message": "{{ class_name }} deleted"})
+        return deleted.map_sync(lambda _done: {"message": "{{ class_name }} deleted"})
 {%- endif %}

@@ -62,8 +62,8 @@ if __name__ == "__main__":
 
 `/hello` is yours; `/docs`, `/redoc`, `/openapi.json`, and `/health`
 come with it. Full walkthrough:
-[your first app](https://dbtinoy-.github.io/quadkit/getting-started/first-app/), then the
-[web API guide](https://dbtinoy-.github.io/quadkit/guides/web-api/).
+[your first app](https://oridecon.dev/quadkit/getting-started/first-app/), then the
+[web API guide](https://oridecon.dev/quadkit/packages/web/quadkit-web/docs/guide/).
 
 ## Binding, not parsing
 
@@ -102,7 +102,7 @@ note: cookie-based CSRF is on by default, so JSON clients send the
 `X-CSRF-Token` header (or you disable CSRF for token-authenticated
 APIs: `web.security.enable_csrf: false`). More composition —
 middleware, guards, per-route rate limits — in the
-[web API guide](https://dbtinoy-.github.io/quadkit/guides/web-api/) and the
+[web API guide](https://oridecon.dev/quadkit/packages/web/quadkit-web/docs/guide/) and the
 [feature tour](https://github.com/dbtinoy-/quadkit/blob/main/docs/guides/examples/features/README.md).
 
 ## Optional extras
@@ -169,14 +169,14 @@ Everything is typed, validated at boot, and env-overridable
 
 Env overrides mirror the YAML path, e.g. `QK_WEB__SERVER__PORT=8080`,
 `QK_WEB__SECURITY__CORS__ALLOWED_ORIGINS='["https://app.example.com"]'`.
-See [configuration](https://dbtinoy-.github.io/quadkit/getting-started/configuration/).
+See [configuration](https://oridecon.dev/quadkit/getting-started/configuration/).
 
 ## Error handling
 
 Every failure renders as an RFC 7807 problem body: domain exceptions map
 through a status table, `HTTPError` gives direct control, request-body
 validation answers `422` with per-field errors.
-[The error-handling guide](https://dbtinoy-.github.io/quadkit/guides/error-handling/) shows
+[The error-handling guide](https://oridecon.dev/quadkit/fundamentals/result-pattern/) shows
 all three paths with executable examples.
 
 ## Testing
@@ -198,21 +198,21 @@ async def test_hello() -> None:
 
 Conservative defaults: CSRF on, CORS deny-by-default, unexpected
 exceptions contained to a minimal 500 body. Details and hardening:
-[secure configuration](https://dbtinoy-.github.io/quadkit/security/secure-configuration/);
+[secure configuration](https://oridecon.dev/quadkit/getting-started/configuration/);
 report vulnerabilities privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md).
 
 ## Stability
 
-Version `0.0.45` in the `0.x` series, released in lockstep with the
-other four distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-web==0.0.45`) or a tight range
-(`>=0.0.45,<0.1.0`). Full policy:
-[stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
+Version `0.0.46` in the `0.x` series, released in lockstep with the
+other twelve distributions; APIs may change between minor versions until
+1.0 — pin an exact version (`quadkit-web==0.0.46`) or a tight range
+(`>=0.0.46,<0.1.0`). Full policy:
+[stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links
 
-- **Documentation** — <https://dbtinoy-.github.io/quadkit/>
-- **Getting started** — <https://dbtinoy-.github.io/quadkit/getting-started/installation/>
+- **Documentation** — <https://oridecon.dev/quadkit/>
+- **Getting started** — <https://oridecon.dev/quadkit/getting-started/installation/>
 - **Changelog** — <https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md>
 - **Issues** — <https://github.com/dbtinoy-/quadkit/issues>
 - **Security** — report privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md)

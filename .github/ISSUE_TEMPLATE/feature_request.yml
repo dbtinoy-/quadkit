@@ -1,5 +1,5 @@
 name: Feature request
-description: A capability you want in one of the five public distributions
+description: A capability you want in one of the public distributions
 labels: [enhancement]
 body:
   - type: textarea

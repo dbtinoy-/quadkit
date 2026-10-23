@@ -4,14 +4,15 @@
 #   mkdocs build --strict
 #   mkdocs serve            # local preview at http://127.0.0.1:8000
 #
-# CI (docs.yml) builds this on every docs change and publishes to GitHub
-# Pages on release tags. The docs-check gates (scripts/) run first — this
-# site only ships prose that already passed them.
+# The canonical site is https://oridecon.dev/quadkit/. CI (docs.yml) only
+# builds this tree in strict mode to catch broken prose and links; it does
+# not deploy. The docs-check gates (scripts/) run first — this tree only
+# carries prose that already passed them.
 site_name: Quadkit
 site_description: >-
   Async Python, contract-driven, container-assembled — documentation for the
-  five public distributions.
-site_url: https://dbtinoy-.github.io/quadkit/
+  thirteen public distributions.
+site_url: https://oridecon.dev/quadkit/
 repo_url: https://github.com/dbtinoy-/quadkit
 edit_uri: ""
 docs_dir: docs

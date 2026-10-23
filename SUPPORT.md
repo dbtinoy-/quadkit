@@ -5,7 +5,7 @@
 The documentation site covers installation, your first application, and a
 runnable feature tour:
 
-- **Docs site:** https://dbtinoy-.github.io/quadkit/
+- **Docs site:** https://oridecon.dev/quadkit/
 - **Get started:** [Installation](docs/getting-started/installation.md) →
   [Your First App](docs/getting-started/first-app.md)
 - **Feature tour:** [`docs/guides/examples/features/`](docs/guides/examples/features/) —

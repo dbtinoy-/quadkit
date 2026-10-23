@@ -8,7 +8,7 @@ Background task processing for Quadkit Framework — Scheduling, workers, and jo
 
 quadkit-tasks provides background task execution, scheduling, and async job queues with support for Redis, RabbitMQ, PostgreSQL, and in-memory backends. It features configurable retry policies, priority queues, rate limiting, cron scheduling, and Prometheus metrics. All services are wired via `TaskProvider`, which registers task protocols with the DI container.
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

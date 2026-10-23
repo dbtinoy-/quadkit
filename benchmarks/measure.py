@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Measure Quadkit performance budgets against the INSTALLED distributions.
 
-Run from a virtualenv containing the five public distributions:
+Run from a virtualenv containing the thirteen public distributions:
 
     python benchmarks/measure.py                 # print a report
     python benchmarks/measure.py --json out.json # also write machine-readable results

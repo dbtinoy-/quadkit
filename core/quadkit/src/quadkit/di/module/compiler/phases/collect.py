@@ -95,7 +95,7 @@ class CollectPhase:
             raise ModuleError(
                 f"'{cls.__name__}' is not decorated with @module.\n"
                 f"\n"
-                f"Reference: {DOCS_BASE_URL}/modules#declaration",
+                f"Reference: {DOCS_BASE_URL}/fundamentals/modules/",
                 hint=(
                     f"Add @module() to {cls.__name__}, or import "
                     f"{cls.__name__}.configure() instead."

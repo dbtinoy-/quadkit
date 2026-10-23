@@ -15,7 +15,7 @@ Use `AuthModule.configure()` to register the auth bundle and protect routes with
 `@require_auth`, `@require_roles`, and `@require_permissions` decorators.
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

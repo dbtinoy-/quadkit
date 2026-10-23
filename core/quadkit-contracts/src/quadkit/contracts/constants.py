@@ -7,6 +7,6 @@ pointers resolve to the same published site.
 
 from __future__ import annotations
 
-DOCS_BASE_URL = "https://dbtinoy-.github.io/quadkit"
+DOCS_BASE_URL = "https://oridecon.dev/quadkit"
 
 __all__ = ["DOCS_BASE_URL"]

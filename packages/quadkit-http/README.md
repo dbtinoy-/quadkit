@@ -16,7 +16,7 @@ use `quadkit-web`. Resilience patterns (retry, circuit breaker) are layered in
 through `the optional provider`, not built in by default.
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

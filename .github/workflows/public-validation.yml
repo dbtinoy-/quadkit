@@ -15,8 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # The five packages classify 3.11-3.13 on PyPI — this matrix is what
-      # proves that claim, and the README CI badge reports it.
+      # The thirteen packages classify 3.11-3.13 on PyPI — this matrix is
+      # what proves that claim.
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
     steps:

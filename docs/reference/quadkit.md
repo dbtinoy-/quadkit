@@ -6,7 +6,7 @@ distribution resolves from it; `quadkit-contracts` carries the protocols
 it binds against.
 
 - **Install**: `pip install quadkit` · Python `>= 3.11`
-- **Version** (lockstep with all thirteen distributions): `0.0.45`
+- **Version** (lockstep with all thirteen distributions): `0.0.46`
   → [stability policy](./stability.md)
 - **Changelog**: `core/quadkit/CHANGELOG.md` in this repository
 - **Issues**: <https://github.com/dbtinoy-/quadkit/issues>

@@ -137,8 +137,8 @@ def test_handlers_return_result_over_domain_errors(tmp_path: Path) -> None:
     assert "async def delete(self, item_id: str) -> Result[dict[str, str], NotFoundError]:" in content
     # WS-8: the handler maps the repo's `Result` — serialize-or-bridge,
     # never probe. The domain error is constructed once, at the data tier.
-    assert "return item.map(json_serialize)" in content
-    assert 'return deleted.map(lambda _done: {"message": "Message deleted"})' in content
+    assert "return item.map_sync(json_serialize)" in content
+    assert 'return deleted.map_sync(lambda _done: {"message": "Message deleted"})' in content
     # No raise-style remnants: the throw path is gone from controllers.
     assert "raise NotFoundError" not in content
     assert "raise BadRequestError" not in content

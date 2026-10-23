@@ -66,7 +66,7 @@ pytest docs/guides/examples/features/test_feature_throttle.py -q   # one feature
 - **Executable** — a pytest file first and a guide second; CI runs them.
 - **Honest** — they assert the failure paths too (429s, 403s, 422s,
   error short-circuits).
-- **Wheel-proven** — each file was verified against the five public wheels
+- **Wheel-proven** — each file was verified against the public wheels
   (`quadkit`, `quadkit-web`, `quadkit-contracts`, `quadkit-testing`,
   `quadkit-cli`) in a clean environment.
 - **Found bugs so you don't have to** — authoring these examples drove out

@@ -1,14 +1,19 @@
 # Changelog
 
-All notable changes to the five public quadkit distributions — `quadkit`,
-`quadkit-contracts`, `quadkit-web`, `quadkit-cli`, and `quadkit-testing` —
-are summarized here.
+All notable changes to the public quadkit distributions are summarized here.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and the project adheres to
 [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+
+### Changed
+
+- Documentation links and package metadata now point at
+  `https://oridecon.dev/quadkit/`. The retired GitHub Pages site and the
+  old placeholder domain are gone from the published tree, and error-code
+  links resolve through the canonical registry.
 
 ## [0.0.4] — 2026-09-19
 

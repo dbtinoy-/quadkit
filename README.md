@@ -7,8 +7,7 @@
 [![PyPI version](https://img.shields.io/pypi/v/quadkit?color=%2322c55e&label=pypi%20package)](https://pypi.org/project/quadkit/)
 [![Python versions](https://img.shields.io/pypi/pyversions/quadkit?color=%2322c55e)](https://pypi.org/project/quadkit/)
 [![License](https://img.shields.io/pypi/l/quadkit?color=%2322c55e)](https://github.com/dbtinoy-/quadkit/blob/main/LICENSE)
-[![CI](https://github.com/dbtinoy-/quadkit/actions/workflows/public-validation.yml/badge.svg)](https://github.com/dbtinoy-/quadkit/actions/workflows/public-validation.yml)
-[![Docs](https://img.shields.io/badge/docs-dbtinoy--.github.io%2Fquadkit-22c55e)](https://dbtinoy-.github.io/quadkit/)
+[![Docs](https://img.shields.io/badge/docs-oridecon.dev%2Fquadkit-22c55e)](https://oridecon.dev/quadkit/)
 [![Open in Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/dbtinoy-/quadkit)
 
 Stop assembling. Start building.

@@ -10,7 +10,7 @@ that integrate with Kubernetes probes and load-balancer health checks.
 
 quadkit-monitor provides metrics collection, distributed tracing, health checks, and alerting for Quadkit applications. It integrates with Prometheus and OpenTelemetry backends, supports composable health checks with liveness and readiness flavours, and includes decorators for instrumenting services with custom metrics and traces. All services are wired via `MonitorProvider`, which registers monitoring protocols with the DI container.
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

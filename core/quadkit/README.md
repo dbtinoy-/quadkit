@@ -88,7 +88,7 @@ asyncio.run(main())
 ```
 
 For the web quickstart (a real endpoint in minutes), see
-[the docs](https://dbtinoy-.github.io/quadkit/getting-started/first-app/).
+[the docs](https://oridecon.dev/quadkit/getting-started/first-app/).
 
 ## Expected failures are values
 
@@ -120,7 +120,7 @@ result = (
 
 In controllers, returning an `Err` renders as an RFC 7807 problem
 response automatically — see the
-[error-handling guide](https://dbtinoy-.github.io/quadkit/guides/error-handling/).
+[error-handling guide](https://oridecon.dev/quadkit/fundamentals/result-pattern/).
 
 ## Optional extras
 
@@ -151,11 +151,11 @@ Providers can also define an async `boot()` (acquire resources) and
 `shutdown()` (release them, in reverse registration order) — the
 container drives the whole lifecycle.
 
-Concepts: [contracts](https://dbtinoy-.github.io/quadkit/concepts/contracts/) ·
-[dependency injection](https://dbtinoy-.github.io/quadkit/concepts/dependency-injection/) ·
-[modules](https://dbtinoy-.github.io/quadkit/concepts/modules/) ·
-[lifecycle](https://dbtinoy-.github.io/quadkit/concepts/lifecycle/) ·
-[async model](https://dbtinoy-.github.io/quadkit/concepts/async-model/).
+Concepts: [contracts](https://oridecon.dev/quadkit/fundamentals/container-protocols/) ·
+[dependency injection](https://oridecon.dev/quadkit/fundamentals/dependency-injection/) ·
+[modules](https://oridecon.dev/quadkit/fundamentals/modules/) ·
+[lifecycle](https://oridecon.dev/quadkit/fundamentals/application-lifecycle/) ·
+[async model](https://oridecon.dev/quadkit/fundamentals/architecture/).
 
 ## Configuration
 
@@ -171,7 +171,7 @@ QK_PROFILE=production              # select a profile block
 ```
 
 See
-[configuration](https://dbtinoy-.github.io/quadkit/getting-started/configuration/).
+[configuration](https://oridecon.dev/quadkit/getting-started/configuration/).
 
 ## Error handling
 
@@ -179,36 +179,36 @@ See
 `quadkit-contracts` exception hierarchy (`QuadkitError → DomainError →
 NotFoundError`, `ValidationError`, `ConflictError`, ...) for everything
 else. The web layer renders both as problem responses — see
-[error handling](https://dbtinoy-.github.io/quadkit/guides/error-handling/).
+[error handling](https://oridecon.dev/quadkit/fundamentals/result-pattern/).
 
 ## Testing
 
 Pair with `quadkit-testing`: `AppTestBed.from_factory(create_app)` boots
 your application in-process (with `overrides={Contract: fake}` for test
 doubles), no server required. See
-[testing](https://dbtinoy-.github.io/quadkit/getting-started/testing/).
+[testing](https://oridecon.dev/quadkit/guides/testing/).
 
 ## Security
 
 Never put secrets in `application.yaml` — pass them through `QK_*`
 environment variables or a secret store. Unexpected exceptions never
 leak internals to clients. See
-[secure configuration](https://dbtinoy-.github.io/quadkit/security/secure-configuration/) and
+[secure configuration](https://oridecon.dev/quadkit/getting-started/configuration/) and
 report vulnerabilities privately per
 [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md).
 
 ## Stability
 
-Version `0.0.45` in the `0.x` series, released in lockstep with the
-other four distributions; APIs may change between minor versions until
+Version `0.0.46` in the `0.x` series, released in lockstep with the
+other twelve distributions; APIs may change between minor versions until
 1.0 — pin an exact version
-(`quadkit==0.0.45`) or a tight range (`>=0.0.45,<0.1.0`). Full policy:
-[stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
+(`quadkit==0.0.46`) or a tight range (`>=0.0.46,<0.1.0`). Full policy:
+[stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links
 
-- **Documentation** — <https://dbtinoy-.github.io/quadkit/>
-- **Getting started** — <https://dbtinoy-.github.io/quadkit/getting-started/installation/>
+- **Documentation** — <https://oridecon.dev/quadkit/>
+- **Getting started** — <https://oridecon.dev/quadkit/getting-started/installation/>
 - **Changelog** — <https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md>
 - **Issues** — <https://github.com/dbtinoy-/quadkit/issues>
 - **Security** — report privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md)

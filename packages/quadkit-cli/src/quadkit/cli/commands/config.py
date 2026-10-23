@@ -151,7 +151,7 @@ def init(
                 default_config,
                 header=(
                     "# Quadkit Framework Configuration\n"
-                    f"# Documented at {DOCS_BASE_URL}/config\n\n"
+                    f"# Documented at {DOCS_BASE_URL}/getting-started/configuration/\n\n"
                 ),
             )
 

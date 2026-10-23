@@ -11,7 +11,7 @@ SQL database abstractions for Quadkit Framework — Postgres, MySQL, SQLite with
 ---
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

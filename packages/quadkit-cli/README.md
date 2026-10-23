@@ -79,7 +79,7 @@ Global options: `--json` for machine-readable output, `--quiet`,
 | `quadkit version` | framework and package versions |
 
 Per-distribution guide:
-[quadkit-cli reference](https://dbtinoy-.github.io/quadkit/reference/quadkit-cli/).
+[quadkit-cli reference](https://oridecon.dev/quadkit/reference/cli/).
 
 ## Optional extras
 
@@ -111,16 +111,16 @@ review release notes on upgrade. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.45` in the `0.x` series, released in lockstep with the
-other four distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-cli==0.0.45`) or a tight range
-(`>=0.0.45,<0.1.0`). Full policy:
-[stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
+Version `0.0.46` in the `0.x` series, released in lockstep with the
+other twelve distributions; APIs may change between minor versions until
+1.0 — pin an exact version (`quadkit-cli==0.0.46`) or a tight range
+(`>=0.0.46,<0.1.0`). Full policy:
+[stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links
 
-- **Documentation** — <https://dbtinoy-.github.io/quadkit/>
-- **Getting started** — <https://dbtinoy-.github.io/quadkit/getting-started/installation/>
+- **Documentation** — <https://oridecon.dev/quadkit/>
+- **Getting started** — <https://oridecon.dev/quadkit/getting-started/installation/>
 - **Changelog** — <https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md>
 - **Issues** — <https://github.com/dbtinoy-/quadkit/issues>
 - **Security** — report privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md)

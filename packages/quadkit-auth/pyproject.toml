@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-auth"
-version = "0.0.45"
+version = "0.0.46"
 description = "Authentication and authorization for Quadkit Framework - JWT, OAuth2, SAML, LDAP, RBAC, and multi-tenancy"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -53,10 +53,10 @@ dependencies = [
     "jinja2>=3.1.0",
 ]
 authors = [
-    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+    { name = "Quadkit Framework Team", email = "hello@oridecon.dev" },
 ]
 maintainers = [
-    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+    { name = "Quadkit Framework Team", email = "hello@oridecon.dev" },
 ]
 
 [project.license]
@@ -98,9 +98,9 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://dbtinoy-.github.io/quadkit"
+Homepage = "https://oridecon.dev"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://dbtinoy-.github.io/quadkit"
+Documentation = "https://oridecon.dev/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 

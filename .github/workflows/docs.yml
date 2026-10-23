@@ -1,24 +1,28 @@
-name: Docs site
+name: Docs build
 
-# Builds the mkdocs site on every docs change and publishes it to GitHub
-# Pages when a release tag lands. The prose gates (scripts/check_public_*)
-# run in public-validation.yml — this workflow's job is the site build.
-
-# Trigger on release tags and manual dispatch: the export pipeline pushes
-# with a token that does not retrigger `push` workflows, so each release
-# tag is the dependable signal to rebuild and publish the site.
+# The canonical documentation site is https://oridecon.dev/quadkit/. This
+# workflow only verifies that the Markdown in docs/ still builds strictly,
+# so a broken cross-reference fails the public repository instead of
+# silently rotting. It does not deploy anywhere.
 on:
   push:
-    tags: ["v*"]
+    branches: [main]
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
+  pull_request:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+      - ".github/workflows/docs.yml"
   workflow_dispatch:
 
 permissions:
   contents: read
-  pages: write
-  id-token: write
 
 concurrency:
-  group: pages
+  group: docs-build-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -31,21 +35,5 @@ jobs:
           python-version: "3.11"
       - name: Install the site toolchain
         run: pip install mkdocs-material==9.5.34
-      - name: Build the site (strict)
+      - name: Build the site (strict, preview only)
         run: mkdocs build --strict --site-dir site
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-  deploy:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4

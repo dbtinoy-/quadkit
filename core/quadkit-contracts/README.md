@@ -110,7 +110,7 @@ async def load_setting(raw: str) -> int:
 `collect()` gathers many results, `partition()` splits them into
 successes and failures, and `try_catch()` is the sync counterpart of
 `as_result`. Full walkthrough:
-[contracts — errors as values](https://dbtinoy-.github.io/quadkit/concepts/contracts/).
+[contracts — errors as values](https://oridecon.dev/quadkit/fundamentals/container-protocols/).
 
 ## Optional extras
 
@@ -133,7 +133,7 @@ successes and failures, and `try_catch()` is the sync counterpart of
 | `quadkit.contracts.data` | `DatabaseProviderProtocol` |
 | `quadkit.contracts.security.secrets` | `SecretStoreProtocol` |
 
-Deep-dive: [contracts](https://dbtinoy-.github.io/quadkit/concepts/contracts/) in the docs
+Deep-dive: [contracts](https://oridecon.dev/quadkit/fundamentals/container-protocols/) in the docs
 set.
 
 ## Configuration
@@ -146,7 +146,7 @@ The taxonomy lives here: `QuadkitError` is the root; `DomainError`
 subclasses describe expected business failures (`NotFoundError`,
 `ValidationError`, `ConflictError`, `PermissionDeniedError`, ...). The
 web layer maps them to HTTP problem responses — see
-[error handling](https://dbtinoy-.github.io/quadkit/guides/error-handling/).
+[error handling](https://oridecon.dev/quadkit/fundamentals/result-pattern/).
 
 ## Testing
 
@@ -162,21 +162,21 @@ runtime dependencies. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.45` in the `0.x` series, released in lockstep with the
-other four distributions. **These protocols carry no compatibility
+Version `0.0.46` in the `0.x` series, released in lockstep with the
+other twelve distributions. **These protocols carry no compatibility
 guarantee yet**: minor releases may add, rename, or remove members
 while the framework is pre-1.0. Because this package is published
 whole, protocols for not-yet-released areas are the most likely to
 change; the settled ones are those exercised by `quadkit`,
 `quadkit-web`, `quadkit-testing`, and `quadkit-cli`. Pin an exact
-version (`quadkit-contracts==0.0.45`) when you depend on these types
+version (`quadkit-contracts==0.0.46`) when you depend on these types
 directly. Full policy:
-[stability and compatibility](https://dbtinoy-.github.io/quadkit/reference/stability/).
+[stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links
 
-- **Documentation** — <https://dbtinoy-.github.io/quadkit/>
-- **Getting started** — <https://dbtinoy-.github.io/quadkit/getting-started/installation/>
+- **Documentation** — <https://oridecon.dev/quadkit/>
+- **Getting started** — <https://oridecon.dev/quadkit/getting-started/installation/>
 - **Changelog** — <https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md>
 - **Issues** — <https://github.com/dbtinoy-/quadkit/issues>
 - **Security** — report privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/blob/main/SECURITY.md)

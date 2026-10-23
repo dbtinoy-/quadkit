@@ -11,7 +11,7 @@ quadkit-storage provides a unified `BlobStore` interface over Amazon S3, Google 
 ---
 
 
-> Full documentation: [docs.quadkit.dev](https://docs.quadkit.dev)
+> Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
 ## Install
 
 ```bash

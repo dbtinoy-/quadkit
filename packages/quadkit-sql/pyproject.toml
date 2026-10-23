@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-sql"
-version = "0.0.45"
+version = "0.0.46"
 description = "SQL database abstractions for Quadkit Framework — Postgres, MySQL, SQLite with migrations, repositories, and query building"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -49,10 +49,10 @@ dependencies = [
     "anyio>=4.0.0",
 ]
 authors = [
-    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+    { name = "Quadkit Framework Team", email = "hello@oridecon.dev" },
 ]
 maintainers = [
-    { name = "Quadkit Framework Team", email = "team@quadkit.dev" },
+    { name = "Quadkit Framework Team", email = "hello@oridecon.dev" },
 ]
 
 [project.license]
@@ -93,9 +93,9 @@ all = [
 ]
 
 [project.urls]
-Homepage = "https://dbtinoy-.github.io/quadkit"
+Homepage = "https://oridecon.dev"
 Repository = "https://github.com/dbtinoy-/quadkit"
-Documentation = "https://dbtinoy-.github.io/quadkit"
+Documentation = "https://oridecon.dev/quadkit/"
 Issues = "https://github.com/dbtinoy-/quadkit/issues"
 Changelog = "https://github.com/dbtinoy-/quadkit/blob/main/CHANGELOG.md"
 
