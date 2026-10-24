@@ -8,6 +8,8 @@ and the project adheres to
 
 ## [Unreleased]
 
+## [0.0.46] — 2026-10-23
+
 ### Changed
 
 - Documentation links and package metadata now point at
@@ -116,6 +118,7 @@ layer, `quadkit-cli` scaffolding and generators, and `quadkit-testing`
 test harness. Introduced the public repository layout, the docs site,
 the starter examples, and the runnable feature tour.
 
-[Unreleased]: https://github.com/dbtinoy-/quadkit/compare/v0.0.4...HEAD
+[Unreleased]: https://github.com/dbtinoy-/quadkit/compare/v0.0.46...HEAD
+[0.0.46]: https://github.com/dbtinoy-/quadkit/compare/v0.0.45...v0.0.46
 [0.0.4]: https://github.com/dbtinoy-/quadkit/compare/v0.0.3...v0.0.4
 [0.0.3]: https://github.com/dbtinoy-/quadkit/releases/tag/v0.0.3
