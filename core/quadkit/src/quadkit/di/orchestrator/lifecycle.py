@@ -245,8 +245,13 @@ class LifecycleManager:
         await self._events.emit_module_shutdown()
         await self._events.emit_before_shutdown()
 
-        ordered = self._registry.graph.topological_sort()
-        levels = self._registry.graph.compute_boot_levels(ordered)
+        # Dependency validation may have failed before any provider booted.
+        # There is nothing to tear down in that case; re-validating the invalid
+        # graph would prevent shutdown events and application container disposal.
+        levels: list[list[Provider]] = []
+        if self._boot_order:
+            ordered = self._registry.graph.topological_sort()
+            levels = self._registry.graph.compute_boot_levels(ordered)
 
         async with self._lock:
             for level in reversed(levels):

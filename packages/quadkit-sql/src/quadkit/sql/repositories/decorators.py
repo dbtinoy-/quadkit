@@ -23,7 +23,7 @@ import functools
 import time
 from typing import Any, TypeVar
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 logger = get_logger(__name__)
 
@@ -67,7 +67,7 @@ def timed(operation: str | None = None) -> Callable[[F], F]:
                     "repository_operation_failed",
                     operation=op_name,
                     elapsed_ms=round(elapsed_ms, 3),
-                    error=str(e),
+                    error_type=safe_error_type(e),
                 )
                 raise
 
@@ -122,13 +122,13 @@ def cacheable(
 
             cached = await cache.get(cache_key)
             if cached is not None:
-                logger.debug("repository_cache_hit", key=cache_key)
+                logger.debug("repository_cache_hit", operation=prefix)
                 return cached
 
             result = await fn(*args, **kwargs)
             if result is not None:
                 await cache.set(cache_key, result, ttl=ttl)
-                logger.debug("repository_cache_set", key=cache_key, ttl=ttl)
+                logger.debug("repository_cache_set", operation=prefix, ttl=ttl)
             return result
 
         return wrapper  # type: ignore[return-value]

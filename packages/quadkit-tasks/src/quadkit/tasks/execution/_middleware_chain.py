@@ -11,7 +11,7 @@ from collections.abc import Awaitable, Callable
 import time
 from typing import TYPE_CHECKING, Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.execution._invoke import invoke_handler
 from quadkit.tasks.middleware.core import (
     TaskExecutionContext,
@@ -126,13 +126,20 @@ async def execute_handler_through_middleware(
         # ANY handler error becomes a failed JobResult so metrics/after
         # hooks still observe the failure.
         duration = time.monotonic() - ctx.start_time
-        ctx.result = JobResult.fail(str(exc), job.retry_count, duration)
+        ctx.result = JobResult.fail(
+            f"Task failed ({safe_error_type(exc)})",
+            job.retry_count,
+            duration,
+        )
     finally:
         # After hooks run on success AND failure, isolated per middleware.
         for mw in pipeline._middleware:
             try:
                 await mw.after_execute(ctx)
-            except Exception:  # noqa: BLE001 — handler isolation
-                logger.exception("Error in middleware after_execute")
+            except Exception as middleware_error:  # noqa: BLE001 — handler isolation
+                logger.error(
+                    "task_middleware_after_execute_failed",
+                    error_type=safe_error_type(middleware_error),
+                )
 
     return ctx.result

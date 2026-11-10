@@ -1,0 +1,21 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: ai_agents:
+# Environment variable prefix: QK_AI_AGENTS__
+
+ai_agents:
+  # Maximum number of reasoning iterations per agent execution.
+  # Higher values allow deeper reasoning at the cost of latency.
+  max_iterations: 10
+
+  # Default sampling temperature for LLM calls (0.0 = deterministic, 2.0 = creative).
+  default_temperature: 0.7
+
+  # Default maximum tokens to generate per LLM response.
+  default_max_tokens: 2048
+
+  # Enable OpenTelemetry distributed tracing for agent executions.
+  enable_tracing: true
+
+  # Enable Prometheus metrics for agent performance monitoring.
+  enable_metrics: true

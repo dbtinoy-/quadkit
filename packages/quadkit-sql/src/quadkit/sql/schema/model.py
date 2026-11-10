@@ -27,9 +27,9 @@ here so the public import path is unchanged.
 
 from __future__ import annotations
 
-import re
 from typing import Any
 
+from quadkit.contracts.cli.generators import pluralize_identifier
 from quadkit.logging import get_logger
 from quadkit.sql.schema.descriptors import (
     BelongsTo as BelongsTo,
@@ -344,13 +344,9 @@ class Model(metaclass=ModelMeta):
 
 
 def _to_snake_case_plural(name: str) -> str:
-    """Convert PascalCase to snake_case_plural."""
-    s = re.sub(r"(?<!^)(?=[A-Z])", "_", name).lower()
-    if s.endswith("y"):
-        return s[:-1] + "ies"
-    if s.endswith(("s", "sh", "ch", "x", "z")):
-        return s + "es"
-    return s + "s"
+    """Convert a singular class name via the contracts pluralizer."""
+
+    return pluralize_identifier(name)
 
 
 __all__ = [

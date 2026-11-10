@@ -122,12 +122,17 @@ class _JWTRefreshMixin(_JWTRevocationMixin):
     async def refresh_access_token(self, refresh_token: str) -> AuthToken:
         """Create new access token from refresh token with rotation.
 
-        Implements one-time-use refresh tokens (RTR). The used refresh token is
-        blacklisted and a new refresh token is issued.
+        The used refresh token is consumed before a replacement is issued.
+        Cross-process single-winner semantics require a blacklist backend with
+        AtomicTokenClaimProtocol. Legacy backends still use verify then revoke;
+        they do not gain distributed atomicity from this method.
 
         If a blacklisted refresh token is presented, it indicates a potential
         reuse attack. In this case, all tokens for the user are invalidated
-        immediately to prevent further compromise.
+        using the existing account-wide sentinel policy. Revocation failures
+        never turn the denied refresh into success, and the error does not claim
+        that every session was successfully revoked. This is not family-scoped
+        refresh lineage or a browser-session recovery protocol.
 
         Raises:
             TokenBlacklistedError: If token reuse is detected (domain failure).
@@ -157,7 +162,9 @@ class _JWTRefreshMixin(_JWTRevocationMixin):
                             "Refresh token reuse detected for user %s. Revoking all sessions.",
                             user_id,
                         )
-                        await self.logout_all_user_tokens(user_id)
+                        revoked = await self.logout_all_user_tokens(user_id)
+                        if revoked.is_err():
+                            raise RuntimeError("User token revocation failed")
                 except Exception:  # noqa: BLE001 — revocation is best-effort; the BlacklistedTokenError below must still be raised
                     self.logger.exception(
                         "Failed to revoke user tokens after reuse detection",
@@ -167,15 +174,25 @@ class _JWTRefreshMixin(_JWTRevocationMixin):
                         "Unexpected error during session revocation",
                     )
                 raise BlacklistedTokenError(
-                    "Refresh token reuse detected. All sessions revoked.",
+                    "Refresh token reuse detected; refresh denied.",
                 ) from None
             # Other domain errors (expired, invalid)
             raise AuthTokenError(str(error)) from error
 
         verified = result.unwrap()
 
-        # Blacklist the used refresh token (rotation)
-        await self.logout(refresh_token)
+        # A durable backend can make verify/consume races single-winner across
+        # processes. Legacy cache backends retain their existing rotation path,
+        # but a failed revocation must never mint replacement credentials.
+        claimed = await self._blacklist_mgr.claim_verified_refresh(
+            refresh_token, verified.expires_at.timestamp()
+        )
+        if claimed is False:
+            raise BlacklistedTokenError("Refresh token already consumed")
+        if claimed is None:
+            revoked = await self.logout(refresh_token)
+            if revoked.is_err():
+                raise AuthTokenError("Refresh token revocation failed")
 
         # Create new token pair from token claims
         user = User(

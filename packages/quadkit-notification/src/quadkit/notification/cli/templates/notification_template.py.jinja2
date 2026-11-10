@@ -1,0 +1,44 @@
+"""{{ template_name }} notification template.
+
+Generated scaffold — render subject/body per channel and register the
+template with the notification service.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Any
+
+
+@dataclass(frozen=True, slots=True)
+class RenderedNotification:
+    """A notification rendered for one channel."""
+
+    channel: str
+    subject: str
+    body: str
+
+
+class {{ template_name }}Template:
+    """Notification template for the ``{{ template_name_snake }}`` event."""
+
+    name = "{{ template_name_snake }}"
+
+    def render(self, context: dict[str, Any]) -> RenderedNotification:
+        """Render the notification for *context*.
+
+        Args:
+            context: Template variables (recipient name, links, ...).
+
+        Returns:
+            A :class:`RenderedNotification` per outbound channel.
+        """
+        recipient = str(context.get("name", "there"))
+
+        # @INTENT: Render this notification's subject/body for each delivery channel.
+        # @TODO: adjust subjects/bodies for your channels.
+        return RenderedNotification(
+            channel="email",
+            subject="Hello {{ template_name_snake }}",
+            body=f"Hi {recipient}, this is the {{ template_name_snake }} notification.",
+        )

@@ -6,25 +6,22 @@ Suitable for production deployments requiring high reliability and message deliv
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
+from quadkit.contracts.infra.tasks import TaskQueueProtocol
 from quadkit.result import Ok, Result
 from quadkit.serialization import dumps, loads
 from quadkit.tasks.exceptions import TaskError
 from quadkit.tasks.hooks import TaskEnqueuedHook
 
 # Optional RabbitMQ dependency
+aio_pika: Any = None
 try:
     import aio_pika
 
     HAS_RABBITMQ = True
 except ImportError:
     HAS_RABBITMQ = False
-    aio_pika = None
-
-from typing import Any, cast
-
-from quadkit.contracts.infra.tasks import TaskQueueProtocol
 
 if TYPE_CHECKING:
     from quadkit.contracts.core import HookRegistryProtocol

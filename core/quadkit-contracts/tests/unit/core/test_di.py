@@ -21,6 +21,9 @@ class TestContainerRegistrarProtocol:
     def test_has_scoped_method(self) -> None:
         assert hasattr(ContainerRegistrarProtocol, "scoped")
 
+    def test_has_resolve_sync_method(self) -> None:
+        assert hasattr(ContainerRegistrarProtocol, "resolve_sync")
+
 
 class TestContainerResolverProtocol:
     """Tests for ContainerResolverProtocol."""

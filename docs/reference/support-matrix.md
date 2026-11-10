@@ -21,13 +21,14 @@ single reference for "is my setup supported".
 
 ## Distributions and deprecation policy
 
-The public surface is exactly thirteen distributions: the core five
-(`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`,
-`quadkit-testing`) plus `quadkit-sql`, `quadkit-auth`, `quadkit-cache`,
-`quadkit-storage`, `quadkit-events`, `quadkit-tasks`, `quadkit-http`, and
-`quadkit-monitor`. All thirteen release
-in lockstep with the same version number — mixing versions across them is
-not a supported configuration.
+The public-use set contains 18 distributions: the core five
+(`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`, `quadkit-testing`),
+plus `quadkit-sql`, `quadkit-auth`, `quadkit-cache`, `quadkit-storage`,
+`quadkit-events`, `quadkit-tasks`, `quadkit-http`, `quadkit-monitor`,
+`quadkit-ai-llm`, `quadkit-ai-agents`, `quadkit-ai-mcp`, `quadkit-workflow`,
+and `quadkit-notification`. Packages version independently. Check dependency
+bounds, tested artifact combinations and actual index availability; membership
+is not evidence that a candidate version has been published.
 
 | Stability tier | Meaning |
 | --- | --- |

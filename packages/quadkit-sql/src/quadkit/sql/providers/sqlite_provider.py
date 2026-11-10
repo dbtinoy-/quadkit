@@ -4,6 +4,7 @@ SQLite database provider for community edition
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 import re
 from typing import Any
@@ -20,13 +21,16 @@ except ImportError:
     HAS_AIOSQLITE = False
     aiosqlite = None
 
+from quadkit.contracts.data.sql.committed_reads import CommittedReadState
 from quadkit.sql.exceptions import (
     CheckConstraintError,
     DatabaseConnectionError,
     DuplicateKeyError,
     ForeignKeyError,
     IntegrityError,
+    NotNullViolationError,
     QueryError,
+    TransactionError,
 )
 from quadkit.sql.providers.base_provider import (
     DatabaseDriver,
@@ -40,6 +44,39 @@ class SQLiteProvider(DatabaseDriver):
     Uses aiosqlite for async SQLite operations.
     """
 
+    # Local provider holds its direct connection for a transaction, and the
+    # transaction manager rejects inherited cross-task scope use. Outbox relay
+    # code requires this explicit capability rather than assuming old wheels
+    # or third-party providers offer committed-only reads.
+    supports_outbox_committed_reads_v1 = True
+    supports_committed_read_guard_v1 = True
+
+    def committed_read_state(self) -> CommittedReadState:
+        """Verify this implementation, its pool and observable transaction state.
+
+        The execution/lease locks, not this snapshot alone, prevent another
+        task's uncommitted rows being exposed. Unknown subclasses/pools and
+        disabled implementation capabilities are deliberately refused.
+        """
+        from quadkit.sql.backends.sqlite import SQLiteConnectionPool
+
+        if (
+            type(self) is not SQLiteProvider
+            or self.supports_committed_read_guard_v1 is not True
+            or self.supports_outbox_committed_reads_v1 is not True
+        ):
+            return CommittedReadState.UNSUPPORTED_PROVIDER
+        pool = self.connection_pool
+        if pool is not None and (
+            type(pool) is not SQLiteConnectionPool
+            or getattr(pool, "supports_outbox_committed_reads_v1", False) is not True
+        ):
+            return CommittedReadState.UNSUPPORTED_POOL
+        active = getattr(self.transaction_manager, "in_transaction", None)
+        if type(active) is not bool:
+            return CommittedReadState.UNOBSERVABLE_TRANSACTION
+        return CommittedReadState.IN_TRANSACTION if active else CommittedReadState.SAFE
+
     name = "sqlite"
 
     def __init__(self, database_path: str = ":memory:", **kwargs: Any) -> None:
@@ -47,6 +84,10 @@ class SQLiteProvider(DatabaseDriver):
             raise ImportError(
                 "aiosqlite is required for SQLiteProvider. Install it with: pip install aiosqlite",
             )
+        # aiosqlite DEBUG records include functools.partial arguments with raw
+        # SQL parameters. Keep its driver logger at WARNING to prevent private
+        # identifiers and query values from entering application logs.
+        logging.getLogger("aiosqlite").setLevel(logging.WARNING)
         # Accept a raw filesystem path (e.g., '/var/db/test.db') or any
         # sqlite connection string — the sync scheme ('sqlite:///') or any
         # async driver variant ('sqlite+aiosqlite:///', 'sqlite+pysqlite:///',
@@ -104,6 +145,13 @@ class SQLiteProvider(DatabaseDriver):
         if path != ":memory:":
             await conn.execute("PRAGMA journal_mode=WAL")
         await conn.execute("PRAGMA busy_timeout=5000")
+        # SQLite parses FOREIGN KEY clauses but does not enforce them
+        # unless each connection opts in. Without this pragma the DDL
+        # the schema declares (referential actions included) is inert
+        # at runtime: dangling references insert silently and ON DELETE
+        # rules never fire. Enforcement is per-connection in SQLite, so
+        # it belongs here, at the one connection birthplace.
+        await conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
     async def _close_connection(self, connection: Any) -> None:
@@ -168,6 +216,8 @@ class SQLiteProvider(DatabaseDriver):
                 raise DuplicateKeyError(msg, cause=e) from e
             if "FOREIGN KEY constraint failed" in msg:
                 raise ForeignKeyError(msg, cause=e) from e
+            if "NOT NULL constraint failed" in msg:
+                raise NotNullViolationError(msg, cause=e) from e
             if "CHECK constraint failed" in msg:
                 raise CheckConstraintError(msg, cause=e) from e
             raise IntegrityError(msg, cause=e) from e
@@ -185,6 +235,12 @@ class SQLiteProvider(DatabaseDriver):
         "REPEATABLE READ": "IMMEDIATE",
         "SERIALIZABLE": "EXCLUSIVE",
     }
+
+    def _check_outer_transaction_boundary(self, connection: Any) -> None:
+        # Only the known raw driver exposes a state we can rely on here.
+        # Custom wrappers are not covered by this check.
+        if type(connection) is aiosqlite.Connection and connection.in_transaction:
+            raise TransactionError("connection already has an active transaction")
 
     async def _begin_transaction_raw(
         self, connection: Any, isolation: Any | None = None

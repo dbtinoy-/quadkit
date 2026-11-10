@@ -27,7 +27,11 @@ class _TaskAttrsMixin:
     _backend_registry: TaskBackendRegistry
     _background_tasks: set[asyncio.Task[Any]]
     _config: TaskConfig | None
+    _config_from_factory: bool
     _container: ContainerRegistrarProtocol
+    _explicit_enable_scheduler: bool
+    _explicit_queue: bool
+    _explicit_worker_count: bool
     _id_generator: IdGeneratorProtocol | None
     _middleware_pipeline: TaskMiddlewarePipeline | None
     _queue_services: list[tuple[str, Any]]

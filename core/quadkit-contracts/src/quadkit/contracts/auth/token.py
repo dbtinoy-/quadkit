@@ -113,6 +113,22 @@ class TokenManagerProtocol(Protocol):
 
 
 __all__ = [
+    "AtomicTokenClaimProtocol",
     "TokenManagerProtocol",
     "VerifiedToken",
 ]
+
+
+@runtime_checkable
+class AtomicTokenClaimProtocol(Protocol):
+    """Optional durable one-time refresh consumption capability.
+
+    Implement on the configured JWT blacklist backend. A successful claim must
+    become visible to ``exists`` before returning, and competing processes must
+    not both win. Store only the supplied hashed blacklist key, never raw JWTs.
+    Infrastructure errors must raise, not masquerade as a replay (False).
+    """
+
+    async def claim_token_once(self, key: str, ttl: float) -> bool:
+        """Atomically insert an absent token hash; True wins, False means replay."""
+        ...

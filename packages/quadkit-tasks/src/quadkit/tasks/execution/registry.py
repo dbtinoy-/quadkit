@@ -12,8 +12,10 @@ from quadkit.primitives.registry import Registry
 from quadkit.tasks.exceptions import TaskNotFoundError
 from quadkit.tasks.execution._invoke import invoke_handler
 
+TaskHandler = Callable[..., Awaitable[Any]] | type[Any]
 
-class HandlerRegistry(Registry[str, Callable[..., Awaitable[Any]]]):
+
+class HandlerRegistry(Registry[str, TaskHandler]):
     """Registry for task handlers that also satisfies the TaskExecutorProtocol contract.
 
     Maps task names to their handler functions. Handlers can be
@@ -42,7 +44,7 @@ class HandlerRegistry(Registry[str, Callable[..., Awaitable[Any]]]):
     def register(  # type: ignore[override]
         self,
         name: str,
-        handler: Callable[..., Awaitable[Any]] | None = None,
+        handler: TaskHandler | None = None,
     ) -> Callable[..., Any]:
         """Register a task handler.
 
@@ -69,8 +71,8 @@ class HandlerRegistry(Registry[str, Callable[..., Awaitable[Any]]]):
         if handler is None:
             # Used as decorator
             def decorator(
-                func: Callable[..., Awaitable[Any]],
-            ) -> Callable[..., Awaitable[Any]]:
+                func: TaskHandler,
+            ) -> TaskHandler:
                 super(HandlerRegistry, self).register(name, func)
                 return func
 

@@ -18,6 +18,8 @@ from starlette.requests import Request
 from starlette.types import Receive, Scope, Send
 
 from quadkit import Application
+from quadkit.contracts.core.result import Ok, Result
+from quadkit.contracts.exceptions import AuthorizationError
 from quadkit.testing import WebTestBed
 from quadkit.web import Controller, WebModule, get, roles
 
@@ -33,8 +35,10 @@ class RoleUser:
 class DemoAuthorizer:
     """`AuthorizerProtocol`: intersection of user roles with required roles."""
 
-    async def authorize(self, user: RoleUser, action: str, resource: object) -> bool:
-        return True  # decision surface kept for the protocol shape
+    async def authorize(
+        self, user: RoleUser, action: str, resource: object
+    ) -> Result[bool, AuthorizationError]:
+        return Ok(True)  # decision surface kept for the protocol shape
 
     async def check_access(
         self,

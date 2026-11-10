@@ -9,8 +9,14 @@ from quadkit.monitor.health.base import HealthCheck
 class FunctionHealthCheck(HealthCheck):
     """Health check implemented as a function."""
 
-    def __init__(self, name: str, func: Callable, critical: bool = True):
-        super().__init__(name, critical)
+    def __init__(
+        self,
+        name: str,
+        func: Callable,
+        critical: bool = True,
+        timeout: float | None = None,
+    ):
+        super().__init__(name, critical, timeout)
         self.func = func
 
     async def check(self) -> HealthCheckResult:

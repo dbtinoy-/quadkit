@@ -19,7 +19,41 @@ from quadkit.contracts.core.result import Result
 
 @dataclass(frozen=True, slots=True)
 class RelayChannel:
-    """Configuration of one upstream endpoint a gateway can route to."""
+    """Configuration of one upstream endpoint a gateway can route to.
+
+    ``group`` is the routing scope the channel serves, and ``groups`` holds
+    any *additional* scopes a channel is shared with — one physical channel
+    often serves several. A request is eligible only for channels that list
+    its group (see :meth:`serves_group`); the default ``"default"`` keeps
+    every channel that never mentions groups serving every request that
+    never mentions groups, so existing configurations select exactly as
+    before. Beyond that, scope is exact: no group name is magic. A
+    channel that genuinely serves everyone says so with ``public=True``
+    rather than by claiming a group whose name happens to mean "all" —
+    a silent wildcard is exactly the kind of routing behaviour that is
+    impossible to reason about after the fact.
+
+    ``models`` may be empty, which means **catch-all**: the channel serves
+    any model it is asked for. That is how new-api represents aggregators and
+    providers whose catalogue is not enumerable (undeclared media models);
+    selection prefers channels that name the requested model and only falls
+    back to catch-all ones when none does, so declaring a catalogue never
+    makes a channel less reachable.
+
+    ``cost_multiplier`` is the channel's price relative to list price, used
+    only by ``routing_policy="cheapest"``. ``None`` means list price (1.0),
+    which is what a host that does not track cost leaves it at — and such a
+    host keeps the default ``"priority"`` policy, so cost never enters
+    selection unless it is both declared and asked for.
+
+    ``upstream_base_url`` may be empty, which means *this channel is not
+    dialled by the gateway's HTTP transport*: an offline or host-local
+    adaptor answers it, and the host resolves (or does not need) a URL.
+    Selection never reads the field. A deployment that does dial through
+    the gateway loader still has to supply one — that check belongs to the
+    loader and to the transport that would otherwise build a garbage URL,
+    not to a routing model that must also describe adaptor-backed rows.
+    """
 
     name: str
     upstream_base_url: str
@@ -32,30 +66,50 @@ class RelayChannel:
     enabled: bool = True
     timeout_seconds: float = 60.0
     model_map: Mapping[str, str] = field(default_factory=dict)
+    group: str = "default"
+    groups: frozenset[str] = frozenset()
+    public: bool = False
+    cost_multiplier: float | None = None
 
     def __post_init__(self) -> None:
         """Validate the channel configuration."""
         if not self.name:
             raise ValueError("name must not be empty")
-        if not self.upstream_base_url:
-            raise ValueError("upstream_base_url must not be empty")
-        if not self.models:
-            raise ValueError("models must not be empty")
+        if not self.group:
+            raise ValueError("group must not be empty")
+        if self.cost_multiplier is not None and self.cost_multiplier <= 0:
+            raise ValueError("cost_multiplier must be positive when set")
         if self.timeout_seconds <= 0:
             raise ValueError("timeout_seconds must be positive")
         if self.weight < 0:
             raise ValueError("weight must not be negative")
-        unknown = set(self.model_map) - set(self.models)
+        # A catch-all channel has no catalogue to intersect with, so its map
+        # *is* the alias table: any key is addressable.
+        unknown = set(self.model_map) - set(self.models) if self.models else set()
         if unknown:
             raise ValueError(
                 f"model_map keys must be listed in models; unknown: {sorted(unknown)}"
             )
 
+    def serves_group(self, group: str) -> bool:
+        """Whether this channel is in scope for *group*.
+
+        Args:
+            group: The routing scope the caller belongs to.
+
+        Returns:
+            ``True`` when the channel is public, lists the group in
+            ``group`` or ``groups``. Membership is otherwise exact — an
+            empty request group never matches, and no group is implicit.
+        """
+        return self.public or group == self.group or group in self.groups
+
     def resolve_model(self, alias: str) -> str:
         """Resolve the upstream model name for *alias*.
 
         The mapping wins when it carries *alias*; otherwise the alias is
-        used as its own upstream name.
+        used as its own upstream name. This is what makes a catch-all
+        channel's alias table work without a declared catalogue.
 
         Args:
             alias: The client-visible model alias.
@@ -83,6 +137,7 @@ class RelayGatewayRequest:
     payload: Mapping[str, JsonValue]
     headers: Mapping[str, str]
     channel: RelayChannel | None = None
+    group: str = "default"
 
 
 @dataclass(frozen=True, slots=True)
@@ -171,6 +226,39 @@ class RelayGatewayError(Exception):
     status_code: int
     request_id: str
     retryable: bool = False
+
+
+@runtime_checkable
+class RelayRuntimeEnableProtocol(Protocol):
+    """Runtime eligibility overrides for routing targets.
+
+    The relay gateway's ``RelayChannelRegistry`` implements this over its
+    static channel table, and it is the surface the failover tracker and the
+    operator controls both write. It is a protocol rather than a concrete
+    dependency so a host that selects channels from its own store (a
+    database, a control plane) can hand the tracker *its* eligibility
+    surface instead of being forced onto the gateway's static table.
+
+    Implementations must treat "not listed" as eligible: only an explicit
+    override takes a target out of service.
+    """
+
+    def set_runtime_enabled(self, channel: str, enabled: bool) -> None:
+        """Take *channel* out of service, or restore it.
+
+        Args:
+            channel: The routing target's identity (a channel name).
+            enabled: ``False`` drains the target; ``True`` restores it.
+        """
+        ...
+
+    def runtime_enabled(self) -> Mapping[str, bool]:
+        """Return the non-default overrides.
+
+        Returns:
+            A mapping of target identity to ``False`` for drained targets.
+        """
+        ...
 
 
 @runtime_checkable

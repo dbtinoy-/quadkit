@@ -97,12 +97,7 @@ class PersistentDeadLetterQueue:
         )
         await self._backend.add(job.id, record.to_dict())
         self._total_added += 1
-        logger.info(
-            "PersistentDLQ: added job %s (%s): %s",
-            job.id,
-            job.name,
-            error[:100],
-        )
+        logger.info("persistent_dlq.job_added")
 
     async def remove(self, job_id: str) -> bool:
         """Permanently remove a failure from the DLQ.
@@ -135,7 +130,7 @@ class PersistentDeadLetterQueue:
         if raw is None:
             return None
         if isinstance(raw, FailureRecord):
-            return raw
+            return FailureRecord.from_dict(raw.to_dict())
         return FailureRecord.from_dict(raw)
 
     async def list_failed(
@@ -155,7 +150,10 @@ class PersistentDeadLetterQueue:
             dicts.
         """
         all_records = await self._backend.list_all()
-        all_records = list(reversed(all_records))
+        all_records = [
+            FailureRecord.from_dict(record).to_dict()
+            for record in reversed(all_records)
+        ]
         if job_name:
             all_records = [r for r in all_records if r.get("job_name") == job_name]
         return all_records[:limit]
@@ -176,9 +174,7 @@ class PersistentDeadLetterQueue:
             return None
         await self._backend.remove(job_id)
         self._total_retried += 1
-        logger.info(
-            "PersistentDLQ: retrying job %s (%s)", job_id, record_data.get("job_name")
-        )
+        logger.info("persistent_dlq.job_retry_requested")
         # Reconstruct a minimal JobProtocol from the record — callers should re-fetch
         # the full job from the queue if more attributes are needed.
         return None  # Callers must resolve the job from the task queue.

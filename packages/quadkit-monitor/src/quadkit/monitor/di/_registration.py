@@ -120,12 +120,25 @@ class _MonitorRegistrationMixin(_MonitorAttrsMixin):
             ),
         )
 
-        # Register health infrastructure singletons.
+        # Register health infrastructure singletons. One instance, aliased:
+        # the concrete class, the documented string key, the observability
+        # protocol and the two admin protocols must all resolve to the *same*
+        # registry, or a check added through one alias is invisible to a
+        # consumer resolving another — and admin's health widget reported
+        # "no health monitor registered" in every app because nothing ever
+        # bound its protocols.
+        from quadkit.contracts.admin import (
+            HealthOverviewProtocol,
+            NamedHealthCheckProtocol,
+        )
         from quadkit.contracts.observability.metrics import HealthCheckRegistryProtocol
 
-        container.singleton(HealthCheckRegistry, HealthCheckRegistry)
-        container.singleton("HealthCheckRegistry", HealthCheckRegistry)
-        container.singleton(HealthCheckRegistryProtocol, HealthCheckRegistry)
+        health_registry = HealthCheckRegistry()
+        container.singleton(HealthCheckRegistry, instance=health_registry)
+        container.singleton("HealthCheckRegistry", instance=health_registry)
+        container.singleton(HealthCheckRegistryProtocol, instance=health_registry)
+        container.singleton(HealthOverviewProtocol, instance=health_registry)
+        container.singleton(NamedHealthCheckProtocol, instance=health_registry)
 
         container.singleton(HealthCheckerRegistry, HealthCheckerRegistry())
         container.singleton(ProfilingRegistry, ProfilingRegistry())
@@ -146,19 +159,34 @@ class _MonitorRegistrationMixin(_MonitorAttrsMixin):
 
         await self._discover_backends(container)
 
-        await self._discover_backends(container)
+        # Register LoggingAlertDispatcher as the default AlertDispatcherProtocol
+        # when no custom or entry-point dispatcher has been bound.
+        from quadkit.contracts.observability.metrics import AlertDispatcherProtocol
+        from quadkit.monitor.alerts.alerting import LoggingAlertDispatcher
+
+        if not container.has(AlertDispatcherProtocol):
+            container.singleton(
+                AlertDispatcherProtocol,
+                LoggingAlertDispatcher(),
+            )
 
         # Collector-backed scrape endpoint. Registered unconditionally so the
         # documented ``prometheus_metrics_app`` key exists for any app that
         # configured monitoring; an explicit PrometheusMetricsExporter below
         # overrides it (a real prometheus_client registry renders richer text
         # than the collector's fallback exposition).
+        from quadkit.contracts.observability.metrics import MetricsExpositionProtocol
         from quadkit.monitor.middleware.prometheus import CollectorMetricsApp
 
         _collector_ref = self.metrics_collector
+        _collector_app = CollectorMetricsApp(metrics_collector=_collector_ref)
         container.singleton(
             "prometheus_metrics_app",
-            lambda: CollectorMetricsApp(metrics_collector=_collector_ref),
+            lambda: _collector_app,
+        )
+        container.singleton(
+            MetricsExpositionProtocol,
+            lambda: _collector_app,
         )
 
         # Register optional metrics exporter provided at construction time.

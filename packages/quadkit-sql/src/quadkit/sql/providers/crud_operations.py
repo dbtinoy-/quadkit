@@ -10,7 +10,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, cast
 
-from quadkit.contracts.data.identifiers import Column, Table
+from quadkit.contracts.data.identifiers import Column, Delta, Table
 from quadkit.contracts.data.sql.database import encode_bind_value
 from quadkit.logging import get_logger
 from quadkit.primitives import clock as ambient_clock
@@ -63,11 +63,15 @@ class DatabaseOperationContext:
     """Context manager for database operations with timing and error handling.
 
     Responsibilities are deliberately narrow: acquire/release the connection,
-    measure wall-clock time for the whole operation, and normalise errors to
-    :class:`DatabaseError`.  Query logging is **not** done here — the query
-    executor's ``execute_query``/``execute_modify`` already emit exactly one
-    log entry per statement, and logging here as well used to produce
-    duplicate console lines for every INSERT/UPDATE/DELETE.
+    measure wall-clock time for the whole operation, and normalise *foreign*
+    errors to :class:`DatabaseError`. Errors that already are
+    ``DatabaseError`` subclasses keep their concrete type — normalising a
+    ``ForeignKeyError`` into a plain ``DatabaseError`` would destroy the
+    distinction callers answer for (constraint outcome vs database fault).
+    Query logging is **not** done here — the query executor's
+    ``execute_query``/``execute_modify`` already emit exactly one log entry
+    per statement, and logging here as well used to produce duplicate
+    console lines for every INSERT/UPDATE/DELETE.
     """
 
     def __init__(
@@ -100,7 +104,7 @@ class DatabaseOperationContext:
         # Close the connection
         await self.conn_cm.__aexit__(exc_type, exc_val, exc_tb)
 
-        if exc_val:
+        if exc_val and not isinstance(exc_val, DatabaseError):
             raise DatabaseError(str(exc_val)) from exc_val
 
     def get_execution_time(self) -> float:
@@ -169,10 +173,27 @@ class CrudOperations(ABC):
         where_clause: str,
         where_params: list[Any] | None = None,
     ) -> UpdateResult:
-        """Execute an UPDATE operation"""
+        """Execute an UPDATE operation.
+
+        A :class:`~quadkit.contracts.data.identifiers.Delta` value moves the
+        column relative to itself (``col = col + ?``) instead of assigning to
+        it, so a balance changes in one statement rather than a read, an
+        arithmetic step in the caller and a write that can lose a concurrent
+        movement. Parameters are appended in column order either way, so the
+        WHERE clause still starts at the position the caller expects.
+        """
         safe_table = Table(table)
-        set_clause = ", ".join(f"{Column(k)} = ?" for k in data)
-        values = [_serialize_param(v) for v in data.values()]
+        assignments: list[str] = []
+        values: list[Any] = []
+        for key, value in data.items():
+            column = Column(key)
+            if isinstance(value, Delta):
+                assignments.append(f"{column} = {value.to_sql()}")
+                values.append(_serialize_param(value.amount))
+            else:
+                assignments.append(f"{column} = ?")
+                values.append(_serialize_param(value))
+        set_clause = ", ".join(assignments)
 
         sql = f"UPDATE {safe_table} SET {set_clause} WHERE {where_clause}"  # noqa: S608 -- safe_table/set_clause are Table()/Column() quoted; where_clause built by repo mixins from validated identifiers
 

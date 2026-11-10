@@ -1,7 +1,9 @@
 """Test task idempotency."""
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock, call
 
 import pytest
+
+import quadkit.tasks.execution.manager as manager_module
 
 from quadkit.contracts.exceptions import IdempotencyError, IdempotencyStoreError
 from quadkit.result import Err, Ok
@@ -109,7 +111,6 @@ class TestIdempotency:
         """Test worker skips execution of already-completed tasks."""
         from unittest.mock import AsyncMock
 
-        from quadkit.tasks.execution.worker import TaskWorker
         from quadkit.tasks.models.job import JobProtocol
 
         # Mock idempotency manager that returns completed task
@@ -234,8 +235,10 @@ class TestIdempotencyStoreFailure:
         with pytest.raises(IdempotencyStoreError) as excinfo:
             await manager.check_duplicate("key_abc")
 
-        assert "key_abc" in str(excinfo.value)
-        assert isinstance(excinfo.value.__cause__, IdempotencyError)
+        assert excinfo.value.message == "Idempotency store lookup failed"
+        assert "key_abc" not in str(excinfo.value)
+        assert "connection refused" not in str(excinfo.value)
+        assert excinfo.value.__cause__ is None
 
     @pytest.mark.asyncio
     async def test_check_duplicate_ok_none_returns_none(self):
@@ -299,3 +302,37 @@ class TestIdempotencyStoreFailure:
             await manager.record_completion("key_abc", {"charged": True})
 
         storage.set.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_idempotency_logs_omit_keys_and_task_ids(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        logger = MagicMock()
+        monkeypatch.setattr(manager_module, "logger", logger)
+        private_key = "PRIVATE_IDEMPOTENCY_KEY_SENTINEL"
+        private_task_id = "PRIVATE_TASK_ID_SENTINEL"
+        record = {
+            "task_id": private_task_id,
+            "idempotency_key": private_key,
+            "status": "submitted",
+            "created_at": "2024-01-01T00:00:00",
+            "result": None,
+        }
+        storage = AsyncMock()
+        storage.get.return_value = Ok(record)
+        manager = IdempotencyManager(storage)
+
+        assert await manager.check_duplicate(private_key) is not None
+        await manager.record_submission(
+            private_key, private_task_id, "private-user-task", {}
+        )
+        await manager.record_completion(private_key, {"ok": True})
+
+        logger.info.assert_called_once_with("task.duplicate_detected")
+        assert logger.debug.call_args_list == [
+            call("task.submission_recorded"),
+            call("task.completion_recorded"),
+        ]
+        assert private_key not in repr(logger.mock_calls)
+        assert private_task_id not in repr(logger.mock_calls)
+        assert "private-user-task" not in repr(logger.mock_calls)

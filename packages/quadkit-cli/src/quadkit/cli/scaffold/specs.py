@@ -30,6 +30,13 @@ class ProjectTemplateSpec:
     # none; the playground passes one per emitted registration provider so
     # the composition root wires what the scaffold generated.
     providers: tuple[tuple[str, str], ...] = ()
+    # ASGI middleware as ``(module, class_name, options_literal)`` triples.
+    # ``options_literal`` is already-rendered Python for the two-element
+    # registration tuple, or None for the bare ``(Cls,)`` form. Fresh
+    # ``quadkit new`` projects pass none; the playground passes the same
+    # entries its flat scaffold registers so adding a bounded context does
+    # not silently drop the web middleware stack.
+    middlewares: tuple[tuple[str, str, str | None], ...] = ()
 
 
 def _spec(
@@ -39,9 +46,16 @@ def _spec(
     features: frozenset[str] = frozenset(),
     notes: tuple[str, ...] = (),
     providers: tuple[tuple[str, str], ...] = (),
+    middlewares: tuple[tuple[str, str, str | None], ...] = (),
 ) -> ProjectTemplateSpec:
     return ProjectTemplateSpec(
-        name, description, dependencies, features, notes, providers
+        name,
+        description,
+        dependencies,
+        features,
+        notes,
+        providers,
+        middlewares,
     )
 
 

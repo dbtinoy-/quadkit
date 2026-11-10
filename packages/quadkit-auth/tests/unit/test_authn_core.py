@@ -11,7 +11,12 @@ from quadkit.auth.authn.jwt import JWTTokenManager
 from quadkit.auth.authn.schemas import RegisterRequest
 from quadkit.auth.authn.security import PasswordHasher
 from quadkit.auth.authn.services import AuthenticationService, LoginAttemptTracker
-from quadkit.auth.exceptions import AccountLockedError, InvalidCredentialsError
+from quadkit.auth.exceptions import (
+    AccountLockedError,
+    EmailExistsError,
+    InvalidCredentialsError,
+    UsernameExistsError,
+)
 from quadkit.auth.models import AuthToken, User
 from quadkit.auth.storage.token_store import InMemoryUserStore
 
@@ -155,6 +160,31 @@ class TestAuthenticationService:
         result = await auth_service.register_user(request)
 
         assert result.is_err()
+        assert isinstance(result.unwrap_err(), EmailExistsError)
+
+    @pytest.mark.asyncio
+    async def test_register_user_duplicate_name(
+        self, auth_service: AuthenticationService, user_store: InMemoryUserStore
+    ) -> None:
+        """Registration with a taken name (fresh email) is an Err, not a raise.
+
+        The store is the uniqueness authority for names — registration
+        only pre-checks email — so its typed conflict must surface as
+        ``Err(UsernameExistsError)`` (previously a bare ``ValueError``
+        escaped the Result and became a 500 at the HTTP layer).
+        """
+        await _make_user(user_store, "existing", "existing@example.com", "Password123!")
+
+        request = RegisterRequest(
+            name="existing",
+            email="new@example.com",
+            password="Password123!",
+            confirm_password="Password123!",
+        )
+        result = await auth_service.register_user(request)
+
+        assert result.is_err()
+        assert isinstance(result.unwrap_err(), UsernameExistsError)
 
     def test_create_token(
         self, auth_service: AuthenticationService, user_store: InMemoryUserStore

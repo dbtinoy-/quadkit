@@ -16,11 +16,17 @@ from quadkit.cache.repository.collections import (
     CollectionRepository,
     ConfigurationRepository,
 )
+from quadkit.cache.repository.mixin import (
+    CachedRepositoryMixin,
+    InvalidatingCacheMixin,
+)
 
 __all__ = [
     "CacheRepository",
+    "CachedRepositoryMixin",
     "CollectionRepository",
     "ConfigurationRepository",
     "EntityRepository",
+    "InvalidatingCacheMixin",
     "QueryRepository",
 ]

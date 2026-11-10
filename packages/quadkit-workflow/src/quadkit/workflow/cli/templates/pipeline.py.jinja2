@@ -1,0 +1,70 @@
+"""{{ pipeline_name }} pipeline.
+
+Sequential stages over a threaded payload: ``run()`` feeds each
+stage's output to the next. Ships extract/transform/load stubs —
+implement them and list the order in :meth:`stages`.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Awaitable, Callable
+from typing import Any
+
+from quadkit.logging import get_logger
+
+logger = get_logger(__name__)
+
+Stage = Callable[[Any], Awaitable[Any]]
+
+
+class {{ pipeline_name }}Pipeline:
+    """Sequential processing pipeline: ``{{ pipeline_name_snake }}``."""
+
+    name = "{{ pipeline_name_snake }}"
+
+    def stages(self) -> list[Stage]:
+        """Return the ordered pipeline stages.
+
+        Returns:
+            Callables applied in sequence to the payload.
+        """
+        # @INTENT: Declare the pipeline stages in the order they should run.
+        # @TODO: list your stages in execution order.
+        # Example:
+        #   return [self.extract, self.transform, self.load]
+        return []
+
+    async def run(self, payload: Any) -> Any:
+        """Run every stage over *payload*, threading results forward.
+
+        Args:
+            payload: The initial pipeline input.
+
+        Returns:
+            The output of the final stage.
+        """
+        for stage in self.stages():
+            logger.info("pipeline_stage_started")
+            payload = await stage(payload)
+        return payload
+
+    async def extract(self, payload: Any) -> Any:
+        """First stage — acquire/normalize input data."""
+        # @INTENT: Acquire and normalize the pipeline's raw input.
+        # @TODO: implement the extract stage.
+        _ = payload
+        raise NotImplementedError("implement the extract stage")
+
+    async def transform(self, payload: Any) -> Any:
+        """Middle stage — reshape/enrich the data."""
+        # @INTENT: Reshape/enrich the extracted data into its output form.
+        # @TODO: implement the transform stage.
+        _ = payload
+        raise NotImplementedError("implement the transform stage")
+
+    async def load(self, payload: Any) -> Any:
+        """Final stage — persist/publish the result."""
+        # @INTENT: Persist or publish the transformed result.
+        # @TODO: implement the load stage.
+        _ = payload
+        raise NotImplementedError("implement the load stage")

@@ -159,3 +159,21 @@ class _HealthMixin:
                 await self.db_provider.table_exists(table_name),  # type: ignore[attr-defined]
             )
         return False
+
+    async def get_table_columns(self, table_name: str) -> list[dict[str, Any]]:
+        """Return column metadata for *table_name* from the underlying provider.
+
+        Args:
+            table_name: The name of the table to inspect.
+
+        Returns:
+            Column descriptor dictionaries, or an empty list if unsupported.
+        """
+        if not self.db_provider:  # type: ignore[attr-defined]
+            await self.boot()  # type: ignore[attr-defined]
+        if hasattr(self.db_provider, "get_table_columns"):  # type: ignore[attr-defined]
+            return cast(
+                "list[dict[str, Any]]",
+                await self.db_provider.get_table_columns(table_name),  # type: ignore[attr-defined]
+            )
+        return []

@@ -6,18 +6,20 @@ for everything published from this repository.
 
 ## Versioning policy (`0.x`)
 
-- All thirteen distributions — the core five (`quadkit-contracts`,
+- All eighteen distributions — the core five (`quadkit-contracts`,
   `quadkit`, `quadkit-web`, `quadkit-cli`, `quadkit-testing`) plus
   `quadkit-sql`, `quadkit-auth`, `quadkit-cache`, `quadkit-storage`,
-  `quadkit-events`, `quadkit-tasks`, `quadkit-http`, and `quadkit-monitor` —
-  are released **in
-  lockstep with a single version** (currently `0.0.46`). Cross-package
-  compatibility is only guaranteed within one released version; do not
-  mix `quadkit-web 0.0.2` with a hypothetical `quadkit 0.0.46`.
+  `quadkit-events`, `quadkit-tasks`, `quadkit-http`, `quadkit-monitor`,
+  `quadkit-ai-llm`, `quadkit-ai-agents`, `quadkit-ai-mcp`,
+  `quadkit-workflow`, and `quadkit-notification` —
+  are versioned independently from the manifest of each distribution. The
+  currently published set is `0.0.50`. Cross-package compatibility is only
+  guaranteed between versions that were released and tested together; do not
+  assume that matching version numbers make two releases interchangeable.
 - **Minor releases** (`0.x → 0.y`) may change or remove public APIs.
   There are no breaking-change-free guarantees before `1.0`.
 - **Pin your versions.** In `pyproject.toml` prefer exact pins
-  (`quadkit-web==0.0.46`) or tight ranges (`>=0.0.46,<0.1.0`) until `1.0`,
+  (`quadkit-web==0.0.50`) or tight ranges (`>=0.0.50,<0.1.0`) until `1.0`,
   and read the release notes on every upgrade.
 
 ## Deprecation and breaking changes
@@ -35,7 +37,7 @@ for everything published from this repository.
 ## Python support
 
 - Every published distribution requires **Python >= 3.11**, matching the
-  `requires-python` metadata in all thirteen manifests.
+  `requires-python` metadata in all 18 public-use manifests.
 - Support for newer CPython releases is validated as it lands; the floor
   only moves in a minor release, with a note in the changelog.
 

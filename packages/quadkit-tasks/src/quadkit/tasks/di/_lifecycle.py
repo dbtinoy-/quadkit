@@ -17,7 +17,7 @@ from quadkit.contracts.core.health import HealthCheckCategory
 from quadkit.contracts.observability.metrics import (
     HealthCheckRegistryProtocol as _HealthCheckRegistry,
 )
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.admin.contributor import TasksAdminContributor
 from quadkit.tasks.di._attrs import _TaskAttrsMixin
 from quadkit.tasks.di._discovery import discover_registered_tasks
@@ -90,6 +90,8 @@ class _TaskLifecycleMixin(_TaskAttrsMixin):
                 "tasks_named_queues_connected",
                 count=len(self._queue_services),
             )
+        elif not self._explicit_queue:
+            await _connect_queue("default", self.queue)
 
         # Upgrade to CacheBackendResultStore if a CacheBackendProtocol is available.
         with contextlib.suppress(Exception):
@@ -284,14 +286,16 @@ class _TaskLifecycleMixin(_TaskAttrsMixin):
                 category=HealthCheckCategory.READINESS,
             )
 
-        except Exception as e:
+        except Exception as exc:
             # Intentionally broad: health checks should report failure rather than raising.
-            logger.exception("TaskProvider health check failed")
-            health_data = TaskHealth(status="unhealthy", message=str(e))
+            error_type = safe_error_type(exc)
+            logger.error("task_provider_health_check_failed", error_type=error_type)
+            safe_error = f"Health check failed ({error_type})"
+            health_data = TaskHealth(status="unhealthy", message=safe_error)
             return HealthCheckResult(
                 component=self.name,
                 status=HealthStatus.UNHEALTHY,
-                error=str(e),
+                error=safe_error,
                 details=health_data.to_dict(),
                 category=HealthCheckCategory.READINESS,
             )
@@ -322,5 +326,5 @@ async def _check_queue_health(queue: Any) -> HealthCheckResult:
         return HealthCheckResult(
             component="tasks",
             status=HealthStatus.UNHEALTHY,
-            error=str(exc),
+            error=f"Health check failed ({safe_error_type(exc)})",
         )

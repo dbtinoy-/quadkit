@@ -121,6 +121,45 @@ class ResultResponseMapper:
         return JSONResponse(content={"error": "Invalid result object"}, status_code=400)
 
     @classmethod
+    def documented_errors(
+        cls,
+        error_types: list[type[Exception]] | tuple[type[Exception], ...],
+        *,
+        exclude_statuses: set[str] | None = None,
+    ) -> dict[str, Any]:
+        """Describe explicitly declared default Result errors using native wiring.
+
+        Custom renderers require explicit responses; no return-annotation or
+        guard-name guessing, exception construction or policy inference occurs.
+        """
+        from quadkit.web.errors.mapping import get_default_status_for_error_type
+        from quadkit.web.errors.problem_detail import ProblemDetail
+
+        if not isinstance(error_types, (list, tuple)):
+            raise TypeError("result_errors must be an explicit list or tuple")
+        responses: dict[str, Any] = {}
+        for error_type in error_types:
+            status = get_default_status_for_error_type(error_type)
+            if not 400 <= status <= 599:
+                raise ValueError("Declared Result errors require a 4xx or 5xx status")
+            code = str(status)
+            if code in (exclude_statuses or set()):
+                continue
+            if any(
+                base in _ERROR_BODY_RENDERER_REGISTRY for base in error_type.__mro__
+            ):
+                raise ValueError(
+                    "Custom Result error renderers require explicit OpenAPI responses"
+                )
+            responses[code] = {
+                "description": "A declared Result error.",
+                "content": {
+                    "application/problem+json": {"schema": ProblemDetail.json_schema()}
+                },
+            }
+        return responses
+
+    @classmethod
     def register(
         cls,
         error_type: type[Exception],

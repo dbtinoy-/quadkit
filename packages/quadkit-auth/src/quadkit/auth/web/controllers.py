@@ -37,7 +37,13 @@ from starlette.requests import Request
 from quadkit.auth import constants as const
 from quadkit.auth.authn.schemas.requests import LoginRequest, RegisterRequest
 from quadkit.auth.authn.services import AuthenticationService
-from quadkit.auth.exceptions import AccountLockedError, InvalidCredentialsError
+from quadkit.auth.exceptions import (
+    AccountLockedError,
+    EmailExistsError,
+    InvalidCredentialsError,
+    PasswordPolicyError,
+    UsernameExistsError,
+)
 from quadkit.auth.models.user import User
 from quadkit.contracts.web import post
 from quadkit.result import Result
@@ -114,9 +120,9 @@ class AuthController(Controller):
     async def register(self, request: Request) -> dict[str, Any]:
         """Create a user and hand back a token for the new account.
 
-        Returns 409 when the email is taken, 422 when the password violates
-        the configured policy — both are actionable by the caller, so neither
-        is collapsed into a generic 400.
+        Returns 409 when the email or name is taken, 400 when the password
+        violates the configured policy — both are actionable by the caller,
+        so neither is collapsed into a generic error.
         """
         body = await _read_json_object(request)
         try:
@@ -127,10 +133,9 @@ class AuthController(Controller):
         result = await self.auth_service.register_user(payload)
         if result.is_err():
             error = result.unwrap_err()
-            name = type(error).__name__
-            if name == "EmailExistsError":
+            if isinstance(error, (EmailExistsError, UsernameExistsError)):
                 raise ConflictError(str(error)) from error
-            if name == "PasswordPolicyError":
+            if isinstance(error, PasswordPolicyError):
                 raise BadRequestError(str(error)) from error
             raise BadRequestError(str(error)) from error
 

@@ -108,10 +108,10 @@ class TestTaskChain:
         result = await chain_.execute("x")
         wr = result.unwrap()
         assert wr.status is WorkflowStatus.FAILED
-        assert wr.error == "Step 'bad' failed: boom"
+        assert wr.error == "Step failed (ValueError)"
         assert len(wr.steps) == 2
         assert wr.steps[1].success is False
-        assert wr.steps[1].error == "boom"
+        assert wr.steps[1].error == "Step failed (ValueError)"
 
     @pytest.mark.asyncio
     async def test_continue_on_error(self) -> None:
@@ -124,6 +124,32 @@ class TestTaskChain:
         assert wr.status is WorkflowStatus.COMPLETED
         assert wr.final_result == "processed:processed:x"
         assert [s.success for s in wr.steps] == [True, False, True]
+
+    @pytest.mark.asyncio
+    async def test_step_failure_log_contains_only_error_type(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        import quadkit.tasks.workflows.core as workflow_module
+
+        sentinel = "SENSITIVE_WORKFLOW_ERROR_SENTINEL"
+
+        async def fail_with_secret(_data: Any) -> Any:
+            raise RuntimeError(sentinel)
+
+        mock_logger = MagicMock()
+        monkeypatch.setattr(workflow_module, "logger", mock_logger)
+        result = await TaskChain([TaskStep("private-step", fail_with_secret)]).execute()
+
+        assert result.is_ok()
+        assert result.unwrap().steps[0].error == "Step failed (RuntimeError)"
+        assert result.unwrap().error == "Step failed (RuntimeError)"
+        mock_logger.warning.assert_called_once_with(
+            "workflow_chain_step_failed",
+            error_type="RuntimeError",
+        )
+        assert sentinel not in str(mock_logger.mock_calls)
 
     @pytest.mark.asyncio
     async def test_on_error_handler_recovers(self) -> None:
@@ -206,7 +232,9 @@ class TestTaskChain:
             async def load_state(self, workflow_id: str) -> None:
                 return None
 
-            async def save_state(self, workflow_id: str, result: WorkflowResult) -> None:
+            async def save_state(
+                self, workflow_id: str, result: WorkflowResult
+            ) -> None:
                 raise OSError("disk full")
 
         store = BrokenStore()
@@ -218,6 +246,7 @@ class TestTaskChain:
         result = await chain_.execute("x")
         assert result.is_err()
         assert isinstance(result.unwrap_err(), WorkflowError)
+        assert str(result.unwrap_err()) == "Workflow failed (OSError)"
 
     @pytest.mark.asyncio
     async def test_pipe_operator(self) -> None:
@@ -240,6 +269,7 @@ class TestTaskGroup:
         group = TaskGroup([TaskStep("a", _ok), TaskStep("b", _boom)])
         wr = (await group.execute("x")).unwrap()
         assert wr.status is WorkflowStatus.PARTIALLY_COMPLETED
+        assert wr.steps[1].error == "Step failed (ValueError)"
 
     @pytest.mark.asyncio
     async def test_all_fail(self) -> None:
@@ -273,7 +303,9 @@ class TestTaskGroup:
             async def load_state(self, workflow_id: str) -> None:
                 return None
 
-            async def save_state(self, workflow_id: str, result: WorkflowResult) -> None:
+            async def save_state(
+                self, workflow_id: str, result: WorkflowResult
+            ) -> None:
                 raise RuntimeError("infra down")
 
         group = TaskGroup(
@@ -283,6 +315,7 @@ class TestTaskGroup:
         )
         result = await group.execute("x")
         assert result.is_err()
+        assert str(result.unwrap_err()) == "Workflow failed (RuntimeError)"
 
 
 class TestTaskChord:
@@ -318,8 +351,9 @@ class TestTaskChord:
         )
         wr = (await chord.execute("x")).unwrap()
         assert wr.status is WorkflowStatus.FAILED
-        assert wr.error == "Callback 'merge' failed"
+        assert wr.error == "Callback step failed (ValueError)"
         assert wr.steps[-1].success is False
+        assert wr.steps[-1].error == "Callback step failed (ValueError)"
 
 
 class TestBranchStep:
@@ -353,7 +387,8 @@ class TestBranchStep:
         )
         wr = (await branch.execute({})).unwrap()
         assert wr.status is WorkflowStatus.FAILED
-        assert wr.steps[0].error == "boom"
+        assert wr.steps[0].error == "Branch step failed (ValueError)"
+        assert wr.error == "Branch step failed (ValueError)"
 
     @pytest.mark.asyncio
     async def test_condition_raising_returns_err(self) -> None:

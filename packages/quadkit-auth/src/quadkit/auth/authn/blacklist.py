@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import inspect
+import math
 from typing import TYPE_CHECKING, Any
 
 import jwt
@@ -52,8 +53,8 @@ class JWTBlacklist:
         cache: CacheBackendProtocol | None,
         algorithm: str,
         current_key_id_fn: Any,
-        access_expiration_hours: int,
-        refresh_expiration_days: int,
+        access_expiration_hours: float,
+        refresh_expiration_days: float,
         audit_logger: AuditLoggerProtocol | None = None,
         cache_resolver: Any = None,
     ) -> None:
@@ -186,6 +187,28 @@ class JWTBlacklist:
 
     # ── Public API ────────────────────────────────────────────────────────
 
+    async def claim_verified_refresh(
+        self, token: str, expires_at: float
+    ) -> bool | None:
+        """Use an explicitly supported atomic backend, or report no capability.
+
+        Call only after signature/type/audience verification. None preserves the
+        legacy backend path; it is not evidence of cross-process rotation safety.
+        """
+        from quadkit.contracts.auth.token import AtomicTokenClaimProtocol
+
+        cache = await self._effective_cache()
+        if not isinstance(cache, AtomicTokenClaimProtocol):
+            return None
+        ttl = expires_at - ambient_clock.timestamp()
+        if ttl <= 0:
+            return False
+        key = "jwt:blacklist:" + hashlib.sha256(token.encode()).hexdigest()
+        result = await cache.claim_token_once(key, ttl)
+        if type(result) is not bool:
+            raise RuntimeError("Atomic token claim returned an invalid result")
+        return result
+
     async def revoke(self, token: str) -> Result[None, ContractsTokenError]:
         """Add *token* to the blacklist.
 
@@ -272,8 +295,13 @@ class JWTBlacklist:
 
         cache = await self._effective_cache()
         max_token_ttl = max(
-            self._access_expiration_hours * 3600,
-            self._refresh_expiration_days * 86400,
+            1,
+            math.ceil(
+                max(
+                    self._access_expiration_hours * 3600,
+                    self._refresh_expiration_days * 86400,
+                )
+            ),
         )
         if not cache:
             self._fallback_users[str(user_id)] = (

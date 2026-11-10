@@ -79,6 +79,7 @@ if TYPE_CHECKING:
         HealthCheckRegistry,
         HealthCheckResult,
         HealthStatus,
+        InfrastructureHealthProvider,
         health_checker,
     )
     from quadkit.monitor.instrumentation.database import instrument_database
@@ -212,6 +213,7 @@ _LAZY_IMPORTS = {
     "HealthChecker": "quadkit.monitor.health",
     "HealthCheckerRegistry": "quadkit.monitor.health",
     "FunctionHealthCheck": "quadkit.monitor.health",
+    "InfrastructureHealthProvider": "quadkit.monitor.health",
     "health_checker": "quadkit.monitor.health",
     # NoOp stubs
     "NoOpSpan": "quadkit.observability.core",

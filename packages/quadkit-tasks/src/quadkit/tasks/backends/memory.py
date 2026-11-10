@@ -9,7 +9,7 @@ from __future__ import annotations
 import asyncio
 import heapq
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from quadkit.contracts.infra.tasks import TaskQueueProtocol
 from quadkit.result import Ok, Result
@@ -160,6 +160,35 @@ class MemoryTaskQueue(TaskQueueProtocol):
         """Clear all tasks from the queue"""
         async with self._lock:
             self.tasks.clear()
+            self._in_flight.clear()
+
+    async def get_job(self, job_id: str) -> JobProtocol | None:
+        """Get a queued or in-flight job by ID."""
+        async with self._lock:
+            in_flight = self._in_flight.get(job_id)
+            if in_flight is not None:
+                return in_flight[2]
+            for _, _, task in self.tasks:
+                if task.id == job_id:
+                    return task
+            return None
+
+    async def delete_job(self, job_id: str) -> bool:
+        """Delete a queued or in-flight job by ID."""
+        async with self._lock:
+            if self._in_flight.pop(job_id, None) is not None:
+                return True
+            for idx, (_, _, task) in enumerate(self.tasks):
+                if task.id == job_id:
+                    self.tasks.pop(idx)
+                    heapq.heapify(self.tasks)
+                    return True
+            return False
+
+    async def count(self, queue_name: str, status: Any | None = None) -> int:  # noqa: ARG002
+        """Count queued jobs (single-queue in-memory implementation)."""
+        async with self._lock:
+            return len(self.tasks)
 
     async def close(self) -> None:
         """Close the queue connection

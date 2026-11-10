@@ -19,6 +19,7 @@ async def test_list_users_handles_dict_result():
         "hashed_password": "h",
     }
     # Provider-level execute_query returns a dict for the list
+    mock_db.execute = AsyncMock()
     mock_db.execute_query = AsyncMock(return_value=row)
 
     store = SQLUserStore(mock_db)
@@ -33,6 +34,7 @@ async def test_count_users_handles_list_result():
     # Mock DB provider returning a list for count
     mock_db = MagicMock()
 
+    mock_db.execute = AsyncMock()
     mock_db.execute_query = AsyncMock(return_value=[{"count": 5}])
 
     store = SQLUserStore(mock_db)

@@ -17,7 +17,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from quadkit import serialization as json
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.progress.core import ProgressInfo, ProgressStore
 
 if TYPE_CHECKING:
@@ -82,7 +82,10 @@ class CacheBackendProgressStore(ProgressStore):
                 metadata=d.get("metadata", {}),
             )
         except (json.JSONDecodeError, KeyError) as exc:
-            logger.warning("tasks.progress.deserialize_error", error=str(exc))
+            logger.warning(
+                "tasks.progress.deserialize_error",
+                error_type=safe_error_type(exc),
+            )
             return None
 
     async def save(self, info: ProgressInfo) -> None:

@@ -40,6 +40,9 @@ from quadkit.sql.lib.retry import retry_call
 class SQLiteConnectionPool(ConnectionPoolProtocol):
     """SQLite connection pool (single connection for simplicity)"""
 
+    # The one physical connection is leased exclusively across transactions.
+    supports_outbox_committed_reads_v1 = True
+
     def __init__(
         self,
         database: str = ":memory:",
@@ -60,6 +63,9 @@ class SQLiteConnectionPool(ConnectionPoolProtocol):
         self._is_healthy = False
         self._last_health_check = 0.0
         self._connection_count = 0
+        # A SQLite pool owns one physical connection; never hand it to two
+        # tasks at once while one task holds a transaction.
+        self._lease_lock = asyncio.Lock()
         self._error_count = 0
         self._total_connections_created = 0
         self._monitoring_task: asyncio.Task[None] | None = None
@@ -106,6 +112,10 @@ class SQLiteConnectionPool(ConnectionPoolProtocol):
         """Internal connection creation with error handling"""
         try:
             self._conn = await aiosqlite.connect(self.database, **self.pool_kwargs)
+            # SQLite requires foreign-key enforcement per physical connection,
+            # including connections created by the pool rather than the driver.
+            cursor = await self._conn.execute("PRAGMA foreign_keys=ON")
+            await cursor.close()
             self._file_identity = self._stat_identity()
             self._total_connections_created += 1
             self._is_healthy = True
@@ -163,7 +173,14 @@ class SQLiteConnectionPool(ConnectionPoolProtocol):
 
     @asynccontextmanager
     async def get_connection(self) -> AsyncGenerator[SQLiteConnection, None]:
-        """Get the initialized connection with circuit breaker protection"""
+        """Lease the single physical connection to one task at a time."""
+        async with self._lease_lock:
+            async with self._get_connection_unlocked() as connection:
+                yield connection
+
+    @asynccontextmanager
+    async def _get_connection_unlocked(self) -> AsyncGenerator[SQLiteConnection, None]:
+        """Get the initialized connection with circuit breaker protection."""
         if not self._conn:
             await self.initialize()
 

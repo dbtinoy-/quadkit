@@ -6,11 +6,13 @@ issues once work starts.
 
 ## Shipped
 
-- **Thirteen-distribution public release** — the core five
+- **18-distribution public-use set** — the core five
   (`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`,
   `quadkit-testing`) plus `quadkit-sql`, `quadkit-auth`, `quadkit-cache`,
   `quadkit-storage`, `quadkit-events`, `quadkit-tasks`, `quadkit-http`, and
-  `quadkit-monitor` in lockstep versions,
+  `quadkit-monitor`, plus `quadkit-ai-llm`, `quadkit-ai-agents`,
+  `quadkit-ai-mcp`, `quadkit-workflow`, and `quadkit-notification`,
+  versioned independently (membership is not publication),
   generated from a private monorepo with a verified export pipeline.
 - **Docs as code** — every page validated in CI; getting-started and guide
   examples execute as real tests against the published wheels.

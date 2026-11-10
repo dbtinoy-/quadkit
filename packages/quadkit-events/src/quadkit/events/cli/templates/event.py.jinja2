@@ -20,7 +20,7 @@ from dataclasses import dataclass
 from quadkit.contracts.domain import DomainEvent
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class {{ class_name }}Event(DomainEvent):
     """Emitted when a {{ class_name }} occurs."""
 {% if fields %}{% for field in fields %}

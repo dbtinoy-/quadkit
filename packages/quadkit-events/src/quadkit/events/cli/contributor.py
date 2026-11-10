@@ -49,6 +49,12 @@ _SPECS: tuple[tuple[str, str, str, str], ...] = (
         "quadkit.events.cli.generators.projection:ProjectionGenerator",
         "src/projections",
     ),
+    (
+        "use_case",
+        "Generate a use case: command/result message + application-service handler",
+        "quadkit.events.cli.generators.use_case:UseCaseGenerator",
+        "src/usecases",
+    ),
 )
 
 _GENERATOR_DEFINITIONS: tuple[GeneratorDefinition, ...] = tuple(

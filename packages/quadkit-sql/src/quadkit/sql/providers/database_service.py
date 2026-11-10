@@ -29,6 +29,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, ClassVar, cast
 
+from quadkit.contracts.data.sql.committed_reads import CommittedReadState
 from quadkit.sql.config import DatabaseConfig
 from quadkit.sql.logging import ConsoleQueryLogger
 from quadkit.sql.managers import DatabaseManager
@@ -100,6 +101,22 @@ class DatabaseService(_ConnectionMixin, _QueryMixin, _HealthMixin):
                 await provider.execute_insert("users", {"name": "John"})
                 await provider.execute_update("users", {"name": "Jane"}, "id = ?", (1,))
     """
+
+    supports_committed_read_guard_v1 = True
+
+    def committed_read_state(self) -> CommittedReadState:
+        """Delegate safety inspection only to the verified local SQLite driver."""
+        from quadkit.sql.providers.sqlite_provider import SQLiteProvider
+
+        driver = self.db_provider
+        if (
+            type(self) is not DatabaseService
+            or self.supports_committed_read_guard_v1 is not True
+            or type(driver) is not SQLiteProvider
+            or driver.supports_committed_read_guard_v1 is not True
+        ):
+            return CommittedReadState.UNSUPPORTED_PROVIDER
+        return driver.committed_read_state()
 
     _driver_registry: ClassVar[dict[str, ProviderFactory]] = {
         "sqlite": _load_sqlite,

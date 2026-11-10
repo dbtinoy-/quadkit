@@ -1,4 +1,5 @@
 """Tests for T-08: TaskWorker delegates retries to injected RetryPolicyProtocol."""
+
 import time
 from unittest.mock import AsyncMock, MagicMock
 
@@ -41,19 +42,40 @@ async def test_handle_job_failure_sends_to_dlq_not_queue():
     # DLQ.add() is synchronous — use MagicMock
     dlq = MagicMock()
 
-    worker = TaskWorker("worker-1", queue, handler_registry={}, services=TaskWorkerServices(dead_letter_queue=dlq))
+    worker = TaskWorker(
+        "worker-1",
+        queue,
+        handler_registry={},
+        services=TaskWorkerServices(dead_letter_queue=dlq),
+    )
+    worker.logger = MagicMock()
 
     job = JobProtocol(id="job-1", name="test", max_retries=3)
     start_time = time.time()
 
-    await worker._handle_job_failure(job, "error occurred", start_time)
+    await worker._handle_job_failure(
+        job,
+        "sensitive error detail",
+        start_time,
+        error_type="ValueError",
+    )
 
-    # JobProtocol should be marked as permanently failed
+    worker.logger.error.assert_called_once_with(
+        "worker_job_failed_permanently",
+        retry_count=0,
+        error_type="ValueError",
+    )
+    assert "worker-1" not in str(worker.logger.error.call_args)
+    assert "job-1" not in str(worker.logger.error.call_args)
+    assert "sensitive error detail" not in str(worker.logger.error.call_args)
+
+    # JobProtocol and the DLQ receive a type-only failure detail.
     assert job.status == JobStatus.FAILED
-    assert job.last_error == "error occurred"
+    assert job.last_error == "Task failed (ValueError)"
 
     # DLQ.add() should have been called (DLQ is sync)
     dlq.add.assert_called_once()
+    assert dlq.add.call_args.kwargs["error"] == "Task failed (ValueError)"
 
     # Queue should NOT have been asked to enqueue (T-08: no re-enqueue path)
     queue.enqueue.assert_not_awaited()
@@ -102,8 +124,10 @@ async def test_execute_job_exhausted_retries_sends_to_dlq():
 
     dlq = MagicMock()  # DLQ.add() is synchronous
 
+    private_error = "private /srv/app/users/user-42 traceback=secret"
+
     async def always_fails() -> None:
-        raise ValueError("permanent failure")
+        raise ValueError(private_error)
 
     worker = TaskWorker(
         "worker-1",
@@ -118,11 +142,16 @@ async def test_execute_job_exhausted_retries_sends_to_dlq():
     job = JobProtocol(id="job-2", name="bad", max_retries=2)
     await worker._execute_job(job)
 
-    # JobProtocol should be permanently failed
+    # JobProtocol should be permanently failed without exposing raw exception text.
     assert job.status == JobStatus.FAILED
+    assert job.last_error == "Task failed (TaskExecutionError)"
+    assert private_error not in str(job.last_error)
+    assert "/srv/app" not in str(job.last_error)
+    assert "user-42" not in str(job.last_error)
 
     # DLQ should have received the job once all retries exhausted
     dlq.add.assert_called_once()
+    assert dlq.add.call_args.kwargs["error"] == "Task failed (TaskExecutionError)"
 
     # Queue should NOT have been asked to enqueue
     queue.enqueue.assert_not_awaited()

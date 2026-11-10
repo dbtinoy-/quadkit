@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Callable
 from dataclasses import replace
 import time
@@ -45,10 +46,11 @@ class HealthCheckRegistry(Registry[str, HealthCheck]):
         critical: bool = True,
         liveness: bool = True,
         readiness: bool = True,
+        timeout: float | None = None,
     ) -> None:
         from quadkit.monitor.health.functions import FunctionHealthCheck
 
-        check = FunctionHealthCheck(name, func, critical)
+        check = FunctionHealthCheck(name, func, critical, timeout)
         self._register(check, liveness, readiness)
 
     async def _run_named(
@@ -73,9 +75,23 @@ class HealthCheckRegistry(Registry[str, HealthCheck]):
 
         try:
             start = time.time()
-            result = await check.check()
+            if check.timeout is not None:
+                # A bound the caller asked for is a bound: without this the
+                # ``timeout`` argument was accepted and dropped, so one hung
+                # probe blocked the whole sweep.
+                result = await asyncio.wait_for(check.check(), timeout=check.timeout)
+            else:
+                result = await check.check()
             result = replace(result, duration_ms=(time.time() - start) * 1000)
             return result.to_dict()
+        except TimeoutError:
+            logger.warning("Health check %s timed out", name)
+            return HealthCheckResult(
+                component=name,
+                status=HealthStatus.UNHEALTHY,
+                message=f"timed out after {check.timeout}s",
+                duration_ms=(time.time() - start) * 1000,
+            ).to_dict()
         except Exception as e:  # noqa: BLE001 — any check failure is UNHEALTHY, never a raw raise
             logger.exception("Health check %s error", name)
             result = HealthCheckResult(
@@ -174,6 +190,7 @@ class HealthCheckRegistry(Registry[str, HealthCheck]):
             critical=critical,
             liveness=is_liveness,
             readiness=is_readiness,
+            timeout=timeout,
         )
 
     async def run_all(self) -> tuple[Any, dict[str, Any]]:

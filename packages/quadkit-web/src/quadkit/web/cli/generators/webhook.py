@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+from keyword import iskeyword
 from pathlib import Path
+from typing import Any
 
 from quadkit.codegen import (
     FieldSpec,
@@ -21,6 +23,7 @@ class WebhookGenerator(GeneratorBase):
     name = "webhook"
     description = "Generate a webhook handler"
     default_output_dir = "src/webhooks"
+    supports_use_case_binding_v1 = True
 
     def __init__(self, output_dir: str | Path = "src/webhooks") -> None:
         super().__init__(output_dir=output_dir)
@@ -30,6 +33,7 @@ class WebhookGenerator(GeneratorBase):
         name: str,
         *,
         fields_str: str | None = None,
+        use_case: dict[str, Any] | None = None,
         dry_run: bool = False,
         force: bool = False,
         **options: object,
@@ -39,6 +43,8 @@ class WebhookGenerator(GeneratorBase):
         Args:
             name: Webhook name (e.g. ``"PaymentWebhook"`` or ``"payment_webhook"``).
             fields_str: Optional ``name:type`` field list in parser syntax.
+            use_case: Closed signed scalar-command binding (module, command,
+                result, event_type, inputs). No principal or metadata mapping.
             dry_run: Compute output paths without writing.
             force: Overwrite an existing file.
 
@@ -46,6 +52,11 @@ class WebhookGenerator(GeneratorBase):
             ``GenerationResult`` with created/skipped/overwritten paths.
         """
         file_path = self.output_dir / f"{self._to_snake_case(name)}_webhook.py"
+        if use_case is not None:
+            use_case = self._compile_use_case(use_case)
+            if fields_str:
+                raise ValueError("use_case webhook defines its own closed payload")
+            fields_str = "aggregate_id:str," + use_case["inputs"][0] + ":str"
         parsed = list(parse_fields(fields_str or ""))
         if parsed and not any(field.name == "event_type" for field in parsed):
             # The handler dispatches on ``webhook_payload.event_type``, so a
@@ -57,6 +68,21 @@ class WebhookGenerator(GeneratorBase):
         content = self.render_template(
             "webhook.py.jinja2",
             {
+                "use_case": use_case,
+                "bound_imports": sorted(
+                    [
+                        "from pydantic import BaseModel, ConfigDict, Field, ValidationError",
+                        "from quadkit.contracts import CommandBusProtocol",
+                        "from quadkit.serialization import JSONDecodeError, loads",
+                        "from quadkit.web import JSONResponse",
+                        "from starlette.requests import Request",
+                        f"from {use_case['module']} import "
+                        + ", ".join(sorted([use_case["command"], use_case["result"]])),
+                    ],
+                    key=str.lower,
+                )
+                if use_case
+                else [],
                 "webhook_name": self._to_pascal_case(name),
                 "webhook_name_snake": self._to_snake_case(name),
                 "package_name": self._package_name(),
@@ -75,13 +101,69 @@ class WebhookGenerator(GeneratorBase):
                 ],
                 # ``Any`` is used by the handler registry outside the payload,
                 # so it is imported whether or not a field asks for it.
-                "imports": import_lines(
-                    (field.type for field in parsed), always=["Any"]
-                ),
+                "imports": ["from typing import Any, Literal", "from uuid import UUID"]
+                if use_case
+                else import_lines((field.type for field in parsed), always=["Any"]),
             },
         )
         self.stage(file_path, content)
         return self.finalize(self.commit(resolve_options(dry_run=dry_run, force=force)))
+
+    @staticmethod
+    def _compile_use_case(spec: dict[str, Any]) -> dict[str, Any]:
+        if type(spec) is not dict or set(spec) != {
+            "module",
+            "command",
+            "result",
+            "event_type",
+            "inputs",
+        }:
+            raise ValueError(
+                "use_case requires exact command/result/event_type/inputs binding"
+            )
+        for key in ("module", "command", "result", "event_type"):
+            value = spec[key]
+            parts = value.split(".") if type(value) is str else []
+            if (
+                not parts
+                or (key != "module" and len(parts) != 1)
+                or any(
+                    not part.isascii()
+                    or not part.isidentifier()
+                    or iskeyword(part)
+                    or part.startswith("_")
+                    for part in parts
+                )
+            ):
+                raise ValueError("use_case binding requires public Python identifiers")
+        inputs = spec["inputs"]
+        reserved = {
+            "id",
+            "timestamp",
+            "metadata",
+            "aggregate_id",
+            "event_type",
+            "principal_sub",
+            "clock",
+            "actor_id",
+        }
+        if (
+            type(inputs) is not list
+            or len(inputs) != 1
+            or any(
+                type(name) is not str
+                or not name.isascii()
+                or not name.isidentifier()
+                or iskeyword(name)
+                or name.startswith("_")
+                or name in reserved
+                for name in inputs
+            )
+        ):
+            raise ValueError(
+                "use_case requires one public scalar input without authority fields"
+            )
+        return dict(spec)
 
     def _package_name(self) -> str:
         parts = self.output_dir.parts

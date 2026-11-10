@@ -121,7 +121,11 @@ async def test_work_loop_survives_unexpected_exception():
         await worker._work_loop()
 
     assert dequeue_calls == 2
-    worker.logger.exception.assert_called_once()
+    worker.logger.error.assert_called_once_with(
+        "worker_loop.unexpected_error",
+        error_type="UnexpectedWorkerError",
+    )
+    worker.logger.exception.assert_not_called()
 
 
 @pytest.mark.asyncio

@@ -13,6 +13,13 @@ if TYPE_CHECKING:
     from quadkit.web.config import WebConfig
     from quadkit.web.di.provider import WebProvider
     from quadkit.web.di.rate_limit import RateLimitProvider
+    from quadkit.web.routing.health_controller import HealthController
+    from quadkit.web.server.shutdown import (
+        GracefulShutdownManager,
+        GracefulShutdownProvider,
+        ShutdownMiddleware,
+    )
+    from quadkit.web.transport.requests import Request, UploadFile
 
 
 # =============================================================================
@@ -40,6 +47,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
         "ControllerRegistry",
     ),
     "GenericController": ("quadkit.web.routing.controller", "GenericController"),
+    "HealthController": ("quadkit.web.routing.health_controller", "HealthController"),
     "Router": ("quadkit.web.routing.router", "Router"),
     "RouteRegistry": ("quadkit.web.routing.registry", "RouteRegistry"),
     "VersionExtractor": ("quadkit.web.routing.versioning", "VersionExtractor"),
@@ -69,6 +77,8 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "websocket": ("quadkit.web.routing.decorators", "websocket"),
     "websocket_handler": ("quadkit.web.websocket.decorators", "websocket_handler"),
     # Transport
+    "Request": ("quadkit.web.transport.requests", "Request"),
+    "UploadFile": ("quadkit.web.transport.requests", "UploadFile"),
     "Response": ("quadkit.web.transport.responses", "Response"),
     "FastJSONResponse": ("quadkit.web.transport.responses", "FastJSONResponse"),
     "HTMXResponse": ("quadkit.web.transport.responses", "HTMXResponse"),
@@ -168,6 +178,19 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "Result": ("quadkit.result", "Result"),
     "Ok": ("quadkit.result", "Ok"),
     "Err": ("quadkit.result", "Err"),
+    # Server shutdown
+    "GracefulShutdownManager": (
+        "quadkit.web.server.shutdown",
+        "GracefulShutdownManager",
+    ),
+    "GracefulShutdownProvider": (
+        "quadkit.web.server.shutdown",
+        "GracefulShutdownProvider",
+    ),
+    "ShutdownMiddleware": (
+        "quadkit.web.server.shutdown",
+        "ShutdownMiddleware",
+    ),
 }
 
 
@@ -213,10 +236,13 @@ __all__ = [
     "FastJSONResponse",
     "FileResponse",
     "GenericController",
+    "GracefulShutdownManager",
+    "GracefulShutdownProvider",
     "HTMLContent",
     "HTMLResponse",
     "HTMXResponse",
     "HTTPError",
+    "HealthController",
     "InputSanitizationMiddleware",
     "InternalServerError",
     "JSONResponse",
@@ -230,14 +256,17 @@ __all__ = [
     "RateLimitModule",
     "RateLimitProvider",
     "RedirectResponse",
+    "Request",
     "Response",
     "Result",
     "ResultResponseMapper",
     "RoleGuard",
     "RouteRegistry",
     "Router",
+    "ShutdownMiddleware",
     "StreamingResponse",
     "TooManyConnectionsError",
+    "UploadFile",
     "VersionExtractor",
     "WebAppAccessorProtocol",
     "WebConfig",

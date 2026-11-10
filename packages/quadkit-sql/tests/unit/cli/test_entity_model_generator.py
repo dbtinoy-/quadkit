@@ -131,3 +131,43 @@ def test_reserved_fields_are_not_duplicated(tmp_path: Path) -> None:
     source = _render(tmp_path, "id:str,created_at:datetime,title:str")
     assert source.count("    id: str = Field(") == 1
     assert source.count("    created_at: datetime = Field(") == 1
+
+
+def test_write_only_field_is_writable_but_never_dumped(tmp_path: Path) -> None:
+    """A ``!writeonly`` field is on both write DTOs with the schema marker,
+    and ``exclude=True`` on the entity so ``model_dump`` never returns it."""
+    source = _render(tmp_path, "title:str,password_hash:str!writeonly,api_key:str?!writeonly")
+    assert (
+        _annotation(source, "NoteCreate", "password_hash")
+        == 'password_hash: str = Field(json_schema_extra={"writeOnly": True})'
+    )
+    assert (
+        _annotation(source, "NoteUpdate", "password_hash")
+        == 'password_hash: str | None = Field(default=None, json_schema_extra={"writeOnly": True})'
+    )
+    assert (
+        _annotation(source, "NoteCreate", "api_key")
+        == 'api_key: str | None = Field(default=None, json_schema_extra={"writeOnly": True})'
+    )
+    assert (
+        _annotation(source, "Note", "password_hash")
+        == "password_hash: str = Field(exclude=True)"
+    )
+    assert (
+        _annotation(source, "Note", "api_key")
+        == "api_key: str | None = Field(default=None, exclude=True)"
+    )
+    # Ordinary fields keep the byte shape they always had.
+    assert _annotation(source, "NoteCreate", "title") == "title: str"
+    assert _annotation(source, "Note", "title") == "title: str"
+
+
+def test_principal_assigned_field_is_server_owned_on_writes(tmp_path: Path) -> None:
+    """A ``!principal`` ownership field stays readable on the entity but is
+    absent from Create/Update, so no request body can spoof it."""
+    source = _render(tmp_path, "title:str,author_subject:str!principal")
+    assert _annotation(source, "Note", "author_subject") == "author_subject: str"
+    with pytest.raises(AssertionError, match="author_subject"):
+        _annotation(source, "NoteCreate", "author_subject")
+    with pytest.raises(AssertionError, match="author_subject"):
+        _annotation(source, "NoteUpdate", "author_subject")

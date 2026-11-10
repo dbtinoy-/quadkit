@@ -8,9 +8,10 @@ type coercions used during model initialization.
 from __future__ import annotations
 
 import dataclasses
-import datetime
+import datetime as dt
+from decimal import Decimal
 from enum import Enum
-from typing import Any, Union, get_args
+from typing import Any, Literal, Union, get_args
 from uuid import UUID
 
 # Common truthy/falsy string representations
@@ -128,10 +129,12 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
         return val
 
     # Phase 1: resolve the effective field type (best effort).
+    raw_ftype: Any = None
     try:
         ftype = type_hints.get(fname, getattr(f, "type", None))
         if ftype is None:
             return val
+        raw_ftype = ftype
 
         # Handle Optional/Union types
         origin = getattr(ftype, "__origin__", None)
@@ -192,6 +195,30 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
                     }
             return val
 
+        # Literal[...] membership check
+        if origin is Literal:
+            allowed_literals = get_args(ftype)
+            if allowed_literals and val not in allowed_literals:
+                from quadkit.contracts.exceptions.domain import (
+                    FieldError,
+                    ValidationError,
+                )
+
+                raise ValidationError(
+                    "Validation failed",
+                    errors=[
+                        FieldError(
+                            field=fname,
+                            message=(
+                                f"Input should be one of {list(allowed_literals)!r}, "
+                                f"got {val!r}"
+                            ),
+                            code="literal_error",
+                        )
+                    ],
+                )
+            return val
+
         # From here, ftype should be a plain type
         if not isinstance(ftype, type):
             return val
@@ -210,6 +237,58 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
         if isinstance(val, int):
             return bool(val)
         return val
+
+    # Phase 2a: strict EmailStr validation — must reject malformed emails loudly.
+    email_str_cls: Any = None
+    try:
+        from quadkit.validation import EmailStr as _ImportedEmailStr
+
+        email_str_cls = _ImportedEmailStr
+    except ImportError:
+        email_str_cls = None
+    if email_str_cls is not None and ftype is email_str_cls:
+        from quadkit.contracts.exceptions.domain import FieldError, ValidationError
+
+        if not isinstance(val, str):
+            raise ValidationError(
+                "Validation failed",
+                errors=[
+                    FieldError(
+                        field=fname,
+                        message="Input should be a valid email address",
+                        code="invalid_email",
+                    )
+                ],
+            )
+        validate_fn = getattr(email_str_cls, "_validate", None)
+        try:
+            if callable(validate_fn):
+                return str(validate_fn(val))
+        except ValueError as exc:
+            raise ValidationError(
+                "Validation failed",
+                errors=[
+                    FieldError(field=fname, message=str(exc), code="invalid_email")
+                ],
+            ) from exc
+
+    # Phase 2b: strict nested model coercion when ``dict`` is not an allowed
+    # union alternative on the field.  Swallowing a nested ``BaseConfig`` or
+    # ``DomainModel`` validation error (for instance ``JWTConfig`` rejecting a
+    # missing ``required_audience`` in production) would leave a raw ``dict``
+    # bound to an attribute annotated as a typed model.
+    if (
+        hasattr(ftype, "model_validate")
+        and callable(ftype.model_validate)
+        and isinstance(val, dict)
+    ):
+        union_alts = _extract_union_types(raw_ftype) if raw_ftype is not None else []
+        allows_raw_dict = any(
+            alt is dict or getattr(alt, "__origin__", None) is dict
+            for alt in union_alts
+        )
+        if not allows_raw_dict:
+            return ftype.model_validate(val)
 
     # Phase 3: lenient scalar/model coercion.
     try:
@@ -234,14 +313,22 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
             return UUID(val)
 
         # datetime coercion
-        if ftype is datetime.datetime and isinstance(val, str):
-            return datetime.datetime.fromisoformat(val)
+        if ftype is dt.datetime and isinstance(val, str):
+            return dt.datetime.fromisoformat(val)
 
         # date coercion — a DATE column round-tripped through JSON arrives as
         # "2026-10-14", and a `date` field that keeps the string is a type lie
         # that only surfaces later (`.isoformat()`, comparisons, SQL binding).
-        if ftype is datetime.date and isinstance(val, str):
-            return datetime.date.fromisoformat(val)
+        if ftype is dt.date and isinstance(val, str):
+            return dt.date.fromisoformat(val)
+
+        # time coercion (e.g. "09:00:00" from TIME columns or JSON)
+        if ftype is dt.time and isinstance(val, str):
+            return dt.time.fromisoformat(val)
+
+        # Decimal coercion (e.g. numeric strings / floats from JSON or NUMERIC columns)
+        if ftype is Decimal and isinstance(val, str | int | float):
+            return Decimal(str(val))
 
         # Enum coercion
         if issubclass(ftype, Enum) and isinstance(val, str | int):
@@ -251,6 +338,16 @@ def coerce_field_value(fname: str, val: Any, type_hints: dict[str, Any], f: Any)
         # what `model_validate` promised before it delegated here.
         if ftype is str and isinstance(val, bool | int | float):
             return str(val)
+
+        # str subclass coercion (e.g. SecretValue(str)) from plain str so
+        # secret-typed config/domain fields preserve their redacting repr.
+        if (
+            issubclass(ftype, str)
+            and ftype is not str
+            and isinstance(val, str)
+            and not isinstance(val, ftype)
+        ):
+            return ftype(val)
 
         # int coercion from str
         if ftype is int and isinstance(val, str):

@@ -9,12 +9,11 @@ tiers, deprecation windows); the compatibility rules live in
 
 1. **Read the release notes** for every version you cross — deprecations
    are announced there first, before removal.
-2. **Bump all thirteen distributions together.** Lockstep releases mean mixing
-   versions is unsupported:
-   ```bash
-   pip install -U "quadkit==X.Y.Z" "quadkit-web==X.Y.Z" \
-     "quadkit-testing==X.Y.Z" "quadkit-cli==X.Y.Z" "quadkit-contracts==X.Y.Z"
-   ```
+2. **Resolve compatible per-package releases.** Choose each distribution's
+   released version, honor dependency bounds, and regenerate the application
+   lockfile. Different version numbers are expected; equal numbers alone do
+   not prove compatibility. Do not replace unavailable API floors with older
+   packages or placeholders.
 3. **Run your test suite before anything else.** Quadkit's own tests pass
    against the wheels in CI; if yours pass too, the documented surface is
    behaving identically for your use.

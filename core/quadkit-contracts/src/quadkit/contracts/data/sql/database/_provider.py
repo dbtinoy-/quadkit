@@ -116,6 +116,13 @@ class DatabaseProviderProtocol(Protocol):
 
         Returns:
             InsertResult with inserted ID and influenced rows.
+
+        Raises:
+            IntegrityError: Constraint violations (foreign key, unique,
+                NOT NULL, CHECK) propagate as the typed
+                ``quadkit.sql.exceptions.IntegrityError`` family rather
+                than folding into a failed result, so callers can answer
+                for them by type.
         """
         ...
 
@@ -132,15 +139,26 @@ class DatabaseProviderProtocol(Protocol):
         JSON-shaped values in *data* and *where_params* are encoded for
         binding, as in :meth:`execute_insert`.
 
+        A value may be a
+        :class:`~quadkit.contracts.data.identifiers.Delta` instead of a plain
+        value. It renders ``col = col + ?`` — a relative move, so a counter
+        changes inside the statement rather than through a read the caller
+        then writes back. An implementation that binds it as if it were a
+        value writes the ``Delta`` object itself into the column, so this is
+        part of the contract, not an optional extension.
+
         Args:
             table: Table name.
-            data: Column-value updates.
+            data: Column-value updates, or ``Delta`` moves.
             where_clause: WHERE condition.
             where_params: Parameters for WHERE clause.
             **kwargs: Additional options.
 
         Returns:
             UpdateResult with affected rows.
+
+        Raises:
+            IntegrityError: As in :meth:`execute_insert`.
         """
         ...
 
@@ -164,6 +182,11 @@ class DatabaseProviderProtocol(Protocol):
 
         Returns:
             DeleteResult with affected rows.
+
+        Raises:
+            IntegrityError: As in :meth:`execute_insert` — a delete
+                restricted by referencing rows raises the typed
+                foreign-key error.
         """
         ...
 

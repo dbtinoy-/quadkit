@@ -201,6 +201,9 @@ def _app_py(
         imports.append(f"from {module_for('graphql')} import GraphQLModule")
     local_imports = [f"from {module} import {cls}" for module, cls in spec.providers]
     local_imports.extend(
+        f"from {module} import {cls}" for module, cls, _options in spec.middlewares
+    )
+    local_imports.extend(
         [
             f"from {package_name}.infrastructure import infrastructure_modules",
             f"from {package_name}.modules import MODULES",
@@ -213,7 +216,7 @@ def _app_py(
         module_items.append("        GraphQLModule.configure(),")
     module_items.append("        *MODULES,")
     if "web" in features:
-        web_lines = _web_configure_lines(web_discover)
+        web_lines = _web_configure_lines(web_discover, spec.middlewares)
         web_lines[-1] = f"{web_lines[-1]},"
         module_items.extend(f"        {line}" for line in web_lines)
     if spec.providers:

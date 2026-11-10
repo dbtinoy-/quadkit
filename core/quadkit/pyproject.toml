@@ -29,7 +29,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit"
-version = "0.0.46"
+version = "0.0.50"
 description = "Async-first DI/IoC framework for Python — core package"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -69,7 +69,7 @@ maintainers = [
 # lifecycle, or exception hierarchy literally cannot function without it.
 
 dependencies = [
-    "quadkit-contracts>=0.0.2",
+    "quadkit-contracts>=0.0.50",
     "orjson>=3.0.0,<4",
     "structlog>=25.1.0,<27",         # Structured logging foundation
     "pydantic>=2.10.0,<3",              # Required: used unconditionally by config, validation
@@ -117,6 +117,11 @@ security = [
     "cryptography>=41.0.0,<52",
 ]
 
+# Validation extras — opt-in RFC 5322 email validation for quadkit.validation.EmailStr
+email = [
+    "email-validator>=2.0.0,<3",
+]
+
 # ── Extension Convenience Groups ──────────────────────────────────────
 # Users can install entire subsystems via:
 #   pip install quadkit[web]     → all web packages
@@ -124,7 +129,7 @@ security = [
 # ── Web & API ─────────────────────────────────────────────────────────
 
 web = [
-    "quadkit-web[granian]>=0.0.2",
+    "quadkit-web[granian]>=0.0.50",
 ]
 # NOTE: Convenience extras for the extension packages (db, cache, auth,
 # events, tasks, monitor, graphql) were removed. Those packages are not

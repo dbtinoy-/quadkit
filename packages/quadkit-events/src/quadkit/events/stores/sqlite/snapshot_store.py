@@ -10,8 +10,8 @@ from datetime import UTC, datetime
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
-from quadkit.contracts.data.identifiers import Table
 from quadkit.events.config import SqliteConfig
+from quadkit.events.exceptions import EventStoreError
 from quadkit.events.stores.base import AbstractSnapshotStore
 from quadkit.events.stores.sqlite.queries import SqliteQueries
 from quadkit.logging import get_logger
@@ -52,6 +52,7 @@ class SqliteSnapshotStore(AbstractSnapshotStore):
 
     async def connect(self) -> None:
         """Connection is managed by the provider."""
+        self._connected = False
         if self.config.auto_create_tables:
             await self._create_table()
 
@@ -63,22 +64,34 @@ class SqliteSnapshotStore(AbstractSnapshotStore):
 
         for statement in ddl.split(";"):
             if statement.strip():
-                await self.provider.execute_query(statement)
+                result = await self.provider.execute_query(statement)
+                if not result.success:
+                    raise EventStoreError("Could not create SQLite snapshot schema")
 
     async def save_snapshot(self, snapshot: Snapshot) -> None:
         """Save a snapshot (M-14 standardized API)."""
-        await self.provider.execute_insert(
-            str(Table(self.config.snapshots_table)),
-            {
-                "aggregate_id": snapshot.aggregate_id,
-                "aggregate_type": snapshot.aggregate_type,
-                "version": snapshot.version,
-                "state": dumps(snapshot.state).decode("utf-8")
-                if isinstance(dumps(snapshot.state), bytes)
-                else dumps(snapshot.state),
-                "timestamp": (snapshot.timestamp or datetime.now(UTC)).isoformat(),
-            },
-        )
+        if snapshot.metadata:
+            raise EventStoreError("SQLite snapshot metadata is not supported")
+        state = dumps(snapshot.state)
+        async with self.provider.transaction():
+            result = await self.provider.execute_insert(
+                self.config.snapshots_table,
+                {
+                    "aggregate_id": str(snapshot.aggregate_id),
+                    "aggregate_type": snapshot.aggregate_type,
+                    "version": snapshot.version,
+                    "state": state.decode("utf-8")
+                    if isinstance(state, bytes)
+                    else state,
+                    "timestamp": (snapshot.timestamp or datetime.now(UTC)).isoformat(),
+                },
+            )
+            if (
+                not result.success
+                or type(result.affected_rows) is not int
+                or result.affected_rows != 1
+            ):
+                raise EventStoreError("Could not save SQLite snapshot")
 
     async def get_latest(self, aggregate_id: str) -> Snapshot | None:
         """Get latest snapshot (M-14 standardized API)."""
@@ -87,6 +100,8 @@ class SqliteSnapshotStore(AbstractSnapshotStore):
             [str(aggregate_id)],
         )
 
+        if not result.success:
+            raise EventStoreError("Could not read SQLite snapshot")
         if not result.rows:
             return None
 
@@ -128,6 +143,8 @@ class SqliteSnapshotStore(AbstractSnapshotStore):
             [str(aggregate_id), version],
         )
 
+        if not result.success:
+            raise EventStoreError("Could not read SQLite snapshot")
         if not result.rows:
             return None
 
@@ -139,44 +156,31 @@ class SqliteSnapshotStore(AbstractSnapshotStore):
         keep_count: int = 3,
     ) -> int:
         """Delete old snapshots, keeping only the most recent ones."""
+        if type(keep_count) is not int or keep_count < 0:
+            raise ValueError("keep_count must be a non-negative integer")
         async with self.provider.transaction():
-            # Get count before delete
-            count_res = await self.provider.execute_query(
-                self.queries.get_snapshot_count_sql(),
-                [str(aggregate_id)],
-            )
-            total = (
-                int(
-                    count_res.rows[0]["count"]
-                    if "count" in count_res.rows[0]
-                    else next(iter(count_res.rows[0].values()))
-                )
-                if count_res.rows
-                else 0
-            )
-
-            # Delete old snapshots
-            await self.provider.execute(
+            total = await self._snapshot_count(aggregate_id)
+            result = await self.provider.execute(
                 self.queries.get_delete_old_snapshots_sql(),
                 [str(aggregate_id), str(aggregate_id), keep_count],
             )
-
-            # Calculate deleted count (after commit for accuracy)
-            remaining_res = await self.provider.execute_query(
-                self.queries.get_snapshot_count_sql(),
-                [str(aggregate_id)],
-            )
-            remaining = (
-                int(
-                    remaining_res.rows[0]["count"]
-                    if "count" in remaining_res.rows[0]
-                    else next(iter(remaining_res.rows[0].values()))
-                )
-                if remaining_res.rows
-                else 0
-            )
-
+            if not result.success:
+                raise EventStoreError("Could not delete SQLite snapshots")
+            remaining = await self._snapshot_count(aggregate_id)
+            if remaining != min(total, keep_count):
+                raise EventStoreError("Could not verify SQLite snapshot cleanup")
             return total - remaining
+
+    async def _snapshot_count(self, aggregate_id: str | UUID) -> int:
+        result = await self.provider.execute_query(
+            self.queries.get_snapshot_count_sql(), [str(aggregate_id)]
+        )
+        if not result.success or len(result.rows) != 1 or len(result.rows[0]) != 1:
+            raise EventStoreError("Could not count SQLite snapshots")
+        count = next(iter(result.rows[0].values()))
+        if type(count) is not int or count < 0:
+            raise EventStoreError("Could not count SQLite snapshots")
+        return count
 
     async def close(self) -> None:
         """Close the database connection."""

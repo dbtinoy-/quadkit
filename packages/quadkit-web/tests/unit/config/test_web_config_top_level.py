@@ -71,11 +71,12 @@ class TestConstruction:
         with pytest.raises(ValueError, match="greater than or equal to 1"):
             WebConfig(max_body_size=0)
 
-    def test_extra_keys_preserved(self) -> None:
-        # NOTE: the config base retains unknown keys (model_extra) despite the
-        # extra=ignore declaration — documented here as the actual behavior.
+    def test_extra_keys_are_ignored(self) -> None:
+        # The config base declares extra="ignore": undeclared keys never bind
+        # and no pydantic-style ``model_extra`` mapping is exposed.
         c = WebConfig(not_a_real_field=1)  # type: ignore[call-arg]
-        assert getattr(c, "model_extra", None) == {"not_a_real_field": 1}
+        assert getattr(c, "model_extra", None) is None
+        assert not hasattr(c, "not_a_real_field")
 
 
 class TestWildcardCORS:

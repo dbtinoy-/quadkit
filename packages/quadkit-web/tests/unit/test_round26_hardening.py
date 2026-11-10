@@ -156,6 +156,52 @@ class TestWebSocketHardening:
         return _WS
 
     @pytest.mark.asyncio
+    async def test_user_connection_limit_warning_omits_user_id(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        import quadkit.web.websocket.handler as handler_module
+
+        secret_user_id = "private-user-id-42"
+        logger = MagicMock()
+        monkeypatch.setattr(handler_module, "logger", logger)
+
+        handler = self._handler_cls()()
+        handler.max_connections_per_user = 1
+        handler.get_user_id = MagicMock(return_value=secret_user_id)
+        handler._user_connections[secret_user_id] = {"existing-connection"}
+
+        websocket = MagicMock()
+        websocket.close = AsyncMock()
+        await handler.handle(websocket)
+
+        websocket.close.assert_awaited_once_with(
+            code=1008, reason="user_connection_limit_exceeded"
+        )
+        logger.warning.assert_called_once()
+        assert logger.warning.call_args.args == (
+            "websocket.user_connection_limit_reached",
+        )
+        assert logger.warning.call_args.kwargs == {"max_connections_per_user": 1}
+        assert secret_user_id not in repr(logger.warning.call_args)
+
+    @pytest.mark.asyncio
+    async def test_on_error_does_not_return_exception_text(self) -> None:
+        handler = self._handler_cls()()
+        websocket = MagicMock()
+        websocket.send_json = AsyncMock()
+
+        await handler.on_error(
+            websocket,
+            ValueError("private /srv/app/data/user-42 input=secret"),
+        )
+
+        payload = websocket.send_json.await_args.args[0]
+        assert payload == {"type": "error", "error": "message_processing_failed"}
+        assert "private" not in repr(payload)
+        assert "/srv/app/data" not in repr(payload)
+        assert "user-42" not in repr(payload)
+
+    @pytest.mark.asyncio
     async def test_broadcast_survives_foreign_send_error(self) -> None:
         handler = self._handler_cls()()
 

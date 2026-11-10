@@ -25,7 +25,9 @@ from quadkit.web.routing.health_checks import WebHealthChecker
 
 class HealthyDB:
     async def health_check(self, timeout: float = 5.0) -> HealthCheckResult:
-        return HealthCheckResult(component="database", status=HealthStatus.HEALTHY, message="ok")
+        return HealthCheckResult(
+            component="database", status=HealthStatus.HEALTHY, message="ok"
+        )
 
 
 class BrokenDB:
@@ -63,7 +65,8 @@ async def test_a_configured_and_broken_component_still_fails_the_app() -> None:
 
     assert response.status == HealthStatus.UNHEALTHY
     assert response.components["database"].status == HealthStatus.UNHEALTHY
-    assert "db-fail" in (response.components["database"].message or "")
+    assert response.components["database"].message == "Database health check failed"
+    assert "db-fail" not in (response.components["database"].message or "")
 
 
 async def test_an_absent_component_cannot_mask_a_broken_one() -> None:

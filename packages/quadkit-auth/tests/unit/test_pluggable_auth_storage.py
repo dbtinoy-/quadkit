@@ -250,3 +250,87 @@ async def test_the_in_process_default_still_works() -> None:
         pyotp.TOTP(staged["secret"]).now(),
     )
     assert codes
+
+
+@pytest.mark.asyncio
+async def test_explicit_falsey_store_wins_and_parallel_resolution_is_singleton():
+    import asyncio
+
+    from quadkit.contracts.auth.protocols import AuthSessionManagerProtocol
+
+    class EmptyStore(InMemorySessionStore):
+        def __bool__(self):
+            return False
+
+    store = EmptyStore()
+    container = _Container()
+    await SessionProvider(session_store=store).register(container)
+    managers = await asyncio.gather(
+        *(
+            container.singletons[key](container)
+            for key in [SessionManagerImpl, AuthSessionManagerProtocol] * 8
+        )
+    )
+    assert all(manager is managers[0] for manager in managers)
+    assert managers[0].store is store
+    assert SessionManagerImpl(session_store=store).store is store
+
+
+@pytest.mark.asyncio
+async def test_invalid_resolved_session_store_never_falls_back():
+    from quadkit.auth.storage.session_store import SessionStore
+
+    container = _Container({SessionStore: object()})
+    await SessionProvider().register(container)
+    with pytest.raises(TypeError, match="SessionStore"):
+        await container.singletons[SessionManagerImpl](container)
+
+
+@pytest.mark.asyncio
+async def test_deferred_store_lookup_is_single_flight_under_concurrent_resolution():
+    import asyncio
+
+    from quadkit.contracts.auth.protocols import AuthSessionManagerProtocol
+
+    store = _RecordingSessionStore()
+
+    class SlowContainer(_Container):
+        calls = 0
+
+        async def resolve_optional(self, key):
+            self.calls += 1
+            await asyncio.sleep(0.01)
+            return store
+
+    container = SlowContainer()
+    await SessionProvider().register(container)
+    managers = await asyncio.gather(
+        *(
+            container.singletons[key](container)
+            for key in [SessionManagerImpl, AuthSessionManagerProtocol] * 8
+        )
+    )
+    assert container.calls == 1
+    assert all(manager is managers[0] for manager in managers)
+    assert managers[0].store is store
+
+
+@pytest.mark.asyncio
+async def test_failed_store_resolution_can_retry_without_caching_memory_fallback():
+    store = _RecordingSessionStore()
+
+    class RecoveringContainer(_Container):
+        calls = 0
+
+        async def resolve_optional(self, key):
+            self.calls += 1
+            if self.calls == 1:
+                raise RuntimeError("storage registration unavailable")
+            return store
+
+    container = RecoveringContainer()
+    await SessionProvider().register(container)
+    factory = container.singletons[SessionManagerImpl]
+    with pytest.raises(RuntimeError, match="unavailable"):
+        await factory(container)
+    assert (await factory(container)).store is store

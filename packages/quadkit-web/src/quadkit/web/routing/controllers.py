@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from quadkit.contracts.web.security_metadata import HTTP_BEARER_DOCUMENTATION_ATTRIBUTE
+
 
 class Controller:
     """Base controller class with dependency injection support.
@@ -53,6 +55,9 @@ class Controller:
                     configs = getattr(attr_value, "_route_configs", None) or [
                         attr_value._route_config
                     ]
+                    bearer_documentation = getattr(
+                        attr_value, HTTP_BEARER_DOCUMENTATION_ATTRIBUTE, None
+                    )
                     for route_config in configs:
                         routes.append(
                             {
@@ -60,6 +65,9 @@ class Controller:
                                 "path": route_config["path"],
                                 "handler_name": attr_name,
                                 "response_model": route_config.get("response_model"),
+                                "response_schema_model": route_config.get(
+                                    "response_schema_model"
+                                ),
                                 "request_model": route_config.get("request_model"),
                                 "status_code": route_config.get("status_code", 200),
                                 "summary": route_config.get("summary"),
@@ -67,7 +75,20 @@ class Controller:
                                 "tags": route_config.get("tags"),
                                 "operation_id": route_config.get("operation_id"),
                                 "responses": route_config.get("responses"),
+                                **(
+                                    {"result_errors": route_config["result_errors"]}
+                                    if "result_errors" in route_config
+                                    else {}
+                                ),
+                                "openapi_operation": route_config.get(
+                                    "openapi_operation"
+                                ),
                                 "deprecated": route_config.get("deprecated", False),
+                                **(
+                                    {"bearer_documentation": bearer_documentation}
+                                    if bearer_documentation is not None
+                                    else {}
+                                ),
                             },
                         )
                     seen_handlers.add(attr_name)

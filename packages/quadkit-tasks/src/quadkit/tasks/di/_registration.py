@@ -9,7 +9,7 @@ from quadkit.contracts.infra.tasks import (
     TaskExecutorProtocol,
     TaskQueueProtocol,
 )
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.admin.contributor import TasksAdminContributor
 from quadkit.tasks.admin.registration import register_admin_widget_handlers
 from quadkit.tasks.backends.registry import TaskBackendRegistry
@@ -42,12 +42,15 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
         Args:
             container: DI registrar to bind task services into.
         """
+        from quadkit.contracts.core.lock import LockManagerProtocol
         from quadkit.contracts.infra.tasks import TaskProviderProtocol
+        from quadkit.tasks.concurrency.locking import LockManager
         from quadkit.tasks.di.provider import (
             TaskProvider,  # noqa: PLC0415 — breaks provider<->mixin cycle
         )
 
         self._container = container
+        lock_manager = LockManager()
         container.singleton(TaskProvider, lambda: self)
         container.singleton(TaskProviderProtocol, lambda: self)
         container.singleton(TaskScheduler, lambda: self.scheduler)
@@ -56,12 +59,28 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
         container.singleton(cast("type", TaskExecutorProtocol), lambda: self.registry)
         container.singleton(TaskBackendRegistry, lambda: self._backend_registry)
         container.singleton(TaskMetricsCollector, TaskMetricsCollector())
+        if (
+            getattr(container, "has", None) is None
+            or container.has(LockManager) is not True
+        ):
+            container.singleton(LockManager, lock_manager)
+        if (
+            getattr(container, "has", None) is None
+            or container.has(LockManagerProtocol) is not True
+        ):
+            container.singleton(cast("type", LockManagerProtocol), lock_manager)
         # ResultStore: lambda reads self._result_store so it returns the upgraded
         # CacheBackendResultStore if one was injected during boot().
         container.singleton(cast("type", ResultStore), lambda: self._result_store)
 
+        if self._config is not None:
+            if not self._explicit_worker_count:
+                self.worker_count = self._config.worker.worker_count
+            if not self._explicit_enable_scheduler:
+                self.enable_scheduler = self._config.scheduler.enabled
+
         # Branch: multi-backend when config declares named backends; otherwise
-        # fall back to the original single-backend behaviour.
+        # fall back to the single-backend behaviour.
         if self._config is not None and self._config.backends:
             await self._register_multi_backend(container)
         else:
@@ -73,7 +92,9 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
     async def _register_single_backend(
         self, container: ContainerRegistrarProtocol
     ) -> None:
-        """Register the single primary queue (existing behaviour, preserved exactly)."""
+        """Register the single primary queue, instantiating from config when not explicitly supplied."""
+        if self._config is not None and not self._explicit_queue:
+            self.queue = self._backend_registry.create_backend(self._config)
         container.singleton(cast("type", TaskQueueProtocol), lambda: self.queue)
 
     async def _register_multi_backend(
@@ -109,6 +130,8 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
             # Primary backend also gets the unnamed binding for backward compat.
             # Use identity check (is), NOT equality (==).
             if entry.primary or self._config.backends[0] is entry:
+                if not self._explicit_queue:
+                    self.queue = queue
                 container.singleton(
                     cast("type", TaskQueueProtocol),
                     factory=lambda *_, q=queue: q,
@@ -143,7 +166,7 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
                 logger.warning(
                     "tasks_ep_load_failed",
                     entry_point=ep.name,
-                    error=str(exc),
+                    error_type=safe_error_type(exc),
                 )
                 continue
             if not (isinstance(candidate, type) and issubclass(candidate, _Provider)):
@@ -165,7 +188,7 @@ class _TaskRegistrationMixin(_TaskAttrsMixin):
                     "tasks_ep_register_failed",
                     entry_point=ep.name,
                     provider=candidate.__name__,
-                    error=str(exc),
+                    error_type=safe_error_type(exc),
                 )
 
     async def _register_admin_widgets(

@@ -112,14 +112,24 @@ class ContainerResolutionMixin:
             A list of resolved instances for matching registrations.
         """
         results: list[Any] = []
+        seen_ids: set[int] = set()
         for registered_type in (d.service_type for d in self._registry.all()):
             if isinstance(registered_type, type) and issubclass(
                 registered_type,
                 service_type,
             ):
-                results.append(await self.resolve(registered_type))
+                try:
+                    instance: Any = await self.resolve(registered_type)
+                except ModuleVisibilityError:
+                    continue
+                if id(instance) not in seen_ids:
+                    seen_ids.add(id(instance))
+                    results.append(instance)
         if self._parent:
-            results.extend(await self._parent.resolve_all(service_type))
+            for instance in await self._parent.resolve_all(service_type):
+                if id(instance) not in seen_ids:
+                    seen_ids.add(id(instance))
+                    results.append(instance)
         return results
 
     def is_singleton(self, service_type: object) -> bool:

@@ -89,6 +89,14 @@ class TestAPIClientGenerator:
         content = (tmp_path / "clients" / "o_auth_client.py").read_text()
         assert "OAuthClient" in content
 
+    def test_base_url_option_becomes_the_default(self, tmp_path) -> None:
+        g = _gen(tmp_path)
+        g.generate("Stripe", base_url="https://sentinel.invalid/api")
+        content = (tmp_path / "clients" / "stripe_client.py").read_text()
+        assert "DEFAULT_BASE_URL = 'https://sentinel.invalid/api'" in content
+        assert content.count("base_url: str = DEFAULT_BASE_URL") == 2
+        compile(content, "stripe_client.py", "exec")
+
     def test_name_sanitization(self, tmp_path) -> None:
         g = _gen(tmp_path)
         assert g._to_pascal_case("stripe_api") == "StripeApi"

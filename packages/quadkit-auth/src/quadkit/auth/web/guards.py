@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, Any, cast
 from quadkit.auth.types import GuardContext
 from quadkit.contracts.web import ResponseFactoryProtocol
 from quadkit.contracts.web.guard import GuardProtocol
+from quadkit.contracts.web.security_metadata import (
+    HTTP_BEARER_DOCUMENTATION_ATTRIBUTE,
+    HttpBearerDocumentation,
+)
 from quadkit.logging import get_logger
 from quadkit.primitives.context import Context, get_request_context
 
@@ -264,6 +268,13 @@ def use_guards(
 
         # Store guards on function for introspection
         wrapper.__guards__ = guards  # type: ignore[attr-defined]
+        if any(
+            isinstance(guard, (AuthGuard, AdminGuard, RoleGuard, PermissionGuard))
+            for guard in guards
+        ):
+            setattr(
+                wrapper, HTTP_BEARER_DOCUMENTATION_ATTRIBUTE, HttpBearerDocumentation()
+            )
         return wrapper
 
     return decorator
@@ -353,6 +364,7 @@ def require_auth() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
             return await func(*args, **kwargs)
 
         wrapper.__guard_type__ = AuthGuard  # type: ignore[attr-defined]
+        setattr(wrapper, HTTP_BEARER_DOCUMENTATION_ATTRIBUTE, HttpBearerDocumentation())
         return wrapper
 
     return decorator
@@ -395,6 +407,7 @@ def require_admin() -> Callable[[Callable[..., Any]], Callable[..., Any]]:
             return await func(*args, **kwargs)
 
         wrapper.__guard_type__ = AdminGuard  # type: ignore[attr-defined]
+        setattr(wrapper, HTTP_BEARER_DOCUMENTATION_ATTRIBUTE, HttpBearerDocumentation())
         return wrapper
 
     return decorator

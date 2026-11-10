@@ -16,6 +16,18 @@ License for the specific language governing permissions and limitations
 under the License.
 
 --------------------------------------------------------------------------
+Components under other licences
+--------------------------------------------------------------------------
+
+This NOTICE covers the Quadkit Framework. It does not claim to cover every
+directory in this repository, and it should not be read as though it did.
+
+Applications under ``apps/`` carry their own licence and their own NOTICE where
+they differ from the framework's, and the file inside each application's own
+directory is the one that governs it. The framework, the core libraries and the
+packages under ``packages/`` are Apache-2.0 under the licence above.
+
+--------------------------------------------------------------------------
 Trademarks
 --------------------------------------------------------------------------
 

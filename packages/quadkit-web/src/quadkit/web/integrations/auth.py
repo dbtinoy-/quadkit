@@ -3,12 +3,15 @@
 from __future__ import annotations
 
 import inspect
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from starlette.applications import Starlette
 
 from quadkit.di.container import Container
 from quadkit.logging import get_logger
+
+if TYPE_CHECKING:
+    from quadkit.web.middleware.auth import AuthenticationMiddlewareDocumentation
 
 logger = get_logger(__name__)
 
@@ -32,24 +35,30 @@ class AuthIntegration:
         try:
             signature = inspect.signature(authenticate)
         except (TypeError, ValueError):
-            return True
-        positional: list[inspect.Parameter] = [
-            p
-            for p in signature.parameters.values()
-            if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-        ]
-        if positional and positional[0].name in ("self", "cls"):
-            positional = positional[1:]
-        required = [p for p in positional if p.default is p.empty]
-        return len(required) <= 1
+            # An unknown signature cannot establish the request call contract.
+            return False
+        try:
+            # The middleware supplies exactly one positional request. Binding
+            # catches zero-argument methods and required keyword-only inputs as
+            # well as credential stores requiring multiple arguments.
+            signature.bind(object())
+        except TypeError:
+            return False
+        return True
 
     @staticmethod
-    async def configure(app: Starlette, container: Container, web_config: Any) -> None:
+    async def configure(
+        app: Starlette, container: Container, web_config: Any
+    ) -> AuthenticationMiddlewareDocumentation:
         """Configure authentication middleware."""
         from quadkit.contracts.auth import IdentityResolverProtocol
         from quadkit.contracts.auth.guard import AuthenticatorProtocol
         from quadkit.contracts.exceptions import ContainerError
-        from quadkit.web.middleware.auth import AuthenticationMiddleware
+        from quadkit.contracts.exceptions.config import ConfigurationError
+        from quadkit.web.middleware.auth import (
+            AuthenticationMiddleware,
+            AuthenticationMiddlewareDocumentation,
+        )
 
         identity_resolver = await container.resolve_optional(
             cast("Any", IdentityResolverProtocol)
@@ -68,7 +77,16 @@ class AuthIntegration:
                     )
             logger.info("resolved_authenticators", count=len(authenticators))
         except (LookupError, RuntimeError, ContainerError) as e:
-            logger.warning("failed_to_resolve_authenticators", error=str(e))
+            logger.warning(
+                "failed_to_resolve_authenticators", error_type=type(e).__name__
+            )
+
+        if not authenticators:
+            # enable_auth promises protection: installing middleware with an
+            # empty list would otherwise pass every request through unchanged.
+            raise ConfigurationError(
+                "web.enable_auth requires at least one usable AuthenticatorProtocol"
+            )
 
         app.add_middleware(
             AuthenticationMiddleware,
@@ -80,6 +98,9 @@ class AuthIntegration:
         logger.info("Authentication middleware configured")
 
         await AuthIntegration._add_role_guard(app, container, web_config)
+        return AuthenticationMiddlewareDocumentation(
+            exclude_paths=tuple(web_config.auth_exclude_paths)
+        )
 
     @staticmethod
     async def _add_role_guard(

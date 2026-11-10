@@ -1,0 +1,64 @@
+"""{{ policy_name }} policy for explicitly shared resources.
+
+The caller must supply an already verified active subject. This policy does not
+verify bearer tokens, grant permissions, filter private rows or authenticate a
+body-supplied identity. A trusted native Auth provider is mandatory; every
+invocation reloads the account and delegates permission matching to that provider.
+"""
+from __future__ import annotations
+
+from dataclasses import dataclass
+
+from quadkit.contracts.auth import AuthProviderProtocol
+
+
+@dataclass(frozen=True, slots=True)
+class PolicyDecision:
+    allowed: bool
+    reason: str
+
+
+class {{ policy_name }}Policy:
+    name = "{{ policy_name_snake }}"
+    required_permission = {{ required_permission }}
+    resources = frozenset({{ resources }})
+
+    def __init__(self, auth_provider: AuthProviderProtocol) -> None:
+        if auth_provider is None:
+            raise ValueError("Native auth authority is required")
+        self._auth_provider = auth_provider
+
+    async def evaluate(self, principal: object, resource: object) -> PolicyDecision:
+        """Check an explicit shared resource against current account authority.
+
+        Denials have one generic result. Authority/storage failures propagate:
+        they are not a grant, a cached fallback or a disguised policy denial.
+        """
+        denied = PolicyDecision(False, "access denied")
+        if type(resource) is not str or resource not in self.resources:
+            return denied
+        subject = getattr(principal, "user_id", None)
+        if (
+            type(subject) is not str
+            or not subject
+            or subject.strip() != subject
+            or not subject.isprintable()
+            or getattr(principal, "is_active", None) is not True
+        ):
+            return denied
+        current = await self._auth_provider.get_user(subject)
+        if (
+            getattr(principal, "user_id", None) != subject
+            or getattr(principal, "is_active", None) is not True
+        ):
+            return denied
+        if (
+            current is None
+            or getattr(current, "user_id", None) != subject
+            or getattr(current, "is_active", None) is not True
+        ):
+            return denied
+        allowed = self._auth_provider.has_any_permission(current, [self.required_permission])
+        if allowed is not True:
+            return denied
+        return PolicyDecision(True, "access granted")

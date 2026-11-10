@@ -158,7 +158,7 @@ class TestEntity:
         class TestEntity(Entity):
             pass
 
-        assert TestEntity.get_table_name() == "testentitys"
+        assert TestEntity.get_table_name() == "test_entities"
 
     def test_get_table_name_custom(self) -> None:
         class User(Entity):

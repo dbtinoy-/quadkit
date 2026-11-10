@@ -10,7 +10,7 @@ from quadkit.contracts.admin.widget_content import (
     TableCell,
     TableContent,
 )
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks import ResultStore
 
 logger = get_logger(__name__)
@@ -55,7 +55,10 @@ class TasksFailedPage:
             fetch_failed = getattr(self._result_store, "get_failed", None)
             tasks = await fetch_failed() if fetch_failed is not None else []
         except Exception as exc:
-            logger.warning("tasks_failed.store_unavailable", error=str(exc))
+            logger.warning(
+                "tasks_failed.store_unavailable",
+                error_type=safe_error_type(exc),
+            )
             return PageContent(
                 title="Failed Tasks",
                 body=EmptyContent(

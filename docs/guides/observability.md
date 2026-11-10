@@ -1,7 +1,7 @@
 # Observability
 
 What a stock Quadkit service emits, where it goes, and what to do when a
-deploy misbehaves. Everything below works with only the thirteen public
+deploy misbehaves. Everything below works with only the 18 public
 distributions installed — no vendor lock-in, every surface is structured
 data you can route anywhere.
 

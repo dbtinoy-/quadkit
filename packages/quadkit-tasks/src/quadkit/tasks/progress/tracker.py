@@ -37,6 +37,7 @@ from quadkit.contracts.infra.tasks.progress import (
     ProgressTrackerProtocol,
 )
 from quadkit.logging import get_logger
+from quadkit.tasks.safe_errors import safe_failure_message
 
 logger = get_logger(__name__)
 
@@ -98,7 +99,6 @@ class InMemoryProgressTracker:
         await self._broadcast(task_id, snapshot, close=False)
         logger.debug(
             "tasks.progress.update",
-            task_id=task_id,
             current=current,
             total=total,
             percent=snapshot.percent,
@@ -128,7 +128,7 @@ class InMemoryProgressTracker:
             metadata=dict(metadata or {}),
         )
         await self._broadcast(task_id, snapshot, close=True)
-        logger.debug("tasks.progress.complete", task_id=task_id)
+        logger.debug("tasks.progress.complete")
 
     async def fail(
         self,
@@ -140,7 +140,7 @@ class InMemoryProgressTracker:
 
         Args:
             task_id: Unique identifier for the task.
-            error: Description of the failure.
+            error: Failure text; private details are reduced to a generic safe message.
             metadata: Optional JSON-safe terminal UI hints.
         """
         existing = self._snapshots.get(task_id)
@@ -149,11 +149,11 @@ class InMemoryProgressTracker:
             current=existing.current if existing is not None else 0,
             total=existing.total if existing is not None else 0,
             status=ProgressStatus.FAILED,
-            error=error,
+            error=safe_failure_message(error),
             metadata=dict(metadata or {}),
         )
         await self._broadcast(task_id, snapshot, close=True)
-        logger.debug("tasks.progress.fail", task_id=task_id, error=error)
+        logger.debug("tasks.progress.fail", error_present=bool(error))
 
     async def get(self, task_id: str) -> ProgressSnapshot | None:
         """Return the current progress state for a task.

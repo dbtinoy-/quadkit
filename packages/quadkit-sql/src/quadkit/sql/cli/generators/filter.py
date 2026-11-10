@@ -52,7 +52,7 @@ class FilterGenerator(GeneratorBase):
                 "name": name,
                 "exception_type": exception_type,
                 "snake_name": self._to_snake_case(name),
-                "snake_name_plural": f"{self._to_snake_case(name)}s",
+                "snake_name_plural": self._pluralize(self._to_snake_case(name)),
             },
         )
         self.stage(file_path, content)

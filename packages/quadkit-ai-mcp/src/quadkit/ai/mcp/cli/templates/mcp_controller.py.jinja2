@@ -1,0 +1,66 @@
+"""{{ class_name }}Controller — MCP tools, resources, and prompts.
+
+Register in your application module::
+
+    from quadkit.ai.mcp import MCPModule
+    from .{{ module_name }}_controller import {{ class_name }}Controller
+
+    MCPModule(controllers=[{{ class_name }}Controller])
+
+Serve with the CLI::
+
+    quadkit mcp serve <app_factory>
+
+Or in dual-protocol mode::
+
+    quadkit run --mcp-port 8080
+"""
+
+from quadkit.ai.mcp import MCPController, prompt, resource, tool
+
+
+class {{ class_name }}Controller(MCPController):
+    """MCP controller exposing {{ class_name }} capabilities as AI tools."""
+
+    @tool("{{ tool_prefix }}_search", description="Search {{ resource_name }}")
+    async def search(self, query: str = "", limit: int = 20) -> list[dict]:
+        """Search {{ resource_name }} matching *query*.
+
+        Args:
+            query: Search string.
+            limit: Maximum results to return.
+
+        Returns:
+            List of matching {{ resource_name }} as dicts.
+        """
+        # @INTENT: Search the {{ resource_name }} store for rows matching *query*, capped at *limit*.
+        # @TODO: implement search logic
+        return []
+
+    @resource(
+        "{{ resource_uri }}/{id}",
+        description="Retrieve a {{ module_name }} by ID",
+    )
+    async def get_{{ module_name }}(self, id: str) -> dict:
+        """Return the {{ module_name }} identified by *id*.
+
+        Args:
+            id: Unique identifier of the {{ module_name }}.
+
+        Returns:
+            {{ module_name }} data as a dict.
+        """
+        # @INTENT: Load the {{ module_name }} identified by *id* from your data store.
+        # @TODO: implement lookup logic
+        return {"id": id}
+
+    @prompt(
+        "{{ tool_prefix }}_analyze",
+        description="Prompt to analyze {{ resource_name }}",
+    )
+    async def analyze_prompt(self) -> str:
+        """Return analysis instructions for {{ resource_name }}."""
+        return (
+            "Analyze the following {{ resource_name }} and summarize key insights, "
+            "trends, and any anomalies you observe."
+        )

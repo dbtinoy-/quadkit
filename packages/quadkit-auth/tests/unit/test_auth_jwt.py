@@ -2,37 +2,38 @@
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock
 from datetime import UTC, datetime
+from unittest.mock import AsyncMock, MagicMock
 
-import pytest
 from pydantic import SecretStr
+import pytest
 
-from quadkit.auth.models import AuthToken
 import quadkit.auth as la
 from quadkit.auth.authn.core import User
 from quadkit.auth.authn.jwt import JWTTokenManager
 from quadkit.auth.authn.schemas import RegisterRequest
 from quadkit.auth.authn.security import PasswordHasher, PasswordPolicy
 from quadkit.auth.di import AuthenticationProvider, AuthorizationProvider
+from quadkit.auth.exceptions import (
+    BlacklistedTokenError,
+    InvalidTokenError,
+    TokenAudienceError,
+    TokenBlacklistedError,
+    TokenExpiredError,
+    TokenInvalidError,
+)
+from quadkit.auth.exceptions import (
+    TokenExpiredError as TokenExpiredErrorAuth,
+)
+from quadkit.auth.models import AuthToken
 from quadkit.auth.storage.db_stores import (
     MongoDBUserStore,
     RedisUserStore,
     SQLUserStore,
 )
 from quadkit.auth.storage.token_store import InMemoryUserStore
-from quadkit.auth.exceptions import (
-    TokenExpiredError,
-    InvalidTokenError,
-    BlacklistedTokenError,
-)
-from quadkit.auth.exceptions import (
-    TokenAudienceError,
-    TokenBlacklistedError,
-    TokenExpiredError as TokenExpiredErrorAuth,
-    TokenInvalidError,
-)
 from quadkit.contracts.auth.token import VerifiedToken
+from quadkit.contracts.infra.cache import CacheBackendProtocol
 from quadkit.result import Err, Ok
 
 
@@ -42,8 +43,9 @@ class TestJWTTokenManager:
     def setup_method(self):
         """Setup test method"""
         self.secret = SecretStr("test_secret_key_12345678901234567890123456789123")
-        self.mock_cache = AsyncMock()
+        self.mock_cache = AsyncMock(spec=CacheBackendProtocol)
         self.mock_cache.exists.return_value = False
+        self.mock_cache.set.return_value = True
         self.manager = JWTTokenManager(
             current_key_id="default",
             keys={"default": self.secret},
@@ -146,14 +148,16 @@ class TestJWTTokenManager:
             )
 
         original_verify = self.manager.verify_token
+
         async def mock_verify(token, token_type="access", **kwargs):
             if token_type == "refresh":
                 return Ok(_refresh_verified())
             return await original_verify(token, token_type, **kwargs)
+
         self.manager.verify_token = mock_verify
 
         # Mock logout for refresh
-        self.manager.logout = AsyncMock(return_value=True)
+        self.manager.logout = AsyncMock(return_value=Ok(None))
 
         token_pair = self.manager.create_token_pair(user)
         new_token = await self.manager.refresh_access_token(token_pair.refresh_token)
@@ -175,9 +179,11 @@ class TestJWTTokenManager:
         self.manager.verify_token = AsyncMock(
             return_value=Err(TokenBlacklistedError("Revoked"))
         )
-        self.manager.logout_all_user_tokens = AsyncMock()
+        self.manager.logout_all_user_tokens = AsyncMock(return_value=Ok(None))
 
-        with pytest.raises(BlacklistedTokenError, match="Refresh token reuse detected. All sessions revoked."):
+        with pytest.raises(
+            BlacklistedTokenError, match="Refresh token reuse detected; refresh denied."
+        ):
             await self.manager.refresh_access_token(token_pair.refresh_token)
 
         # Ensure all user tokens were logged out
@@ -189,7 +195,9 @@ class TestJWTTokenManager:
         user = User(user_id="user123", name="testuser", email="test@example.com")
 
         # Create token with audience claim
-        token = self.manager.create_access_token(user, additional_claims={"aud": "my-api"})
+        token = self.manager.create_access_token(
+            user, additional_claims={"aud": "my-api"}
+        )
 
         # Verify with correct audience
         result = await self.manager.verify_token(token, expected_audience="my-api")
@@ -200,5 +208,3 @@ class TestJWTTokenManager:
         result2 = await self.manager.verify_token(token, expected_audience="wrong-api")
         assert result2.is_err()
         assert isinstance(result2.unwrap_err(), TokenAudienceError)
-
-

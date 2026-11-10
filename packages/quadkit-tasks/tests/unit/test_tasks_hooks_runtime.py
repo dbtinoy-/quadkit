@@ -110,7 +110,8 @@ async def test_worker_terminal_failure_emits_task_failed() -> None:
     assert seen[0].task_name == "send_email"
     assert seen[0].task_id == "job-1"
     assert seen[0].reason == job.last_error
-    assert "boom" in seen[0].reason
+    assert seen[0].reason == "Task failed (TaskExecutionError)"
+    assert "boom" not in seen[0].reason
 
 
 @pytest.mark.asyncio

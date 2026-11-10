@@ -13,13 +13,15 @@ import hmac
 import logging
 import os
 from collections.abc import Mapping
-{% for line in imports %}{{ line }}
+{% if use_case %}from dataclasses import fields
+{% endif %}{% for line in imports %}{{ line }}
 {% endfor %}
-from pydantic import BaseModel, ConfigDict, Field
+{% if use_case %}{% for line in bound_imports %}{{ line }}
+{% endfor %}{% else %}from pydantic import BaseModel, ConfigDict, Field
 from quadkit.serialization import JSONDecodeError, loads
 from quadkit.web import JSONResponse
 from starlette.requests import Request
-
+{% endif %}
 logger = logging.getLogger(__name__)
 
 #: Signature header, named once. Requests reach ASGI transports with their
@@ -48,9 +50,9 @@ class {{ webhook_name }}Payload(BaseModel):
     Defines the expected payload format for incoming webhooks.
     """
 
-    model_config = ConfigDict(from_attributes=True)
+    model_config = ConfigDict({% if use_case %}strict=True, extra="forbid"{% else %}from_attributes=True{% endif %})
 {% if fields %}{% for field in fields %}
-    {{ field.name }}: {{ field.type }}{% if not field.required %} | None{% endif %} = Field({% if not field.required %}default=None, {% endif %}description="{{ field.description | default(field.name) }}")
+    {{ field.name }}: {% if use_case and field.name == 'event_type' %}Literal[{{ use_case.event_type | tojson }}]{% else %}{{ field.type }}{% endif %}{% if not field.required %} | None{% endif %} = Field({% if not field.required %}default=None, {% endif %}description="{{ field.description | default(field.name) }}")
 {% endfor %}{% else %}
     event_type: str = Field(description="Type of event")
     data: dict = Field(default_factory=dict, description="Event data")
@@ -68,7 +70,8 @@ class {{ webhook_name }}Webhook:
         self,
         secret: str | None = None,
         verify_signature: bool = True,
-    ):
+{% if use_case %}        command_bus: CommandBusProtocol | None = None,
+{% endif %}    ):
         """Initialize the webhook handler.
 
         Args:
@@ -78,7 +81,18 @@ class {{ webhook_name }}Webhook:
         self.secret = secret
         self.verify_signature = verify_signature
         self._handlers: dict[str, Any] = {}
-
+{% if use_case %}        if verify_signature is not True:
+            raise ValueError("use_case webhook requires signature verification")
+        declared = {field.name for field in fields({{ use_case.command }})}
+        inherited = {field.name for field in fields({{ use_case.command }}.__bases__[0])}
+        expected_base = {"id", "metadata", "timestamp"}
+        expected_inputs = {{ "{" }}{{ use_case.inputs[0] | tojson }}{{ "}" }}
+        if inherited != expected_base or declared - inherited != expected_inputs:
+            raise ValueError(
+                "command fields differ from declared binding; no implicit context"
+            )
+        self.command_bus = command_bus
+{% endif %}
     def register_handler(self, event_type: str, handler: Any) -> None:
         """Register a handler for a specific event type.
 
@@ -104,7 +118,13 @@ class {{ webhook_name }}Webhook:
             Response dictionary.
         """
         try:
-            if self.verify_signature:
+{% if use_case %}            if not self.secret or len(self.secret.encode("utf-8")) < 32:
+                return {
+                    "status": "error",
+                    "message": "Webhook secret is not configured",
+                    "status_code": 503,
+                }
+{% endif %}            if {% if use_case %}True{% else %}self.verify_signature{% endif %}:
                 if not self.secret:
                     return {
                         "status": "error",
@@ -116,15 +136,57 @@ class {{ webhook_name }}Webhook:
                     return {
                         "status": "error",
                         "message": "Missing signature",
-                    }
+{% if use_case %}                        "status_code": 401,
+{% endif %}                    }
 
                 if not self._verify_signature(payload, signature):
                     return {
                         "status": "error",
                         "message": "Invalid signature",
-                    }
+{% if use_case %}                        "status_code": 401,
+{% endif %}                    }
 
-            data = loads(payload)
+{% if use_case %}            if self.command_bus is None:
+                return {
+                    "status": "error",
+                    "message": "Command bus is not configured",
+                    "status_code": 503,
+                }
+            try:
+                data = loads(payload)
+                webhook_payload = {{ webhook_name }}Payload.model_validate(data)
+                target = UUID(webhook_payload.aggregate_id)
+                if str(target) != webhook_payload.aggregate_id:
+                    raise ValueError("noncanonical target")
+            except (JSONDecodeError, ValidationError, ValueError):
+                return {
+                    "status": "error",
+                    "message": "Invalid webhook payload",
+                    "status_code": 422,
+                }
+            command = {{ use_case.command }}(
+{% for name in use_case.inputs %}                {{ name }}=webhook_payload.{{ name }},
+{% endfor %}            ).for_aggregate(target)
+            result = await self.command_bus.dispatch(command)
+            if type(result) is not {{ use_case.result }}:
+                return {
+                    "status": "error",
+                    "message": "Invalid command outcome",
+                    "status_code": 500,
+                }
+            if result.success is not True:
+                return {
+                    "status": "error",
+                    "message": "Command did not succeed",
+                    "status_code": 409,
+                }
+            return {
+                "status": "success",
+                "event_type": webhook_payload.event_type,
+                "result": {"aggregate_id": str(target)},
+                "status_code": 200,
+            }
+{% else %}            data = loads(payload)
             webhook_payload = {{ webhook_name }}Payload(**data)
             event_type = webhook_payload.event_type
             handler = self._handlers.get(event_type)
@@ -143,17 +205,18 @@ class {{ webhook_name }}Webhook:
                 "event_type": event_type,
                 "message": "No handler registered",
             }
-        except JSONDecodeError as exc:
+{% endif %}{% if not use_case %}        except JSONDecodeError as exc:
             logger.error("Invalid JSON: %s", exc)
             return {
                 "status": "error",
                 "message": f"Invalid JSON: {exc}",
             }
-        except Exception as exc:
+{% endif %}        except Exception{% if not use_case %} as exc{% endif %}:
             logger.exception("Error handling webhook")
             return {
                 "status": "error",
-                "message": str(exc),
+                "message": {% if use_case %}"Webhook command failed",
+                "status_code": 500,{% else %}str(exc),{% endif %}
             }
 
     def _verify_signature(self, payload: bytes, signature: str) -> bool:
@@ -167,9 +230,15 @@ class {{ webhook_name }}Webhook:
             True if signature is valid.
         """
         if not self.secret:
-            return True
+            return {% if use_case %}False{% else %}True{% endif %}
 
-        expected = hmac.new(
+{% if use_case %}        if (
+            type(signature) is not str
+            or len(signature) != 64
+            or any(char not in "0123456789abcdef" for char in signature)
+        ):
+            return False
+{% endif %}        expected = hmac.new(
             self.secret.encode("utf-8"),
             payload,
             hashlib.sha256,
@@ -214,4 +283,4 @@ async def {{ webhook_name_snake }}_webhook_handler(request: Request) -> JSONResp
     # webhook.register_handler("payment.created", handle_payment)
 
     result = await webhook.handle_request(body, headers)
-    return JSONResponse(result)
+    return JSONResponse(result{% if use_case %}, status_code=result.get("status_code", 500){% endif %})

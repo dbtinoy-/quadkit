@@ -2,7 +2,7 @@
 
 Pure standard-library only (``ipaddress``, ``socket``, ``urllib.parse``) so
 that any extension package — including ``the optional provider``, ``the optional provider``
-and ``the optional provider``, which may not import ``quadkit.security`` — can
+and ``quadkit-ai-mcp``, which may not import ``quadkit.security`` — can
 consume it directly. Keep this file stdlib-only (import-linter Contract 1).
 """
 

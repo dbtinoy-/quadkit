@@ -170,3 +170,92 @@ class TestAuthenticationMiddlewareCall:
         client.get("/api/data")
         # Identity resolution should have updated user_id
         assert scope_captures["user_id"] == "internal-uuid-456"
+
+
+@pytest.mark.parametrize("malformed", [True, False, 42, object()])
+def test_malformed_result_is_not_authenticated(malformed) -> None:
+    called = []
+
+    async def inner(scope, receive, send) -> None:
+        called.append(True)
+        await _plain_inner(scope, receive, send)
+
+    auth = _make_authenticator(malformed)
+    response = TestClient(AuthenticationMiddleware(inner, authenticators=[auth])).get(
+        "/private"
+    )
+    assert response.status_code == 401
+    assert called == []
+
+
+def test_malformed_result_does_not_prevent_later_authenticator() -> None:
+    first = _make_authenticator(True)
+    second = _make_authenticator({"id": "valid"})
+    response = TestClient(
+        AuthenticationMiddleware(_plain_inner, authenticators=[first, second])
+    ).get("/private")
+    assert response.status_code == 200
+    second.authenticate.assert_awaited_once()
+
+
+def test_malformed_result_on_excluded_path_remains_anonymous() -> None:
+    captured = []
+
+    async def inner(scope, receive, send) -> None:
+        captured.append(scope["state"]["user"])
+        await _plain_inner(scope, receive, send)
+
+    auth = _make_authenticator(True)
+    response = TestClient(
+        AuthenticationMiddleware(
+            inner, authenticators=[auth], exclude_paths=["/health"]
+        )
+    ).get("/health")
+    assert response.status_code == 200
+    assert captured == [None]
+
+
+def test_non_mapping_model_dump_is_not_authenticated() -> None:
+    user = MagicMock()
+    user.model_dump.return_value = True
+    auth = _make_authenticator(user)
+    response = TestClient(
+        AuthenticationMiddleware(_plain_inner, authenticators=[auth])
+    ).get("/private")
+    assert response.status_code == 401
+
+
+@pytest.mark.parametrize("malformed", [{}, [], type("Empty", (), {})()])
+def test_empty_identity_is_not_authenticated(malformed) -> None:
+    called = []
+
+    async def inner(scope, receive, send) -> None:
+        called.append(True)
+        await _plain_inner(scope, receive, send)
+
+    auth = _make_authenticator(malformed)
+    response = TestClient(AuthenticationMiddleware(inner, authenticators=[auth])).get(
+        "/private"
+    )
+    assert response.status_code == 401
+    assert called == []
+
+
+def test_empty_identity_does_not_prevent_later_authenticator() -> None:
+    first = _make_authenticator({})
+    second = _make_authenticator({"id": "valid"})
+    response = TestClient(
+        AuthenticationMiddleware(_plain_inner, authenticators=[first, second])
+    ).get("/private")
+    assert response.status_code == 200
+    second.authenticate.assert_awaited_once()
+
+
+def test_empty_model_dump_is_not_authenticated() -> None:
+    user = MagicMock()
+    user.model_dump.return_value = {}
+    auth = _make_authenticator(user)
+    response = TestClient(
+        AuthenticationMiddleware(_plain_inner, authenticators=[auth])
+    ).get("/private")
+    assert response.status_code == 401

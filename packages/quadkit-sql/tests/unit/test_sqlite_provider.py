@@ -1,5 +1,6 @@
 """Unit tests for SQLiteProvider"""
 
+import logging
 from unittest.mock import AsyncMock, Mock, call, patch
 
 import pytest
@@ -10,6 +11,16 @@ from quadkit.sql.providers.sqlite_provider import SQLiteProvider
 
 class TestSQLiteProvider:
     """Test SQLiteProvider functionality"""
+
+    def test_init_disables_aiosqlite_debug_parameter_logging(self) -> None:
+        driver_logger = logging.getLogger("aiosqlite")
+        original_level = driver_logger.level
+        driver_logger.setLevel(logging.DEBUG)
+        try:
+            SQLiteProvider(":memory:")
+            assert driver_logger.level == logging.WARNING
+        finally:
+            driver_logger.setLevel(original_level)
 
     @pytest.fixture
     def mock_connection(self):
@@ -92,8 +103,12 @@ class TestSQLiteProvider:
         mock_connect.assert_called_once_with(":memory:")
         assert connection.row_factory.__name__ == "Row"
         assert connection == mock_connection
-        # WAL is not applicable to in-memory databases; only busy_timeout set.
-        mock_connection.execute.assert_awaited_once_with("PRAGMA busy_timeout=5000")
+        # WAL is not applicable to in-memory databases; busy_timeout and
+        # foreign-key enforcement are set on every connection.
+        assert mock_connection.execute.await_args_list == [
+            call("PRAGMA busy_timeout=5000"),
+            call("PRAGMA foreign_keys=ON"),
+        ]
 
     @pytest.mark.asyncio
     @patch("aiosqlite.connect", new_callable=AsyncMock)
@@ -111,11 +126,13 @@ class TestSQLiteProvider:
         mock_connect.assert_called_once_with("/path/to/db.sqlite")
         assert connection == mock_connection
         # WAL journaling and a busy timeout prevent SQLITE_BUSY failures
-        # when concurrent writers contend on the same file.
+        # when concurrent writers contend on the same file; foreign-key
+        # enforcement is per-connection in SQLite and set on every one.
         mock_connection.execute.assert_has_awaits(
             [
                 call("PRAGMA journal_mode=WAL"),
                 call("PRAGMA busy_timeout=5000"),
+                call("PRAGMA foreign_keys=ON"),
             ]
         )
 

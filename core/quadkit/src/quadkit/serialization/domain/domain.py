@@ -6,7 +6,7 @@ and JSON, with support for common Python types like UUID, datetime, and Enum.
 
 from __future__ import annotations
 
-import datetime
+import datetime as dt
 from enum import Enum
 from typing import Any, cast
 from uuid import UUID
@@ -41,7 +41,7 @@ def json_serialize(obj: Any) -> Any:
         return [json_serialize(x) for x in obj]
     if isinstance(obj, UUID):
         return str(obj)
-    if isinstance(obj, datetime.datetime):
+    if isinstance(obj, dt.datetime):
         return obj.isoformat()
     if isinstance(obj, Enum):
         return obj.value
@@ -54,12 +54,86 @@ def json_serialize(obj: Any) -> Any:
     return str(obj)
 
 
+def _collect_computed_fields(model: Any) -> dict[str, Any]:
+    """Evaluate ``@computed_field`` descriptors declared on ``type(model)``."""
+    computed: dict[str, Any] = {}
+    seen: set[str] = set()
+    for base in type(model).__mro__:
+        if base is object:
+            continue
+        for attr_name, descriptor in vars(base).items():
+            if attr_name in seen:
+                continue
+            if isinstance(descriptor, property) and getattr(
+                descriptor.fget, "_computed_field", False
+            ):
+                seen.add(attr_name)
+                computed[attr_name] = getattr(model, attr_name)
+    return computed
+
+
+def _dump_nested_value(
+    value: Any,
+    *,
+    mode: str,
+    exclude_none: bool,
+    by_alias: bool,
+) -> Any:
+    """Recursively dump nested DomainModel instances and plain containers."""
+    if hasattr(value, "__dataclass_fields__") and hasattr(value, "model_dump"):
+        return value.model_dump(
+            mode=mode,
+            exclude_none=exclude_none,
+            by_alias=by_alias,
+        )
+    if hasattr(value, "__dataclass_fields__"):
+        from dataclasses import asdict
+
+        nested = asdict(value)
+        if exclude_none:
+            nested = {k: v for k, v in nested.items() if v is not None}
+        return nested
+    if isinstance(value, list):
+        return [
+            _dump_nested_value(
+                item,
+                mode=mode,
+                exclude_none=exclude_none,
+                by_alias=by_alias,
+            )
+            for item in value
+        ]
+    if isinstance(value, tuple):
+        return tuple(
+            _dump_nested_value(
+                item,
+                mode=mode,
+                exclude_none=exclude_none,
+                by_alias=by_alias,
+            )
+            for item in value
+        )
+    if isinstance(value, dict):
+        return {
+            k: _dump_nested_value(
+                v,
+                mode=mode,
+                exclude_none=exclude_none,
+                by_alias=by_alias,
+            )
+            for k, v in value.items()
+        }
+    return value
+
+
 def model_dump_to_dict(
     model: Any,
     *,
     mode: str = "python",
     exclude: set[str] | None = None,
     include: set[str] | None = None,
+    exclude_none: bool = False,
+    by_alias: bool = False,
 ) -> dict[str, Any]:
     """Dump a model to a dictionary.
 
@@ -68,31 +142,43 @@ def model_dump_to_dict(
         mode: "python" or "json" - json converts to serializable types.
         exclude: Fields to exclude from output.
         include: Fields to include in output (if None, includes all).
+        exclude_none: Exclude fields whose value is ``None``.
+        by_alias: Emit field aliases when configured in dataclass metadata.
 
     Returns:
         A dictionary representation of the model.
     """
     if hasattr(model, "__dataclass_fields__"):
-        from dataclasses import asdict
-
-        data = asdict(model)
+        dc_fields = model.__dataclass_fields__
+        data = {
+            fname: _dump_nested_value(
+                getattr(model, fname),
+                mode="python",
+                exclude_none=exclude_none,
+                by_alias=by_alias,
+            )
+            for fname in dc_fields
+            if hasattr(model, fname)
+        }
 
         # Automatically exclude fields marked with exclude=True in metadata
         auto_exclude = {
             fname
-            for fname, f in model.__dataclass_fields__.items()
+            for fname, f in dc_fields.items()
             if getattr(f, "metadata", {}).get("exclude")
         }
         if auto_exclude:
             exclude = auto_exclude if exclude is None else exclude | auto_exclude
     else:
+        dc_fields = {}
         data = dict(model.__dict__)
 
+    # Include @computed_field properties
+    for cname, cval in _collect_computed_fields(model).items():
+        if cname not in data:
+            data[cname] = cval
+
     # Add public extras from __dict__ — undeclared attributes only.
-    # `get_model_extra` already hides `_`-prefixed keys, so dumping them would
-    # make `model_dump()` and `model_extra` disagree about what an extra is, and
-    # framework bookkeeping (the domain field guard's marker, for one) is not
-    # payload.
     for k, v in model.__dict__.items():
         if k not in data and not k.startswith("_"):
             data[k] = v
@@ -101,8 +187,19 @@ def model_dump_to_dict(
         for field_name in exclude:
             data.pop(field_name, None)
 
-    if include:
+    if include is not None:
         data = {k: v for k, v in data.items() if k in include}
+
+    if exclude_none:
+        data = {k: v for k, v in data.items() if v is not None}
+
+    if by_alias and dc_fields:
+        aliased: dict[str, Any] = {}
+        for k, v in data.items():
+            f = dc_fields.get(k)
+            alias = getattr(f, "metadata", {}).get("alias") if f is not None else None
+            aliased[alias or k] = v
+        data = aliased
 
     if mode == "json":
         return cast("dict[str, Any]", json_serialize(data))

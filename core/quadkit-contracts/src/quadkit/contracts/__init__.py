@@ -215,7 +215,10 @@ if TYPE_CHECKING:
         MCPToolProviderProtocol,
         MCPTransportProtocol,
     )
-    from quadkit.contracts.observability.metrics import HealthCheckRegistryProtocol
+    from quadkit.contracts.observability.metrics import (
+        HealthCheckRegistryProtocol,
+        MetricsExpositionProtocol,
+    )
     from quadkit.contracts.search import SearchEngineProtocol
     from quadkit.contracts.security import (
         AsyncSecretStoreProtocol,
@@ -375,6 +378,10 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "HealthCheckRegistryProtocol": (
         "quadkit.contracts.observability.metrics",
         "HealthCheckRegistryProtocol",
+    ),
+    "MetricsExpositionProtocol": (
+        "quadkit.contracts.observability.metrics",
+        "MetricsExpositionProtocol",
     ),
     "HealthCheckResult": ("quadkit.contracts.core", "HealthCheckResult"),
     "HealthStatus": ("quadkit.contracts.core", "HealthStatus"),

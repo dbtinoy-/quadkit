@@ -54,11 +54,28 @@ class HandlerSubProvider:
         from typing import cast
 
         from quadkit.events.handlers import HandlerRegistry
+        from quadkit.events.handlers.di_binder import bind_event_handler
 
         self.handler_registry = HandlerRegistry()
 
         for module in self._handler_modules:
             self.handler_registry.discover(module)
+
+        # Bind DI parameters on function-based event handlers before bus registration.
+        for evt_type, handlers in list(self.handler_registry._event_handlers.items()):  # noqa: SLF001
+            bound_handlers: list[Any] = []
+            for entry in handlers:
+                if isinstance(entry, type):
+                    bound_handlers.append(entry)
+                else:
+                    bound = await bind_event_handler(
+                        entry,
+                        container,
+                        skip_if_missing_deps=True,
+                    )
+                    if bound is not None:
+                        bound_handlers.append(bound)
+            self.handler_registry._event_handlers[evt_type] = bound_handlers  # noqa: SLF001
 
         # Collect every unique handler *type* from all three registries.
         all_handler_types: set[type] = set()

@@ -190,6 +190,7 @@ class RateLimiter:
         max_requests: int,
         window_seconds: int,
         scope: Literal["user", "ip", "endpoint"] = "user",
+        namespace: str | None = None,
     ) -> None:
         """Check if request is within rate limit.
 
@@ -198,28 +199,24 @@ class RateLimiter:
             max_requests: Maximum requests per window.
             window_seconds: Time window in seconds.
             scope: Rate limit scope (user, ip, or endpoint).
+            namespace: Optional bucket namespace isolating independent
+                enforcement layers or per-path rules (for example,
+                ``"graphql"`` vs ``"rule:/graphql"``). When ``None``,
+                preserves the legacy unscoped key format.
 
         Raises:
             RateLimitError: If rate limit exceeded.
-
-        Example:
-            >>> # Allow 100 requests per minute per user
-            >>> await limiter.check_rate_limit(
-            ...     request=request,
-            ...     max_requests=100,
-            ...     window_seconds=60,
-            ...     scope="user",
-            ... )
         """
-        # Get rate limit key based on scope
+        # Get rate limit key based on scope and optional namespace
         key = self._get_rate_limit_key(request, scope)
+        scoped_key = f"{namespace}:{key}" if namespace else key
 
         # Check using sliding window
         now = ambient_clock.now()
         window_start = now - timedelta(seconds=window_seconds)
 
         # Redis key for this rate limit
-        redis_key = f"rate_limit:{key}"
+        redis_key = f"rate_limit:{scoped_key}"
 
         # Use Lua script for atomic operation
         lua_script = """
@@ -262,7 +259,7 @@ class RateLimiter:
             remaining = result[1]
         elif self._cache_backend is not None:
             # CacheBackendProtocol-backed fixed-window distributed counter
-            limiter_key = f"{key}:{max_requests}:{window_seconds}"
+            limiter_key = f"{scoped_key}:{max_requests}:{window_seconds}"
             if limiter_key not in self._cache_limiters:
                 self._cache_limiters[limiter_key] = CacheBackendLimiter(
                     cache=self._cache_backend,
@@ -270,11 +267,11 @@ class RateLimiter:
                     max_requests=max_requests,
                 )
             cache_limiter = self._cache_limiters[limiter_key]
-            allowed, remaining = await cache_limiter.try_acquire(key)
+            allowed, remaining = await cache_limiter.try_acquire(scoped_key)
             result = [0, window_seconds] if not allowed else [1, remaining]
         else:
             # In-memory fallback
-            limiter_key = f"{key}:{max_requests}:{window_seconds}"
+            limiter_key = f"{scoped_key}:{max_requests}:{window_seconds}"
             if limiter_key not in self._memory_limiters:
                 self._memory_limiters[limiter_key] = MemoryLimiter(
                     window_size=window_seconds,
@@ -296,7 +293,7 @@ class RateLimiter:
 
             logger.warning(
                 "security.rate_limit_exceeded",
-                key=key,
+                scope=scope,
                 max_requests=max_requests,
                 window_seconds=window_seconds,
                 retry_after=retry_after,
@@ -315,7 +312,6 @@ class RateLimiter:
 
         logger.debug(
             "rate_limit.check_passed",
-            key=key,
             remaining=remaining,
             limit=max_requests,
         )

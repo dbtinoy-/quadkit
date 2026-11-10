@@ -81,7 +81,8 @@ class TestSetOperations:
 
     def test_like_ilike_contains(self) -> None:
         assert F("name").like("%a%").to_sql() == ('"name" LIKE ?', ["%a%"])
-        assert F("name").ilike("%a%").to_sql() == ('"name" ILIKE ?', ["%a%"])
+        # `LOWER(x) LIKE LOWER(?)`: `ILIKE` does not exist in SQLite or MySQL.
+        assert F("name").ilike("%a%").to_sql() == ('LOWER("name") LIKE LOWER(?)', ["%a%"])
         assert F("name").contains("mid").to_sql() == ('"name" LIKE ?', ["%mid%"])
 
     def test_is_null_is_not_null(self) -> None:
@@ -164,6 +165,38 @@ class TestFilterValidation:
     def test_and_coerces_non_filter(self) -> None:
         with pytest.raises(TypeError, match="Expected Filter"):
             (F("a") == 1) & "raw"  # type: ignore[operator]
+
+
+class TestRawPredicate:
+    """Expression predicates compose like any other filter.
+
+    A rule such as "this code is exhausted" compares two nullable columns
+    through ``COALESCE`` and has no column-operator-value form. Without a
+    parameterized escape hatch the caller abandons the builder for a hand-
+    written statement — and the same rule gets rewritten (and drifts) in the
+    listing filter and the sweep.
+    """
+
+    def test_renders_sql_and_parameters(self) -> None:
+        from quadkit.sql.repositories.filter_objects import raw_predicate
+
+        sql, params = raw_predicate("COALESCE(n, 0) >= ?", 2).to_sql()
+        assert sql == "(COALESCE(n, 0) >= ?)"
+        assert params == [2]
+
+    def test_composes_with_equality(self) -> None:
+        from quadkit.sql.repositories.filter_objects import raw_predicate
+
+        sql, params = ((F("status") == "active") & raw_predicate("n > ?", 1)).to_sql()
+        assert sql == '("status" = ? AND (n > ?))'
+        assert params == ["active", 1]
+
+    def test_negates(self) -> None:
+        from quadkit.sql.repositories.filter_objects import raw_predicate
+
+        sql, params = (~raw_predicate("n = ?", 0)).to_sql()
+        assert sql == "NOT ((n = ?))"
+        assert params == [0]
 
 
 class TestColumnQuoting:

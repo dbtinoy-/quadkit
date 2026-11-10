@@ -76,8 +76,10 @@ class ApplicationLifecycle:
         self._logger.info("application.stopping", name=self._app_name)
 
         try:
-            await self._orchestrator.shutdown()
-            await self._container.dispose()
+            try:
+                await self._orchestrator.shutdown()
+            finally:
+                await self._container.dispose()
         finally:
             if self._start_time is not None:
                 self._uptime_seconds = time.monotonic() - self._start_time

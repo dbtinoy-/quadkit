@@ -47,21 +47,25 @@ class TasksModule(Module):
     def configure(
         cls,
         queue: Any | None = None,
-        worker_count: int = 1,
-        enable_scheduler: bool = True,
+        worker_count: int | None = None,
+        enable_scheduler: bool | None = None,
         config: TaskConfig | Any | None = None,
         task_modules: list[str] | tuple[str, ...] | None = None,
         task_packages: list[str] | tuple[str, ...] | None = None,
     ) -> DynamicModule:
-        """Create a TasksModule with explicit configuration.
+        """Create a TasksModule with explicit or YAML-resolved configuration.
 
         Args:
-            queue: :class:`~quadkit.contracts.infra.tasks.TaskQueueProtocol` implementation.
-                Defaults to :class:`~quadkit.tasks.backends.memory.MemoryTaskQueue`.
-            worker_count: Number of concurrent task workers.
-            enable_scheduler: Whether to enable the job scheduler.
+            queue: Optional explicit :class:`~quadkit.contracts.infra.tasks.TaskQueueProtocol`
+                implementation. When ``None``, the queue is instantiated from
+                ``config.backend`` via :class:`~quadkit.tasks.backends.registry.TaskBackendRegistry`
+                (defaulting to :class:`~quadkit.tasks.backends.memory.MemoryTaskQueue`).
+            worker_count: Optional number of concurrent task workers (``0`` for
+                producer-only processes). Defaults to ``config.worker.worker_count``.
+            enable_scheduler: Optional flag enabling the cron scheduler. Defaults
+                to ``config.scheduler.enabled``.
             config: :class:`~quadkit.tasks.config.TaskConfig` or ``None`` to
-                resolve the typed ``tasks`` yaml section at boot time.
+                resolve the typed ``tasks`` yaml section at registration time.
             task_modules: Exact Python module paths to import during boot and
                 scan for decorated ``@task`` / ``@scheduled`` callables.
             task_packages: Package roots to import recursively during boot and
@@ -83,11 +87,6 @@ class TasksModule(Module):
 
         if config is not None and not isinstance(config, _TaskConfig):
             raise TypeError(f"config must be TaskConfig, got {type(config).__name__}")
-
-        if queue is None:
-            from quadkit.tasks.backends.memory import MemoryTaskQueue
-
-            queue = MemoryTaskQueue()  # type: ignore[abstract]
 
         return DynamicModule(
             module=cls,
@@ -169,7 +168,7 @@ class TasksModule(Module):
             module=cls,
             providers=[
                 TaskProvider(
-                    queue=MemoryTaskQueue(),  # type: ignore[abstract]
+                    queue=MemoryTaskQueue(),
                     worker_count=1,
                     enable_scheduler=False,
                 )

@@ -33,6 +33,42 @@ uv tool install quadkit-cli
 
 Requires **Python >= 3.11**.
 
+## Explicit runtime health (local 0.0.50 source)
+
+```bash
+# File checks only; explicitly reports that runtime health was NOT run
+quadkit system health
+
+# From an installed/importable app project, opt into real provider lifecycle
+quadkit system health --app my_api.app:app --check sql:database_connection --strict
+# Repeat --check contributor:name to select additional canonical async probes
+```
+
+`--app` must identify a fresh Quadkit `Application` **instance** in CREATED state,
+not an ASGI object or a factory. The command starts it, awaits selected async
+`check(container) -> HealthCheckResult` contributions, and stops it in `finally`,
+including failures/cancellation. Startup/shutdown each have a cooperative 60-second
+limit; probes use their contribution timeout. Unknown/duplicate/ambiguous selections
+are rejected before application import/boot. Only explicitly selected checks run;
+installed packages do not imply configured application dependencies.
+
+**Booting has real side effects:** normal providers/background tasks and any
+application-configured migrations may run. Use an approved environment. This is
+not a read-only sandbox; it does not replace provider/configuration authority,
+start an HTTP server, register custom generated probes or verify migrations itself.
+
+Only canonical HEALTHY is a passing probe. All other states/errors/malformed
+results fail critical checks and warn for non-critical checks; `--strict` fails on
+warnings too. Boot/shutdown failures fail the command. Provider message/error text
+is not echoed by the runner (application/provider logs retain their own policies).
+Without explicit runtime options the file-only command prints a runtime-not-run
+warning; strict file-only mode therefore cannot claim runtime acceptance.
+
+The SQL callback is demonstrated with generated anonymous-action apps in flat and
+modular layouts using local SQLite. Other contributed probes still need individual
+contract/runtime evidence; this is not universal dependency or installed-wheel
+acceptance. No `quadkit health` top-level alias is introduced: use **system health**.
+
 ## Minimal working example
 
 There is no code to write — the product is the command line:
@@ -111,10 +147,10 @@ review release notes on upgrade. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.46` in the `0.x` series, released in lockstep with the
-other twelve distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-cli==0.0.46`) or a tight range
-(`>=0.0.46,<0.1.0`). Full policy:
+Version `0.0.50` in the `0.x` series, versioned independently of the
+other distributions; APIs may change between minor versions until
+1.0 — pin an exact version (`quadkit-cli==0.0.50`) or a tight range
+(`>=0.0.50,<0.1.0`). Full policy:
 [stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links

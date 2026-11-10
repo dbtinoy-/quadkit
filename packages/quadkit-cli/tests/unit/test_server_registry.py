@@ -143,6 +143,18 @@ class TestGranianBackend:
         cmd = backend.build_dev_command(cfg)
         assert "--reload" in cmd
 
+    def test_factory_entry_point_passes_factory_flag(self) -> None:
+        """A factory target needs --factory, like UvicornBackend emits.
+
+        Without it Granian treats the factory function as the ASGI app
+        and every request calls create_app(scope, ...) — the runner's
+        gunicorn branch had the same defect class.
+        """
+        backend = GranianBackend()
+        cfg = ServerConfig(entry_point="app:create_app", factory=True)
+        assert "--factory" in backend.build_start_command(cfg)
+        assert "--factory" in backend.build_dev_command(cfg)
+
     def test_name_is_granian(self) -> None:
         assert GranianBackend.name == "granian"
 

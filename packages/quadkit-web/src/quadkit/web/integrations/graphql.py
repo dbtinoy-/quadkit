@@ -16,6 +16,8 @@ from quadkit.logging import get_logger
 if TYPE_CHECKING:
     from starlette.applications import Starlette
 
+    from quadkit.contracts.core.di import ContainerResolverProtocol
+
 logger = get_logger(__name__)
 
 
@@ -28,7 +30,9 @@ class GraphQLIntegration:
     """
 
     @staticmethod
-    async def configure(app: Starlette, container: Any | None = None) -> None:
+    async def configure(
+        app: Starlette, container: ContainerResolverProtocol | None = None
+    ) -> None:
         """Configure GraphQL HTTP playground and WebSocket endpoints.
 
         Registers the playground page (``GET graphql.playground.path``,
@@ -50,14 +54,19 @@ class GraphQLIntegration:
 
             from quadkit.contracts.graphql.protocols import WebSocketTransportProtocol
 
-            _transport_holder: dict[str, Any] = {}
+            if not container.has(WebSocketTransportProtocol):
+                await GraphQLIntegration._configure_playground(app, container)
+                return
+
+            _transport_holder: dict[str, WebSocketTransportProtocol] = {}
 
             async def _ws_endpoint(websocket: Any) -> None:
                 transport = _transport_holder.get("transport")
                 if transport is None:
                     try:
-                        transport = await container.resolve(WebSocketTransportProtocol)
-                        _transport_holder["transport"] = transport
+                        _transport_holder["transport"] = await container.resolve(
+                            WebSocketTransportProtocol
+                        )
                         logger.info("GraphQL WS transport initialised")
                     except (LookupError, RuntimeError, OSError) as exc:
                         logger.warning(
@@ -67,7 +76,7 @@ class GraphQLIntegration:
                         await websocket.close(code=1013)
                         return
 
-                await transport.handle(websocket, app)
+                await _transport_holder["transport"].handle(websocket, app)
 
             ws_path = DEFAULT_SUBSCRIPTIONS_PATH
             ws_route = WebSocketRoute(ws_path, _ws_endpoint)
@@ -79,7 +88,9 @@ class GraphQLIntegration:
             return
 
     @staticmethod
-    async def _configure_playground(app: Starlette, container: Any) -> None:
+    async def _configure_playground(
+        app: Starlette, container: ContainerResolverProtocol
+    ) -> None:
         """Register the playground page when ``graphql.playground.enabled``.
 
         Resolves the :class:`GraphQLPlaygroundProtocol` contract (registered
@@ -101,13 +112,60 @@ class GraphQLIntegration:
         if playground is None or not playground.enabled:
             return
 
+        import base64
+        import hashlib
+        import re
+
         from starlette.routing import Route
 
+        from quadkit.web.config.top_level import WebConfig
         from quadkit.web.transport.responses import HTMLResponse
+
+        web_cfg = await container.resolve_optional(WebConfig)
+        frame_ancestors = "'none'"
+        if web_cfg is not None:
+            app_csp = getattr(getattr(web_cfg, "security", None), "csp", None)
+            if app_csp is not None and isinstance(app_csp.directives, dict):
+                configured = app_csp.directives.get("frame-ancestors")
+                if configured:
+                    frame_ancestors = (
+                        " ".join(sorted(str(v) for v in configured))
+                        if isinstance(configured, (set, list))
+                        else str(configured)
+                    )
+
+        script_re = re.compile(
+            r"<script[^>]*>(.*?)</script>", re.DOTALL | re.IGNORECASE
+        )
 
         async def _playground_endpoint(request: Any) -> Any:
             root_path = request.scope.get("root_path", "") or ""
-            return HTMLResponse(playground.render(root_path + playground.endpoint_path))
+            html_doc = playground.render(root_path + playground.endpoint_path)
+            hashes = [
+                "'sha256-"
+                + base64.b64encode(hashlib.sha256(m.encode("utf-8")).digest()).decode(
+                    "ascii"
+                )
+                + "'"
+                for m in script_re.findall(html_doc)
+            ]
+            script_sources = " ".join(["'self'", *hashes])
+            csp_policy = (
+                f"default-src 'self'; "
+                f"script-src {script_sources}; "
+                f"script-src-elem {script_sources}; "
+                f"style-src 'self' 'unsafe-inline'; "
+                f"style-src-elem 'self' 'unsafe-inline'; "
+                f"connect-src 'self' ws: wss:; "
+                f"img-src 'self' data:; "
+                f"frame-ancestors {frame_ancestors}; "
+                f"base-uri 'self'; "
+                f"form-action 'self'"
+            )
+            return HTMLResponse(
+                html_doc,
+                headers={"Content-Security-Policy": csp_policy},
+            )
 
         app.routes.insert(
             0,

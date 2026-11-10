@@ -1,7 +1,7 @@
 """Dialect reporting for ``DatabaseProviderProtocol`` implementations.
 
 Every framework store that provisions its own tables writes ``?`` placeholders
-and translates them per provider (see ``the optional provider module`` and its
+and translates them per provider (see ``quadkit.notification.dialect`` and its
 siblings in ``quadkit.tasks``/``the optional provider module``/``the optional provider module``). Until now
 each store asked the provider for ``name`` — an attribute the contract never
 declared — and defaulted to SQLite when it was missing. A provider that

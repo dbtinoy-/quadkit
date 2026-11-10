@@ -12,7 +12,7 @@ from typing import Any
 from uuid import uuid4
 
 from quadkit.di import injectable
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks import JobProtocol, TaskProvider{% if schedule %}, scheduled{% else %}, task{% endif %}
 
 logger = get_logger(__name__)
@@ -41,14 +41,15 @@ logger = get_logger(__name__)
     Returns:
         Result data produced by the task.
     """
-    logger.info("{{ resource_name }}_started", args=args, kwargs=kwargs)
+    # Task arguments and outputs may contain secrets or user data; do not log them.
+    logger.info("{{ resource_name }}_started")
 
     try:
         result_data = await _process_{{ resource_name }}(*args, **kwargs)
-        logger.info("{{ resource_name }}_completed", result=result_data)
+        logger.info("{{ resource_name }}_completed")
         return result_data
     except Exception as exc:
-        logger.exception("{{ resource_name }}_failed", error=str(exc))
+        logger.error("{{ resource_name }}_failed", error_type=safe_error_type(exc))
         raise
 
 
@@ -116,7 +117,8 @@ class {{ class_name }}TaskRunner:
 {% for param in params %}            "{{ param.name }}": {{ param.name }},
 {% endfor %}        }
 
-        logger.info("{{ resource_name }}_dispatch", task_kwargs=task_kwargs)
+        # Dispatch parameters may include secrets or user data; do not log them.
+        logger.info("{{ resource_name }}_dispatch")
 
         job = JobProtocol(
             id=uuid4().hex,
@@ -126,5 +128,5 @@ class {{ class_name }}TaskRunner:
         )
         job_id = await self._provider.enqueue_job(job)
 
-        logger.info("{{ resource_name }}_dispatched", job_id=job_id)
+        logger.info("{{ resource_name }}_dispatched")
         return job_id

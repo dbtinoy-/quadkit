@@ -84,8 +84,11 @@ class DatabaseProvider(_DatabaseRegistrationMixin, Provider):
         config: DatabaseConfig | str | None = None,
         migration_dir: str = "migrations",
         enable_migrations: bool = False,
+        config_key: str | None = None,
     ) -> None:
         super().__init__()
+        if config_key is not None:
+            self.config_key = config_key
         if isinstance(config, str):
             config = DatabaseConfig.from_url(config)
         self._explicit_config: DatabaseConfig | None = config

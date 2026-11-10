@@ -1,0 +1,49 @@
+"""{{ step_name }} saga step.
+
+Generated scaffold — implement the forward action and its
+compensating transaction.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+from quadkit.logging import get_logger
+
+logger = get_logger(__name__)
+
+
+class {{ step_name }}SagaStep:
+    """Saga step ``{{ step_name_snake }}`` with compensation."""
+
+    name = "{{ step_name_snake }}"
+
+    async def execute(self, context: dict[str, Any]) -> None:
+        """Forward action — make a change that may need undoing.
+
+        Args:
+            context: Shared saga state; stash anything the compensation
+                needs (ids, snapshots) in here.
+        """
+        logger.info("saga_step_executed")
+
+        # @INTENT: Perform this step's forward action; stash whatever the compensation will need in context.
+        # @TODO: perform the forward action.
+        # Example:
+        #   reservation = await inventory.reserve(context["sku"])
+        #   context["{{ step_name_snake }}_reservation_id"] = reservation.id
+
+    async def compensate(self, context: dict[str, Any]) -> None:
+        """Compensating transaction — undo :meth:`execute`.
+
+        Args:
+            context: The same shared saga state passed to execute.
+        """
+        logger.warning("saga_step_compensated")
+
+        # @INTENT: Compensate — reverse the forward action using the state left in context.
+        # @TODO: undo the forward action.
+        # Example:
+        #   reservation_id = context.get("{{ step_name_snake }}_reservation_id")
+        #   if reservation_id:
+        #       await inventory.release(reservation_id)

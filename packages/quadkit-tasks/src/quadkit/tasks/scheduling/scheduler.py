@@ -10,7 +10,7 @@ from dataclasses import dataclass
 import time
 from typing import TYPE_CHECKING, Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.models.job import JobProtocol
 from quadkit.tasks.scheduling.cron import CronExpression
 from quadkit.tasks.scheduling.dependency_resolver import DependencyResolver
@@ -135,7 +135,7 @@ class TaskScheduler:
             self._dependency_resolver.register(job_id, template.depends_on)
 
         self.scheduled_jobs[job_id] = scheduled_job
-        logger.info("Scheduled job %s with cron: %s", job_id, cron_expression)
+        logger.info("scheduler.job_scheduled")
         return job_id
 
     async def schedule_job(
@@ -202,7 +202,7 @@ class TaskScheduler:
         if job_id in self.scheduled_jobs:
             del self.scheduled_jobs[job_id]
             self._dependency_resolver.remove(job_id)
-            logger.info("Unscheduled job %s", job_id)
+            logger.info("scheduler.job_unscheduled")
             return True
         return False
 
@@ -257,9 +257,9 @@ class TaskScheduler:
             try:
                 await self._check_scheduled_jobs(enqueue_callback)
                 await asyncio.sleep(self.check_interval)
-            except Exception:  # noqa: BLE001 — resilience boundary
+            except Exception as exc:  # noqa: BLE001 — resilience boundary
                 # Intentionally broad: scheduler loop must not exit on unexpected errors.
-                logger.exception("Scheduler error")
+                logger.error("scheduler_loop_failed", error_type=safe_error_type(exc))
                 await asyncio.sleep(self.check_interval)
 
     async def stop_scheduler(self) -> None:
@@ -287,7 +287,7 @@ class TaskScheduler:
                 job = scheduled_job.job_template.create_job()
                 try:
                     await enqueue_callback(job)
-                    logger.info("Enqueued scheduled job %s: %s", job_id, job.name)
+                    logger.info("scheduler.job_enqueued")
 
                     # Calculate next run time and persist it.
                     scheduled_job.next_run = scheduled_job.calculate_next_run()
@@ -296,14 +296,18 @@ class TaskScheduler:
                             await self._store.update_next_run(
                                 job_id, scheduled_job.next_run
                             )
-                        except Exception:  # noqa: BLE001 — best-effort
-                            logger.exception(
-                                "Failed to persist next_run for job %s", job_id
+                        except Exception as exc:  # noqa: BLE001 — best-effort
+                            logger.error(
+                                "scheduler_next_run_persist_failed",
+                                error_type=safe_error_type(exc),
                             )
 
-                except Exception:  # noqa: BLE001 — handler isolation
+                except Exception as exc:  # noqa: BLE001 — handler isolation
                     # Intentionally broad: one job failing to enqueue should not stop the scheduler.
-                    logger.exception("Failed to enqueue scheduled job %s", job_id)
+                    logger.error(
+                        "scheduler_job_enqueue_failed",
+                        error_type=safe_error_type(exc),
+                    )
 
     def enable_job(self, job_id: str) -> bool:
         """Enable a scheduled job
@@ -317,7 +321,7 @@ class TaskScheduler:
         job = self.scheduled_jobs.get(job_id)
         if job:
             job.enabled = True
-            logger.info("Enabled scheduled job %s", job_id)
+            logger.info("scheduler.job_enabled")
             return True
         return False
 
@@ -333,7 +337,7 @@ class TaskScheduler:
         job = self.scheduled_jobs.get(job_id)
         if job:
             job.enabled = False
-            logger.info("Disabled scheduled job %s", job_id)
+            logger.info("scheduler.job_disabled")
             return True
         return False
 

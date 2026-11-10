@@ -77,6 +77,7 @@ async def test_select_is_logged_exactly_once(provider) -> None:
     selects = _log_entries(provider, "SELECT * FROM ITEMS")
     assert len(selects) == 1, [e.sql for e in selects]
     assert selects[0].success is True
+    assert selects[0].params is None
 
 
 @pytest.mark.asyncio

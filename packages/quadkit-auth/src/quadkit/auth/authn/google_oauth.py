@@ -42,8 +42,14 @@ class GoogleOAuthService:
         allowed_issuers: tuple[str, ...] = GOOGLE_ISSUERS,
         jwks_cache_ttl_seconds: int = 300,
     ) -> None:
-        if not client_id:
-            raise ValueError("Google OAuth client_id is required")
+        if (
+            not isinstance(client_id, str)
+            or not client_id
+            or client_id.strip() != client_id
+        ):
+            raise ValueError(
+                "Google OAuth client_id is required and must not contain surrounding whitespace"
+            )
         self.client_id = client_id
         self.http_client = http_client
         self.jwks_url = jwks_url
@@ -117,8 +123,9 @@ class GoogleOAuthService:
         if issuer not in self.allowed_issuers:
             raise OAuth2Error(f"Invalid Google token issuer: {issuer!r}")
 
-        email_verified = bool(payload.get("email_verified", False))
-        if not email_verified:
+        # Google ID tokens carry a JSON boolean, not an arbitrary truthy value.
+        # In particular, bool("false") would incorrectly verify an email.
+        if payload.get("email_verified") is not True:
             raise OAuth2Error("Google email is not verified")
 
         return self._claims_from_payload(

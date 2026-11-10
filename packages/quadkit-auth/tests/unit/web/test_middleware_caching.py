@@ -1,6 +1,5 @@
 """Tests for authentication middleware with caching"""
 
-import time
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
 
@@ -13,7 +12,13 @@ from quadkit.contracts.auth.token import VerifiedToken
 from quadkit.result import Ok
 
 
-def _verified(user_id: str = "user123", *, name: str = "testuser", email: str = "test@example.com", roles: list[str] | None = None) -> VerifiedToken:
+def _verified(
+    user_id: str = "user123",
+    *,
+    name: str = "testuser",
+    email: str = "test@example.com",
+    roles: list[str] | None = None,
+) -> VerifiedToken:
     """Helper to create a VerifiedToken for mocking."""
     return VerifiedToken(
         user_id=user_id,
@@ -76,7 +81,10 @@ class TestAuthMiddlewareCaching:
 
     @pytest.mark.asyncio
     async def test_token_cache_miss(
-        self, auth_middleware, mock_auth_provider, mock_request,
+        self,
+        auth_middleware,
+        mock_auth_provider,
+        mock_request,
     ):
         """Test token cache miss performs full authentication."""
         # Authenticate request
@@ -91,46 +99,49 @@ class TestAuthMiddlewareCaching:
         mock_auth_provider.get_user.assert_called_once_with("user123")
 
     @pytest.mark.asyncio
-    async def test_token_cache_hit(
-        self, auth_middleware, mock_auth_provider, mock_request,
+    async def test_repeated_token_reverifies_credentials_and_user(
+        self,
+        auth_middleware,
+        mock_auth_provider,
+        mock_request,
     ):
-        """Test token cache hit skips JWT decode and DB lookup."""
-        # First call - cache miss
+        """A repeated credential still requires verification and current user data."""
+        # First authenticated call
         user1 = await auth_middleware.authenticate_request(mock_request)
 
         # Reset mocks
         mock_auth_provider.verify_token.reset_mock()
         mock_auth_provider.get_user.reset_mock()
 
-        # Second call - should hit cache
+        # Second call must revalidate
         user2 = await auth_middleware.authenticate_request(mock_request)
 
         # Verify same user returned
         assert user1 is user2
 
-        # Verify JWT decode and DB lookup were NOT called on second request
-        mock_auth_provider.verify_token.assert_not_called()
-        mock_auth_provider.get_user.assert_not_called()
+        # Identity snapshots cannot authorize the second request
+        mock_auth_provider.verify_token.assert_awaited_once_with("test_token")
+        mock_auth_provider.get_user.assert_awaited_once_with("user123")
 
     @pytest.mark.asyncio
-    async def test_token_cache_expiration(
-        self, auth_middleware, mock_auth_provider, mock_request,
+    async def test_legacy_cache_expiration_does_not_control_authentication(
+        self,
+        auth_middleware,
+        mock_auth_provider,
+        mock_request,
     ):
-        """Test token cache expires after TTL."""
+        """Verification is required regardless of the legacy utility cache TTL."""
         # Set very short TTL for testing
         auth_middleware.token_cache._ttl = 0.1
 
-        # First call - cache miss
+        # First authenticated call
         user1 = await auth_middleware.authenticate_request(mock_request)
-
-        # Wait for cache to expire
-        time.sleep(0.2)
 
         # Reset mocks
         mock_auth_provider.verify_token.reset_mock()
         mock_auth_provider.get_user.reset_mock()
 
-        # Second call - should miss cache and re-verify
+        # Second call re-verifies even before the legacy TTL expires
         user2 = await auth_middleware.authenticate_request(mock_request)
 
         # Verify same user returned
@@ -142,32 +153,42 @@ class TestAuthMiddlewareCaching:
 
     @pytest.mark.asyncio
     async def test_different_tokens_cached_separately(
-        self, auth_middleware, mock_auth_provider,
+        self,
+        auth_middleware,
+        mock_auth_provider,
     ):
         """Test different tokens are cached separately."""
         # Mock different users for different tokens
         user1 = User(
-            user_id="user1", name="user1", email="user1@example.com", roles=["user"],
+            user_id="user1",
+            name="user1",
+            email="user1@example.com",
+            roles=["user"],
         )
         user2 = User(
-            user_id="user2", name="user2", email="user2@example.com", roles=["user"],
+            user_id="user2",
+            name="user2",
+            email="user2@example.com",
+            roles=["user"],
         )
 
         # Configure mock to return different users based on token
         mock_auth_provider.verify_token.side_effect = None
-        mock_auth_provider.verify_token.return_value = Ok(_verified("user1", name="user1", email="user1@example.com"))
+        mock_auth_provider.verify_token.return_value = Ok(
+            _verified("user1", name="user1", email="user1@example.com")
+        )
 
         def mock_verify_token(token):
             if token == "token1":
                 return Ok(_verified("user1", name="user1", email="user1@example.com"))
-            elif token == "token2":
+            if token == "token2":
                 return Ok(_verified("user2", name="user2", email="user2@example.com"))
             return Ok(_verified())
 
         def mock_get_user(user_id):
             if user_id == "user1":
                 return user1
-            elif user_id == "user2":
+            if user_id == "user2":
                 return user2
             return None
 

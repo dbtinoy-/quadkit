@@ -261,7 +261,7 @@ class DatabaseSchedulerStore:
                 now,
             ],
         )
-        logger.debug("scheduler.job_saved", job_id=job_id)
+        logger.debug("scheduler.job_saved")
 
     async def load_jobs(self) -> dict[str, ScheduledJob]:
         """Load all scheduled jobs from the database.
@@ -298,7 +298,7 @@ class DatabaseSchedulerStore:
             self._sql(_UPDATE_NEXT_RUN_SQL),
             [next_run, datetime.now(UTC), job_id],
         )
-        logger.debug("scheduler.next_run_updated", job_id=job_id, next_run=next_run)
+        logger.debug("scheduler.next_run_updated", next_run=next_run)
 
     async def delete_job(self, job_id: str) -> None:
         """Remove a scheduled job from the database.
@@ -308,4 +308,4 @@ class DatabaseSchedulerStore:
         """
         await self._ensure_table()
         await self._db.execute(self._sql(_DELETE_SQL), [job_id])
-        logger.debug("scheduler.job_deleted", job_id=job_id)
+        logger.debug("scheduler.job_deleted")

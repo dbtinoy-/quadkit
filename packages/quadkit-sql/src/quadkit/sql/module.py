@@ -51,6 +51,7 @@ class DatabaseModule(Module):
         migration_dir: str = "migrations",
         enable_migrations: bool = False,
         enable_query_logging: bool = False,
+        config_key: str = "sql",
     ) -> DynamicModule:
         """Create a DatabaseModule with explicit configuration.
 
@@ -78,6 +79,7 @@ class DatabaseModule(Module):
                     config=config,
                     migration_dir=migration_dir,
                     enable_migrations=enable_migrations,
+                    config_key=config_key,
                 )
             ],
             exports=[DatabaseProviderProtocol, UnitOfWorkProtocol],

@@ -9,7 +9,8 @@ here so the public import path is unchanged.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
+from contextvars import ContextVar, Token
 from functools import wraps
 import inspect
 from typing import TYPE_CHECKING, Any, Literal
@@ -19,7 +20,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from quadkit.contracts.exceptions import RateLimitError
 from quadkit.contracts.web import WebRateLimiterProtocol
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.web.middleware.rate_limit_strategies import (
     CacheBackendLimiter as CacheBackendLimiter,
 )
@@ -35,6 +36,47 @@ if TYPE_CHECKING:
     from quadkit.web.config.rate_limit import RateLimitConfig
 
 logger = get_logger(__name__)
+
+_current_request_var: ContextVar[Request | None] = ContextVar(
+    "quadkit_web_current_request",
+    default=None,
+)
+
+
+def set_current_request(request: Request) -> Token[Request | None]:
+    """Bind the active HTTP ``Request`` to the current async execution context."""
+    return _current_request_var.set(request)
+
+
+def reset_current_request(token: Token[Request | None]) -> None:
+    """Restore the previous HTTP ``Request`` binding for the current context."""
+    _current_request_var.reset(token)
+
+
+def get_current_request() -> Request | None:
+    """Return the active HTTP ``Request`` bound by the router, if any."""
+    return _current_request_var.get()
+
+
+def _is_asgi_request(candidate: Any) -> bool:
+    """Return True if *candidate* looks like an HTTP Starlette/ASGI ``Request``."""
+    scope = getattr(candidate, "scope", None)
+    return (
+        isinstance(scope, Mapping) and hasattr(candidate, "app") and "method" in scope
+    )
+
+
+def _limiter_supports_namespace(limiter: Any) -> bool:
+    """Return True if ``limiter.check_rate_limit`` accepts ``namespace=...``."""
+    if limiter is None:
+        return False
+    try:
+        params = inspect.signature(limiter.check_rate_limit).parameters
+        return "namespace" in params or any(
+            p.kind == inspect.Parameter.VAR_KEYWORD for p in params.values()
+        )
+    except (TypeError, ValueError):
+        return False
 
 
 async def _resolve_container_limiter(request: Request) -> WebRateLimiterProtocol | None:
@@ -64,7 +106,7 @@ async def _resolve_container_limiter(request: Request) -> WebRateLimiterProtocol
         except Exception as exc:  # noqa: BLE001 — not bound in this app
             logger.debug(
                 "rate_limit_container_resolution_miss",
-                error=str(exc),
+                error_type=safe_error_type(exc),
             )
     return None
 
@@ -74,7 +116,10 @@ __all__ = [
     "MemoryLimiter",
     "RateLimitMiddleware",
     "RateLimiter",
+    "get_current_request",
     "rate_limit",
+    "reset_current_request",
+    "set_current_request",
 ]
 
 
@@ -141,15 +186,20 @@ def rate_limit(
             # ── 1. Locate the request object ───────────────────────────────
             request: Request | None = None
             for arg in args:
-                if (
-                    hasattr(arg, "scope")
-                    and hasattr(arg, "app")
-                    and "method" in arg.scope
-                ):
+                if _is_asgi_request(arg):
                     request = arg
                     break
             if request is None:
-                request = kwargs.get("request")
+                for val in kwargs.values():
+                    if _is_asgi_request(val):
+                        request = val
+                        break
+            if request is None:
+                explicit_req = kwargs.get("request")
+                if explicit_req is not None and _is_asgi_request(explicit_req):
+                    request = explicit_req
+            if request is None:
+                request = get_current_request()
 
             if request is None:
                 logger.warning(
@@ -180,11 +230,15 @@ def rate_limit(
                 return await func(*args, **kwargs)
 
             # ── 3. Enforce the rate limit ───────────────────────────────────
+            extra_kwargs: dict[str, Any] = {}
+            if _limiter_supports_namespace(resolved_limiter):
+                extra_kwargs["namespace"] = f"endpoint:{func.__qualname__}"
             await resolved_limiter.check_rate_limit(
                 request=request,
                 max_requests=max_requests,
                 window_seconds=window_seconds,
                 scope=scope,
+                **extra_kwargs,
             )
 
             return await func(*args, **kwargs)
@@ -221,6 +275,7 @@ class RateLimitMiddleware:
         self.app = app
         self.rate_limiter = rate_limiter
         self.config = config
+        self._supports_namespace = _limiter_supports_namespace(rate_limiter)
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Process request and add rate limit headers.
@@ -253,19 +308,31 @@ class RateLimitMiddleware:
             ):
                 pass  # whitelisted — skip enforcement (D2)
             else:
-                rule = self.config.get_rule(request.url.path)
-                if rule is not None:
+                matched = self.config.get_matched_rule(request.url.path)
+                namespace: str | None = None
+                if matched is not None:
+                    pattern, rule = matched
                     max_requests, window_seconds = rule.requests, rule.window
+                    namespace = f"rule:{pattern}"
                 else:
                     max_requests = self.config.default_limit
                     window_seconds = self.config.default_window
                 try:
-                    await self.rate_limiter.check_rate_limit(
-                        request,
-                        max_requests=max_requests,
-                        window_seconds=window_seconds,
-                        scope="user",
-                    )
+                    if namespace is not None and self._supports_namespace:
+                        await self.rate_limiter.check_rate_limit(
+                            request,
+                            max_requests=max_requests,
+                            window_seconds=window_seconds,
+                            scope="user",
+                            namespace=namespace,
+                        )
+                    else:
+                        await self.rate_limiter.check_rate_limit(
+                            request,
+                            max_requests=max_requests,
+                            window_seconds=window_seconds,
+                            scope="user",
+                        )
                 except RateLimitError as exc:
                     response = _rate_limit_429_response(exc)
                     await response(scope, receive, send)

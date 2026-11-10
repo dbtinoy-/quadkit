@@ -1,4 +1,5 @@
 """Tests for file upload pipeline and validators."""
+
 from __future__ import annotations
 
 from unittest.mock import AsyncMock, MagicMock
@@ -73,6 +74,52 @@ class TestFileUpload:
         assert dest.read_bytes() == content
 
     @pytest.mark.asyncio
+    async def test_save_to_rejects_path_escape_without_exposing_paths(
+        self, tmp_path
+    ) -> None:
+        upload = _make_upload()
+        private_base = tmp_path / "PRIVATE_BASE_PATH_SENTINEL"
+        private_destination = (
+            tmp_path / "PRIVATE_DESTINATION_PATH_SENTINEL" / "file.bin"
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="Upload destination escapes the allowed base directory",
+        ) as exc_info:
+            await upload.save_to(private_destination, base_dir=private_base)
+
+        assert (
+            str(exc_info.value)
+            == "Upload destination escapes the allowed base directory"
+        )
+        assert "PRIVATE_BASE_PATH_SENTINEL" not in str(exc_info.value)
+        assert "PRIVATE_DESTINATION_PATH_SENTINEL" not in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_stream_to_rejects_path_escape_without_exposing_paths(
+        self, tmp_path
+    ) -> None:
+        upload = _make_upload()
+        private_base = tmp_path / "PRIVATE_BASE_PATH_SENTINEL"
+        private_destination = (
+            tmp_path / "PRIVATE_DESTINATION_PATH_SENTINEL" / "file.bin"
+        )
+
+        with pytest.raises(
+            ValueError,
+            match="Upload destination escapes the allowed base directory",
+        ) as exc_info:
+            await upload.stream_to(private_destination, base_dir=private_base)
+
+        assert (
+            str(exc_info.value)
+            == "Upload destination escapes the allowed base directory"
+        )
+        assert "PRIVATE_BASE_PATH_SENTINEL" not in str(exc_info.value)
+        assert "PRIVATE_DESTINATION_PATH_SENTINEL" not in str(exc_info.value)
+
+    @pytest.mark.asyncio
     async def test_stream_to(self, tmp_path) -> None:
         content = b"x" * 16384  # two 8192-byte chunks
         mock_file = MagicMock(spec=UploadFile)
@@ -103,7 +150,8 @@ class TestFileSizeValidator:
         upload = _make_upload(size=200)
         result = await validator.validate(upload)
         assert result.is_err()
-        assert "200" in result.unwrap_err().message
+        assert result.unwrap_err().message == "File exceeds the maximum allowed size"
+        assert "200" not in result.unwrap_err().message
 
 
 class TestFileTypeValidator:
@@ -117,10 +165,16 @@ class TestFileTypeValidator:
     @pytest.mark.asyncio
     async def test_returns_err_for_disallowed_type(self) -> None:
         validator = FileTypeValidator(allowed_types=["image/jpeg"])
-        upload = _make_upload(content_type="application/exe")
+        private_content_type = (
+            "application/exe; token=PRIVATE_TOKEN_SENTINEL /srv/private"
+        )
+        upload = _make_upload(content_type=private_content_type)
         result = await validator.validate(upload)
         assert result.is_err()
-        assert "application/exe" in result.unwrap_err().message
+        assert result.unwrap_err().message == "File type is not allowed"
+        assert private_content_type not in result.unwrap_err().message
+        assert "PRIVATE_TOKEN_SENTINEL" not in result.unwrap_err().message
+        assert "/srv/private" not in result.unwrap_err().message
 
     @pytest.mark.asyncio
     async def test_case_insensitive(self) -> None:
@@ -141,10 +195,13 @@ class TestFileExtensionValidator:
     @pytest.mark.asyncio
     async def test_returns_err_for_disallowed_extension(self) -> None:
         validator = FileExtensionValidator(allowed_extensions=[".jpg"])
-        upload = _make_upload(filename="script.exe")
+        private_filename = "/srv/private/PRIVATE_FILENAME_SENTINEL.exe"
+        upload = _make_upload(filename=private_filename)
         result = await validator.validate(upload)
         assert result.is_err()
-        assert ".exe" in result.unwrap_err().message
+        assert result.unwrap_err().message == "File extension is not allowed"
+        assert private_filename not in result.unwrap_err().message
+        assert ".exe" not in result.unwrap_err().message
 
 
 class TestFileUploadPipeline:
@@ -164,7 +221,9 @@ class TestFileUploadPipeline:
             def __init__(self, n: int) -> None:
                 self.n = n
 
-            async def validate(self, upload: FileUpload) -> Result[None, FileValidationError]:
+            async def validate(
+                self, upload: FileUpload
+            ) -> Result[None, FileValidationError]:
                 ordered.append(self.n)
                 return Ok(None)
 
@@ -174,13 +233,14 @@ class TestFileUploadPipeline:
 
     @pytest.mark.asyncio
     async def test_process_returns_err_on_validation_failure(self) -> None:
-        pipeline = FileUploadPipeline(
-            validators=[FileSizeValidator(max_size_bytes=10)]
-        )
+        pipeline = FileUploadPipeline(validators=[FileSizeValidator(max_size_bytes=10)])
         upload = _make_upload(size=999)
         result = await pipeline.process(upload)
         assert result.is_err()
-        assert "999" in result.unwrap_err().message
+        assert (
+            result.unwrap_err().message == "File exceeds the maximum allowed size"
+        )
+        assert "999" not in result.unwrap_err().message
 
     def test_add_validator_chaining(self) -> None:
         pipeline = FileUploadPipeline()

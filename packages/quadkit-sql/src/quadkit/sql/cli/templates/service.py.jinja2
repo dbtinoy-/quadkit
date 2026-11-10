@@ -1,30 +1,92 @@
 """Convention followed: **Service pattern** — domain logic behind a
-small class the provider binds; controllers call the service, never
-the provider. Writes commit through the unit of work, reads go
-straight through. Handlers that can fail on *expected* domain
-outcomes (a row that is not there) return ``Result[T, E]``
-(Convention: **Result + ProblemDetail**) instead of ``None``: the
-web layer's Result bridge renders ``Err(NotFoundError)`` as a
-404 RFC-9457 ``ProblemDetail``. Infra faults (a dead connection) stay
-on the throw path — they are not domain outcomes.
+small class the provider binds for consumers to use. Controllers may
+be wired separately and must not be assumed to call this service. Writes
+use the unit of work; reads go straight through. Handlers that can fail on *expected* domain
+outcomes (a row that is not there, a reference that is missing, a
+unique collision) return ``Result[T, E]`` (Convention: **Result +
+ProblemDetail**) instead of ``None``: the web layer's Result bridge
+renders ``Err(NotFoundError)`` as 404, ``Err(ValidationError)`` as
+422, and ``Err(ConflictError)`` as 409 RFC-9457 ``ProblemDetail``
+documents. Infra faults (a dead connection) stay on the throw path —
+they are not domain outcomes.
 
 Application service for {{ resource_name }} backed by the SQL unit of work.
 """
 
 from __future__ import annotations
 
+import uuid as _uuid
 from typing import Any
 
+from quadkit import clock
 from quadkit.contracts import DatabaseProviderProtocol
-{% if not exceptions_first_party %}from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union != not_found_error %}, {{ service_error_union }}{% endif %}
+from quadkit.contracts.exceptions import ConflictError{% if needs_validation_errors %}, FieldError, ValidationError{% endif %}{% if exceptions_is_contracts %}, {{ not_found_error }}{% endif %}
+{% if not exceptions_first_party and not exceptions_is_contracts %}from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union %}, {{ service_error_union }}{% endif %}
 {% endif %}from quadkit.logging import get_logger
 from quadkit.result import Err, Ok, Result
+from quadkit.sql.exceptions import DuplicateKeyError, ForeignKeyError, IntegrityError
 from quadkit.sql.unit_of_work import SimpleUnitOfWork
 {% if exceptions_first_party %}
 
-from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union != not_found_error %}, {{ service_error_union }}{% endif %}
+from {{ exceptions_module }} import {{ not_found_error }}{% if service_error_union %}, {{ service_error_union }}{% endif %}
+{% endif %}{% if validator_module %}{% if not exceptions_first_party %}
+{% endif %}from {{ validator_module }} import {{ validator_function }}
 {% endif %}
 logger = get_logger(__name__)
+{% if has_foreign_keys %}
+
+#: Physical foreign keys: field name -> ``"<table>.<column>"`` target.
+_FOREIGN_KEYS = {
+{% for fk in foreign_keys %}    "{{ fk.field }}": "{{ fk.target }}",
+{% endfor %}}
+
+
+def _reference_error(data: dict[str, Any]) -> ValidationError:
+    """The 422 a create/update answers when a referenced row is missing.
+
+    The database reports *that* a foreign key failed, not which one; the
+    offending field is named only when exactly one foreign-key field in
+    the payload is non-null, so the identification is always exact.
+    """
+    named = [name for name in _FOREIGN_KEYS if data.get(name) is not None]
+    if len(named) == 1:
+        field = named[0]
+        return ValidationError(
+            "{{ class_name }} references a row that does not exist",
+            errors=[
+                FieldError(
+                    field,
+                    f"references a missing {_FOREIGN_KEYS[field]} row",
+                    code="reference_missing",
+                )
+            ],
+        )
+    return ValidationError("{{ class_name }} references a row that does not exist")
+{% endif %}{% if write_only_fields %}
+#: Write-only fields: accepted on write, stripped from every returned row.
+_WRITE_ONLY_FIELDS = frozenset([{% for name in write_only_fields %}"{{ name }}"{% if not loop.last %}, {% endif %}{% endfor %}])
+
+
+def _public_row(row: dict[str, Any]) -> dict[str, Any]:
+    """The row without its write-only fields (never serialized out)."""
+    return {k: v for k, v in row.items() if k not in _WRITE_ONLY_FIELDS}
+{% endif %}
+
+def _prepare_new(data: dict[str, Any]) -> dict[str, Any]:
+    """The full row for insert: key and timestamps supplied when absent.
+
+    The migration gives every entity table ``id``/``created_at``/
+    ``updated_at`` NOT NULL columns; a caller passing only the authored
+    fields — the documented contract — would otherwise meet a
+    ``ConflictError`` for columns they never named. The generated
+    repository prepares identically: one preparation law.
+    """
+    row = dict(data)
+    row.setdefault("id", str(_uuid.uuid4()))
+    now = clock.now().isoformat()
+    row.setdefault("created_at", now)
+    row["updated_at"] = now
+    return row
 
 
 class {{ entity_class_name }}:
@@ -41,8 +103,9 @@ class {{ entity_class_name }}:
 class {{ class_name }}Service:
     """Service for {{ resource_name }}.
 
-    Write operations use :class:`~quadkit.sql.SimpleUnitOfWork` so entity
-    changes and domain events commit atomically.  Single-statement reads go
+    Write operations use :class:`~quadkit.sql.SimpleUnitOfWork`. This scaffold
+    does not automatically publish domain events or establish outbox atomicity.
+    Single-statement reads go
     straight through the injected :class:`~quadkit.contracts.DatabaseProviderProtocol`.
     """
 
@@ -57,27 +120,54 @@ class {{ class_name }}Service:
 
     async def create(
         self, data: dict[str, Any]
-    ) -> Result[dict[str, Any], {{ service_error_union }}]:
+    ) -> Result[dict[str, Any], {{ service_error_annotation }}]:
         """Persist a new ``{{ table_name }}`` row.
 
         Args:
             data: Row values{% if fields %} (keys: {% for field in fields %}{{ field.name }}{% if not loop.last %}, {% endif %}{% endfor %}){% endif %}.
 
         Returns:
-            ``Ok(row)`` — the persisted row data. Writes that cannot
-            legitimately fail still answer with the service's union so every
-            consumer chains: ``get(...).map(...)`` and
-            ``create(...).and_then(...)`` share one shape.
+            ``Ok(row)`` — the persisted row data. Every method answers
+            with the service's union so every consumer chains:
+            ``get(...).map(...)`` and ``create(...).and_then(...)``
+            share one shape. Integrity outcomes are expected, not
+            infra: a missing reference maps to a field-level
+            ``ValidationError`` (422), a unique/constraint collision
+            to ``ConflictError`` (409).{% if validator_module %} The wired
+            validator runs first: a payload breaking a declared rule
+            answers the same field-level ``ValidationError`` before any
+            write.{% endif %}
         """
-        async with SimpleUnitOfWork(self._provider) as uow:
-            uow.register_new({{ entity_class_name }}(**data))
-            await uow.commit()
+{% if validator_module %}        problems = {{ validator_function }}(data)
+        if problems:
+            return Err(
+                ValidationError(
+                    "{{ class_name }} failed validation",
+                    errors=[
+                        FieldError(field, message, code="validator_rule")
+                        for field, message in problems.items()
+                    ],
+                )
+            )
+{% endif %}        row = _prepare_new(data)
+        try:
+            async with SimpleUnitOfWork(self._provider) as uow:
+                uow.register_new({{ entity_class_name }}(**row))
+                await uow.commit()
+        except {% if has_foreign_keys %}ForeignKeyError:
+            return Err(_reference_error(data))
+        except {% endif %}DuplicateKeyError:
+            return Err(ConflictError("{{ class_name }} violates a unique constraint"))
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ class_name }} violates a database constraint")
+            )
         logger.info("{{ snake_name }}_created", table="{{ table_name }}")
-        return Ok(data)
+        return Ok({% if write_only_fields %}_public_row(row){% else %}row{% endif %})
 
     async def get(
         self, entity_id: Any
-    ) -> Result[dict[str, Any], {{ service_error_union }}]:
+    ) -> Result[dict[str, Any], {{ service_error_annotation }}]:
         """Fetch a ``{{ table_name }}`` row by primary key.
 
         Args:
@@ -96,31 +186,60 @@ class {{ class_name }}Service:
             return Err(
                 {{ not_found_error }}(f"{{ table_name }} row not found with id: {entity_id}")
             )
-        return Ok(result.rows[0])
+        return Ok({% if write_only_fields %}_public_row(result.rows[0]){% else %}result.rows[0]{% endif %})
 
     async def update(
         self, entity_id: Any, data: dict[str, Any]
-    ) -> Result[dict[str, Any], {{ service_error_union }}]:
+    ) -> Result[dict[str, Any], {{ service_error_annotation }}]:
         """Merge *data* into one ``{{ table_name }}`` row by primary key.
 
         The row being gone is the same expected outcome as ``get`` — the
         Err arm comes straight through — so the write happens only for a
-        row that answered ``Ok``.
+        row that answered ``Ok``. Integrity outcomes map exactly as in
+        ``create``.
         """
         existing = await self.get(entity_id)
         if existing.is_err():
             return Err(existing.unwrap_err())
-        async with SimpleUnitOfWork(self._provider) as uow:
-            uow.register_dirty({{ entity_class_name }}(id=entity_id, **data))
-            await uow.commit()
+{% if validator_module %}        problems = {{ validator_function }}(data)
+        if problems:
+            return Err(
+                ValidationError(
+                    "{{ class_name }} failed validation",
+                    errors=[
+                        FieldError(field, message, code="validator_rule")
+                        for field, message in problems.items()
+                    ],
+                )
+            )
+{% endif %}        try:
+            async with SimpleUnitOfWork(self._provider) as uow:
+                uow.register_dirty(
+                    {{ entity_class_name }}(
+                        **{
+                            **data,
+                            "id": entity_id,
+                            "updated_at": clock.now().isoformat(),
+                        }
+                    )
+                )
+                await uow.commit()
+        except {% if has_foreign_keys %}ForeignKeyError:
+            return Err(_reference_error(data))
+        except {% endif %}DuplicateKeyError:
+            return Err(ConflictError("{{ class_name }} violates a unique constraint"))
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ class_name }} violates a database constraint")
+            )
         logger.info("{{ snake_name }}_updated", table="{{ table_name }}")
-        return Ok(data)
+        return Ok({% if write_only_fields %}_public_row(data){% else %}data{% endif %})
 
     async def list(
         self,
         limit: int = 100,
         offset: int = 0,
-    ) -> Result[list[dict[str, Any]], {{ service_error_union }}]:
+    ) -> Result[list[dict[str, Any]], {{ service_error_annotation }}]:
         """List ``{{ table_name }}`` rows with pagination.
 
         Args:
@@ -135,16 +254,17 @@ class {{ class_name }}Service:
             "SELECT * FROM {{ table_name }} LIMIT ? OFFSET ?",
             params=[limit, offset],
         )
-        return Ok(result.rows)
+        return Ok({% if write_only_fields %}[_public_row(row) for row in result.rows]{% else %}result.rows{% endif %})
 
     async def delete(
         self, entity_id: Any
-    ) -> Result[bool, {{ service_error_union }}]:
+    ) -> Result[bool, {{ service_error_annotation }}]:
         """Delete a ``{{ table_name }}`` row by primary key.
 
         The existence check travels as the ``Err`` arm: deleting a missing
         row answers ``Err`` (the bridge renders 404), a real
-        delete answers ``Ok(True)``.
+        delete answers ``Ok(True)``. A delete other rows restrict is
+        likewise expected: ``Err(ConflictError)`` (409).
 
         Args:
             entity_id: Primary key value.
@@ -152,8 +272,19 @@ class {{ class_name }}Service:
         existing = await self.get(entity_id)
         if existing.is_err():
             return Err(existing.unwrap_err())
-        async with SimpleUnitOfWork(self._provider) as uow:
-            uow.register_deleted({{ entity_class_name }}(id=entity_id))
-            await uow.commit()
+        try:
+            async with SimpleUnitOfWork(self._provider) as uow:
+                uow.register_deleted({{ entity_class_name }}(id=entity_id))
+                await uow.commit()
+        except ForeignKeyError:
+            return Err(
+                ConflictError(
+                    f"{{ class_name }} {entity_id} is still referenced by other rows"
+                )
+            )
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ class_name }} violates a database constraint")
+            )
         logger.info("{{ snake_name }}_deleted", table="{{ table_name }}")
         return Ok(True)

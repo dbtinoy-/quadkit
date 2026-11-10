@@ -19,7 +19,8 @@ from domains.{{ model_name }} import {{ class_name }}
 from services.{{ model_name }}_service import {{ class_name }}Service
 {% elif test_type == 'controller' %}
 from controllers.{{ model_name }}_controller import {{ class_name }}Controller
-from quadkit.web.exceptions import NotFoundError
+from quadkit.contracts.exceptions import NotFoundError
+from quadkit.result import Err, Ok
 {% else %}
 # Import your modules here
 {% endif %}
@@ -176,11 +177,12 @@ class Test{{ class_name }}Controller:
     def repo(self) -> MagicMock:
         """Create a mocked repository."""
         repo = MagicMock()
-        repo.list = AsyncMock(return_value=[])
-        repo.get = AsyncMock(return_value=None)
-        repo.create = AsyncMock(return_value={"id": "1"})
-        repo.update = AsyncMock(return_value=None)
-        repo.delete = AsyncMock(return_value=True)
+        missing = Err(NotFoundError("{{ class_name }} not found"))
+        repo.list = AsyncMock(return_value=Ok([]))
+        repo.get = AsyncMock(return_value=missing)
+        repo.create = AsyncMock(return_value=Ok({"id": "1"}))
+        repo.update = AsyncMock(return_value=missing)
+        repo.delete = AsyncMock(return_value=Ok(True))
         return repo
 
     @pytest.fixture
@@ -192,35 +194,40 @@ class Test{{ class_name }}Controller:
     async def test_list(self, controller: {{ class_name }}Controller):
         """Test listing items."""
         result = await controller.list(limit=10)
-        assert isinstance(result, dict)
-        assert "items" in result
-        assert "limit" in result
+        assert result.is_ok()
+        body = result.unwrap()
+        assert "items" in body
+        assert "limit" in body
 
     @pytest.mark.asyncio
     async def test_get_not_found(self, controller: {{ class_name }}Controller):
         """Test getting a missing item."""
-        with pytest.raises(NotFoundError):
-            await controller.get("missing")
+        result = await controller.get("missing")
+        assert result.is_err()
+        assert isinstance(result.unwrap_err(), NotFoundError)
 
     @pytest.mark.asyncio
     async def test_create(self, controller: {{ class_name }}Controller):
         """Test creating an item."""
         request = await _json_request({"name": "Sample"})
         result = await controller.create(request)
-        assert result == {"id": "1"}
+        assert result.is_ok()
+        assert result.unwrap() == {"id": "1"}
 
     @pytest.mark.asyncio
     async def test_update_not_found(self, controller: {{ class_name }}Controller):
         """Test updating a missing item."""
         request = await _json_request({"name": "Updated"})
-        with pytest.raises(NotFoundError):
-            await controller.update("missing", request)
+        result = await controller.update("missing", request)
+        assert result.is_err()
+        assert isinstance(result.unwrap_err(), NotFoundError)
 
     @pytest.mark.asyncio
     async def test_delete(self, controller: {{ class_name }}Controller):
         """Test deleting an item."""
         result = await controller.delete("1")
-        assert result["message"]
+        assert result.is_ok()
+        assert result.unwrap()["message"]
 
     @pytest.mark.asyncio
     async def test_delete_not_found(
@@ -229,9 +236,12 @@ class Test{{ class_name }}Controller:
         repo: MagicMock,
     ):
         """Test deleting a missing item."""
-        repo.delete = AsyncMock(return_value=False)
-        with pytest.raises(NotFoundError):
-            await controller.delete("missing")
+        repo.delete = AsyncMock(
+            return_value=Err(NotFoundError("{{ class_name }} not found"))
+        )
+        result = await controller.delete("missing")
+        assert result.is_err()
+        assert isinstance(result.unwrap_err(), NotFoundError)
 
 {% else %}
 # Add your module-specific tests here

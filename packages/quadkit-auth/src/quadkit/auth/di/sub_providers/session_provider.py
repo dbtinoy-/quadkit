@@ -2,17 +2,18 @@
 
 from __future__ import annotations
 
+import asyncio
 from typing import TYPE_CHECKING, Any
 
 from quadkit.auth.session.manager import SessionManagerImpl
 from quadkit.auth.storage.in_memory_stores import InMemorySessionStore
+from quadkit.auth.storage.session_store import SessionStore
 from quadkit.contracts.auth.protocols import AuthSessionManagerProtocol
 from quadkit.contracts.core import HealthCheckResult, HealthStatus, ProviderPriority
 from quadkit.di.provider import Provider
 from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
-    from quadkit.auth.storage.session_store import SessionStore
     from quadkit.contracts.core.di import (
         ContainerRegistrarProtocol,
         ContainerResolverProtocol,
@@ -29,17 +30,28 @@ class SessionProvider(Provider):
     config is given the session manager defaults to unlimited sessions.
     """
 
-    def __init__(self, config: Any = None, **kwargs: Any) -> None:
+    def __init__(
+        self,
+        config: Any = None,
+        *,
+        session_store: SessionStore | None = None,
+        **kwargs: Any,
+    ) -> None:
         """Initialise the session provider.
 
         Args:
             config: Optional :class:`~quadkit.auth.config.AuthConfig`.  Used
                 to read ``max_sessions_per_user`` and select the session store
                 backend.  When ``None``, sane defaults are used.
+            session_store: Host-owned backend, preferred over an optional DI
+                binding. Supplying an invalid object fails instead of falling back.
             **kwargs: Ignored extra keyword arguments (forwarded from bundle).
         """
         super().__init__(name="sessions", priority=ProviderPriority.SECURITY)
         self._config = config
+        if session_store is not None and not isinstance(session_store, SessionStore):
+            raise TypeError("session_store must implement SessionStore")
+        self._session_store = session_store
 
     async def register(self, container: ContainerRegistrarProtocol) -> None:
         """Register :class:`SessionManagerImpl` as a singleton.
@@ -69,22 +81,33 @@ class SessionProvider(Provider):
         # managers, and a session created through one would be invisible
         # to the other.
         built: dict[str, SessionManagerImpl] = {}
+        lock = asyncio.Lock()
 
         async def build_session_manager(resolver: Any) -> SessionManagerImpl:
             from quadkit.auth.storage.session_store import SessionStore as _SessionStore
 
-            if "manager" in built:
-                return built["manager"]
-            session_store: SessionStore | None = None
-            resolve_optional = getattr(resolver, "resolve_optional", None)
-            if callable(resolve_optional):
-                session_store = await resolve_optional(_SessionStore)
-            manager = SessionManagerImpl(
-                session_store=session_store or InMemorySessionStore(),
-                max_sessions_per_user=max_sessions,
-            )
-            built["manager"] = manager
-            return manager
+            async with lock:
+                if "manager" in built:
+                    return built["manager"]
+                session_store = self._session_store
+                if session_store is None:
+                    resolve_optional = getattr(resolver, "resolve_optional", None)
+                    if callable(resolve_optional):
+                        session_store = await resolve_optional(_SessionStore)
+                if session_store is not None and not isinstance(
+                    session_store, _SessionStore
+                ):
+                    raise TypeError(
+                        "Resolved session_store must implement SessionStore"
+                    )
+                manager = SessionManagerImpl(
+                    session_store=session_store
+                    if session_store is not None
+                    else InMemorySessionStore(),
+                    max_sessions_per_user=max_sessions,
+                )
+                built["manager"] = manager
+                return manager
 
         container.singleton(SessionManagerImpl, factory=build_session_manager)
         container.singleton(AuthSessionManagerProtocol, factory=build_session_manager)

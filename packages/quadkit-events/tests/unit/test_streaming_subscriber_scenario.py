@@ -29,7 +29,9 @@ class OrderShipped(Event):
     order_id: str = "o1"
 
 
-async def _wait_until(predicate: Any, timeout: float = 10.0, step: float = 0.05) -> bool:
+async def _wait_until(
+    predicate: Any, timeout: float = 10.0, step: float = 0.05
+) -> bool:
     """Poll *predicate* until truthy or the deadline passes."""
     deadline = asyncio.get_event_loop().time() + timeout
     while asyncio.get_event_loop().time() < deadline:
@@ -121,10 +123,11 @@ async def test_subscriber_error_isolation_and_pause() -> None:
 
     received: list[str] = []
     errors: list[str] = []
+    allow_retry = False
 
     async def handler(event: Event) -> None:
         order_id = event.order_id  # type: ignore[attr-defined]
-        if order_id == "bad":
+        if order_id == "bad" and not allow_retry:
             errors.append(order_id)
             msg = "poison message"
             raise RuntimeError(msg)
@@ -147,9 +150,11 @@ async def test_subscriber_error_isolation_and_pause() -> None:
     await asyncio.sleep(0.3)
     assert "while-paused" not in received
 
-    # resume: consumption continues from the saved position
+    # resume: retry the failed event before advancing to the later event
+    allow_retry = True
     assert await subscriber.resume(subscription.id) is True
     assert await _wait_until(lambda: "while-paused" in received)
+    assert received == ["ok1", "bad", "while-paused"]
     assert subscription.position == 3
 
     await subscriber.stop()

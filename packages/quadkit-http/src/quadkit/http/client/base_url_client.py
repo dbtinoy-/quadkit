@@ -109,6 +109,9 @@ class BaseURLHTTPClient:
             :class:`~quadkit.http.client.HTTPClient`.
         circuit_breaker: Optional circuit breaker injected into the
             underlying :class:`~quadkit.http.client.HTTPClient`.
+        enforce_url_safety: Keep the SSRF gate on (default). Set ``False``
+            only when every target is a fixed, operator-configured base URL
+            and never a caller-supplied URL, for example a local sandbox.
 
     Example::
 
@@ -129,6 +132,7 @@ class BaseURLHTTPClient:
         name: str = "base-url-http-client",
         retry: RetryPolicyProtocol | None = None,
         circuit_breaker: CircuitBreakerProtocol | None = None,
+        enforce_url_safety: bool = True,
     ) -> None:
         self._base_url = base_url.rstrip("/") if base_url else ""
         self.headers: dict[str, str] = dict(headers or {})
@@ -136,6 +140,7 @@ class BaseURLHTTPClient:
         self._name = name
         self._retry = retry
         self._circuit_breaker = circuit_breaker
+        self._enforce_url_safety = enforce_url_safety
         self._client: HTTPClient | None = None
         self._lock: asyncio.Lock = asyncio.Lock()
 
@@ -166,7 +171,8 @@ class BaseURLHTTPClient:
             async with self._lock:
                 if self._client is None:
                     config = HTTPClientConfig(
-                        pool=ConnectionPoolConfig(timeout=self._timeout)
+                        pool=ConnectionPoolConfig(timeout=self._timeout),
+                        enforce_url_safety=self._enforce_url_safety,
                     )
                     self._client = HTTPClient(
                         config=config,

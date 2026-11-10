@@ -67,8 +67,11 @@ class WeeklyDigestFlushWorker(MonitorScheduledWorker):
         if self._flush_on_stop:
             try:
                 await self._dispatcher.flush()
-            except Exception:
-                logger.exception("weekly_digest.final_flush_failed")
+            except Exception as exc:
+                logger.error(
+                    "weekly_digest.final_flush_failed",
+                    error_type=type(exc).__name__,
+                )
 
 
 __all__ = ["ONE_WEEK_SECONDS", "WeeklyDigestFlushWorker"]

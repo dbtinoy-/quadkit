@@ -14,7 +14,7 @@ from pathlib import Path
 import pkgutil
 from typing import TYPE_CHECKING, Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 if TYPE_CHECKING:
     from quadkit.di.provider import Provider
@@ -51,11 +51,11 @@ def discover_providers(packages: tuple[str, ...] | list[str]) -> list[Provider]:
                 instance = cls()
                 found.append(instance)
                 logger.debug("discovery.provider.found", provider=cls.__name__)
-            except Exception:  # noqa: BLE001 — a provider that cannot be instantiated without args is skipped, never a discovery failure
+            except Exception as exc:  # noqa: BLE001 — a provider that cannot be instantiated without args is skipped, never a discovery failure
                 logger.debug(
                     "discovery.provider.skipped",
                     provider=cls.__name__,
-                    reason="instantiation_failed",
+                    error_type=safe_error_type(exc),
                 )
 
     return found
@@ -166,8 +166,12 @@ def _scan_subclasses(package: str, base: type) -> list[type]:
         try:
             module = importlib.import_module(modname)
             results.extend(_collect_subclasses(module, base))
-        except (ImportError, ModuleNotFoundError, AttributeError) as e:
-            logger.debug("discovery.module.import_failed", module=modname, error=str(e))
+        except (ImportError, ModuleNotFoundError, AttributeError) as exc:
+            logger.debug(
+                "discovery.module.import_failed",
+                module=modname,
+                error_type=safe_error_type(exc),
+            )
 
     # Also scan the root module itself
     results.extend(_collect_subclasses(root, base))
@@ -180,12 +184,12 @@ def _collect_subclasses(module: Any, base: type) -> list[type]:
     for attr_name in dir(module):
         try:
             obj = getattr(module, attr_name)
-        except (AttributeError, TypeError) as e:
+        except (AttributeError, TypeError) as exc:
             logger.debug(
                 "discovery.getattr_failed",
                 module=module.__name__,
                 attr=attr_name,
-                error=str(e),
+                error_type=safe_error_type(exc),
             )
             continue
         if (
@@ -227,11 +231,12 @@ def discover_modules_from_entry_points(
     for ep in importlib.metadata.entry_points(group=group):
         try:
             obj = ep.load()
-        except Exception:  # noqa: BLE001
+        except Exception as exc:  # noqa: BLE001
             logger.warning(
                 "module_discovery_entry_point_load_failed",
                 group=group,
                 name=ep.name,
+                error_type=safe_error_type(exc),
             )
             continue
         if isinstance(obj, type) and issubclass(obj, Module) and obj is not Module:
@@ -241,7 +246,7 @@ def discover_modules_from_entry_points(
                 "module_discovery_entry_point_not_a_module",
                 group=group,
                 name=ep.name,
-                loaded=repr(obj),
+                loaded_type=type(obj).__name__,
             )
     return discovered
 
@@ -268,7 +273,7 @@ def discover_modules_from_directories(
     for directory in directories:
         path = Path(directory)
         if not path.exists() or not path.is_dir():
-            logger.debug("module_discovery_dir_skipped", path=str(path))
+            logger.debug("module_discovery_dir_skipped")
             continue
 
         for candidate in ("plugin.py", "__init__.py"):
@@ -283,10 +288,11 @@ def discover_modules_from_directories(
                     continue
                 mod = importlib.util.module_from_spec(spec)
                 spec.loader.exec_module(mod)
-            except Exception:  # noqa: BLE001
+            except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "module_discovery_dir_load_failed",
-                    file=str(file_path),
+                    candidate=candidate,
+                    error_type=safe_error_type(exc),
                 )
                 continue
 

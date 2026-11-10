@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 
+from quadkit.cli.layout import LAYOUT_VERSION
 from quadkit.cli.package_names import module_for
 from quadkit.cli.scaffold.specs import ProjectTemplateSpec
 
@@ -156,6 +157,7 @@ packages = [
 
 [tool.quadkit]
 module = "{package_name}.app:app"
+layout_version = {LAYOUT_VERSION}
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
@@ -298,7 +300,10 @@ def _feature_calls(
     return calls
 
 
-def _web_configure_lines(web_discover: Sequence[str]) -> list[str]:
+def _web_configure_lines(
+    web_discover: Sequence[str],
+    middlewares: Sequence[tuple[str, str, str | None]] = (),
+) -> list[str]:
     """``WebModule.configure(...)``, wrapped when one line will not fit.
 
     The call is rendered at twelve spaces of indentation inside
@@ -309,6 +314,23 @@ def _web_configure_lines(web_discover: Sequence[str]) -> list[str]:
     shipping broken code.
     """
     roots = [f'"{root}"' for root in web_discover]
+    if middlewares:
+        entries = [
+            f"        ({cls}, {options}),"
+            if options is not None
+            else f"        ({cls},),"
+            for _module, cls, options in middlewares
+        ]
+        return [
+            "WebModule.configure(",
+            "    discover=[",
+            *[f"        {root}," for root in roots],
+            "    ],",
+            "    middleware=[",
+            *entries,
+            "    ],",
+            ")",
+        ]
     single = f"WebModule.configure(discover=[{', '.join(roots)}])"
     # +12 indent, +1 for the trailing comma _render_calls appends.
     if 12 + len(single) + 1 <= 88:

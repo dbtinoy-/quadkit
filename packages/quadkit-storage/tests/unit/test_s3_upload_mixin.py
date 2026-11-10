@@ -24,19 +24,19 @@ class _FakeS3:
         self.calls.append(("put_object", params))
         return {"ETag": '"single"'}
 
-    def create_multipart_upload(self, **params) -> dict:
+    async def create_multipart_upload(self, **params) -> dict:
         self.calls.append(("create_multipart_upload", params))
         return {"UploadId": self.upload_id}
 
-    def upload_part(self, **params) -> dict:
+    async def upload_part(self, **params) -> dict:
         self.calls.append(("upload_part", params))
         return {"ETag": f'"{params["PartNumber"]}"'}
 
-    def complete_multipart_upload(self, **params) -> dict:
+    async def complete_multipart_upload(self, **params) -> dict:
         self.calls.append(("complete_multipart_upload", params))
         return {"ETag": '"multi"'}
 
-    def abort_multipart_upload(self, **params) -> None:
+    async def abort_multipart_upload(self, **params) -> None:
         self.calls.append(("abort_multipart_upload", params))
 
     def names(self) -> list[str]:

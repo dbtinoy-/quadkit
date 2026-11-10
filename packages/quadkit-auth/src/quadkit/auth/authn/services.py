@@ -24,6 +24,7 @@ from quadkit.auth.exceptions import (
     EmailExistsError,
     InvalidCredentialsError,
     PasswordPolicyError,
+    UsernameExistsError,
 )
 from quadkit.auth.models.user import User, UserCredentials
 from quadkit.auth.services.activity_tracker import AuthActivityTracker
@@ -447,7 +448,7 @@ class AuthenticationService:
 
     async def register_user(
         self, request: RegisterRequest
-    ) -> Result[User, EmailExistsError | PasswordPolicyError]:
+    ) -> Result[User, EmailExistsError | UsernameExistsError | PasswordPolicyError]:
         """Register a new user.
 
         Args:
@@ -458,6 +459,7 @@ class AuthenticationService:
             ``Err(PasswordPolicyError)`` if passwords do not match or the
             password violates the policy.
             ``Err(EmailExistsError)`` if the email is already registered.
+            ``Err(UsernameExistsError)`` if the name is already registered.
         """
         from quadkit.result import Err, Ok
 
@@ -474,13 +476,18 @@ class AuthenticationService:
 
         hashed_password = await self._password_hasher.hash(request.password)
 
-        user = await self.user_store.create_user(
-            name=request.name,
-            email=request.email,
-            hashed_password=hashed_password,
-            roles=["user"],
-            profile=request.profile,
-        )
+        try:
+            user = await self.user_store.create_user(
+                name=request.name,
+                email=request.email,
+                hashed_password=hashed_password,
+                roles=["user"],
+                profile=request.profile,
+            )
+        except (EmailExistsError, UsernameExistsError) as e:
+            # The store is the uniqueness authority: this also closes the
+            # race between the email pre-check above and the insert.
+            return Err(e)
         self._emit(UserRegistered(user_id=user.user_id, email=user.email))
         return Ok(user)
 

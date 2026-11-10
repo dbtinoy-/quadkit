@@ -7,6 +7,7 @@ Adds origin-guard assertion proving modules resolve to quadkit core.
 from __future__ import annotations
 
 import importlib.util
+from unittest.mock import patch
 
 import pytest
 
@@ -131,6 +132,51 @@ class TestGuardChain:
     def test_repr(self) -> None:
         chain = GuardChainImpl()
         assert "0 guards" in repr(chain)
+
+
+@pytest.mark.asyncio
+async def test_guard_denial_log_omits_subject_and_path() -> None:
+    class DenyGuard:
+        async def can_activate(self, context: dict) -> bool:
+            return False
+
+    with patch("quadkit.security.guards.chain.logger") as mock_logger:
+        assert (
+            await GuardChainImpl([DenyGuard()]).check(
+                {
+                    "user_id": "PRIVATE_USER_ID_SENTINEL",
+                    "path": "/private/PRIVATE_RECORD_ID_SENTINEL",
+                }
+            )
+            is False
+        )
+
+    call_args, call_kwargs = mock_logger.warning.call_args
+    assert call_args == ("guard_denied",)
+    assert call_kwargs == {"guard_type": "DenyGuard"}
+
+
+@pytest.mark.asyncio
+async def test_guard_exception_error_omits_raw_error_text() -> None:
+    from quadkit.contracts.exceptions.middleware import MiddlewareGuardError
+
+    class BrokenGuard:
+        async def can_activate(self, context: dict) -> bool:
+            raise RuntimeError("PRIVATE_ERROR_SENTINEL /srv/private/guard")
+
+    with patch("quadkit.security.guards.chain.logger") as mock_logger:
+        with pytest.raises(MiddlewareGuardError) as err:
+            await GuardChainImpl([BrokenGuard()]).check_or_raise({})
+
+    assert "Guard evaluation failed (RuntimeError)" in str(err.value)
+    assert "PRIVATE_ERROR_SENTINEL" not in str(err.value)
+    assert err.value.__suppress_context__ is True
+    call_args, call_kwargs = mock_logger.error.call_args
+    assert call_args == ("guard_exception",)
+    assert call_kwargs == {
+        "guard_type": "BrokenGuard",
+        "error_type": "RuntimeError",
+    }
 
 
 class TestUseGuardsDecorator:

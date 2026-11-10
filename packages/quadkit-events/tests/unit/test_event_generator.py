@@ -89,3 +89,27 @@ class TestEventGenerator:
         assert "**payload" not in path.read_text()
         with pytest.raises(TypeError, match="unexpected keyword argument"):
             builder(unknown="not-declared")  # type: ignore[operator]
+
+    def test_optional_field_before_required_ones_still_imports(self) -> None:
+        """An optional payload field authored before required ones is a
+        legitimate ordering (e.g. a nullable actor subject, then the
+        required action). The emitted dataclass must stay importable:
+        like the DomainEvent base, its fields are keyword-only — a
+        positional dataclass raises "non-default argument follows
+        default argument" at import for exactly this shape."""
+        gen = EventGenerator(output_dir=str(self.tmp_dir))
+        gen.generate(
+            "OperationRecorded",
+            fields_str="actor_subject:str?,action:str,resource_type:str",
+        )
+        path = self.tmp_dir / "operation_recorded_event.py"
+        assert "@dataclass(frozen=True, kw_only=True)" in path.read_text()
+
+        namespace: dict[str, object] = {}
+        exec(compile(path.read_text(), str(path), "exec"), namespace)  # noqa: S102
+        event = namespace["build_operation_recorded_event"](  # type: ignore[operator]
+            action="post.published", resource_type="post"
+        )
+        assert event.actor_subject is None
+        assert event.action == "post.published"
+        assert event.resource_type == "post"

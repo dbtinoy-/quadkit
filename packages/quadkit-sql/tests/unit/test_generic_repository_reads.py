@@ -3,19 +3,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-#!/usr/bin/env python3
-"""Unit tests for GenericRepository"""
-
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
-from quadkit.domain import DomainModel
 import pytest
 
-from quadkit.contracts.data import DatabaseProviderProtocol, QueryResult, UpdateResult
+from quadkit.contracts.data import DatabaseProviderProtocol
+from quadkit.domain import DomainModel
 from quadkit.sql.exceptions import DatabaseError, RepositoryError
 from quadkit.sql.repositories.generic_repository import GenericRepository
-from quadkit.sql.row_level_security import RowLevelSecurityPolicy, ScopeColumn
 
 
 @dataclass
@@ -117,7 +113,7 @@ class TestGenericRepository:
         """Test finding entity by ID with database failure"""
         mock_provider.execute_query.side_effect = DatabaseError("database error")
 
-        with pytest.raises(RepositoryError, match="Failed to find entity by id 1"):
+        with pytest.raises(RepositoryError, match="Failed to find entity"):
             await pydantic_repository.find_by_id(1)
 
     # Test find_one

@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass, field
+
+#: Capability declared by generators that accept a structured
+#: ``quadkit.contracts.cli.parsers.EntitySpec`` instead of requiring entity
+#: metadata to be flattened through the legacy ``fields_str`` syntax.
+STRUCTURED_ENTITY_SPEC_CAPABILITY = "structured_entity_spec_v1"
 
 
 @dataclass(frozen=True)
@@ -36,6 +42,20 @@ class GeneratorDefinition:
     category: str = "general"
     options: tuple[GeneratorOption, ...] = field(default_factory=tuple)
     default_output_dir: str = "src"
+    capabilities: frozenset[str] = field(default_factory=frozenset)
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "capabilities", frozenset(self.capabilities))
+
+    def supports(self, capability: str) -> bool:
+        """Whether this generator declares *capability*.
+
+        Discovery must be declarative: bridges should not probe a generator
+        by calling it with structured input and interpreting a ``TypeError``
+        after files may already have been staged.
+        """
+
+        return capability in self.capabilities
 
     @classmethod
     def make(
@@ -49,6 +69,7 @@ class GeneratorDefinition:
         category: str = "general",
         options: tuple[GeneratorOption, ...] = (),
         title: str | None = None,
+        capabilities: Iterable[str] = (),
     ) -> GeneratorDefinition:
         """Build a definition with conventional title derivation.
 
@@ -66,6 +87,8 @@ class GeneratorDefinition:
             category: Grouping bucket used by interactive listings.
             options: Typed CLI options accepted by the generator.
             title: Explicit human-readable title overriding the derivation.
+            capabilities: Declarative generator capabilities bridges may
+                require before invoking the generator.
 
         Returns:
             A frozen :class:`GeneratorDefinition`.
@@ -83,7 +106,12 @@ class GeneratorDefinition:
             category=category,
             options=options,
             default_output_dir=output_dir,
+            capabilities=frozenset(capabilities),
         )
 
 
-__all__ = ["GeneratorDefinition", "GeneratorOption"]
+__all__ = [
+    "STRUCTURED_ENTITY_SPEC_CAPABILITY",
+    "GeneratorDefinition",
+    "GeneratorOption",
+]

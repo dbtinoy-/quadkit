@@ -1,0 +1,1 @@
+"""Integration tests for quadkit-ai-mcp package."""

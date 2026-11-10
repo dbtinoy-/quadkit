@@ -81,6 +81,63 @@ class GenericRepository(SQLRepository[TEntity, TKey], Generic[TEntity, TKey]):
     # Convenience aliases
     # ------------------------------------------------------------------
 
+    async def create(self, entity: Any) -> TEntity:
+        """Create *entity* and return a typed ``TEntity`` when ``entity_class`` is configured."""
+        if self.entity_class is not dict and isinstance(entity, dict):
+            import dataclasses
+
+            try:
+                typed_entity = self._row_to_entity(dict(entity))
+                typed_dict = self._entity_to_dict(typed_entity)
+            except Exception:  # noqa: BLE001 — fall back when DB column defaults supply omitted required fields
+                pass
+            else:
+                declared_fields = (
+                    {f.name for f in dataclasses.fields(typed_entity)}
+                    if dataclasses.is_dataclass(typed_entity)
+                    else set(typed_dict.keys())
+                )
+                if set(entity.keys()) <= declared_fields:
+                    return cast("TEntity", await super().create(typed_entity))
+                columns = await self.table_columns()
+                if columns:
+                    entity = {
+                        **{k: v for k, v in typed_dict.items() if k in columns},
+                        **{k: v for k, v in entity.items() if k in columns},
+                    }
+
+        created = await super().create(entity)
+        if self.entity_class is dict or not isinstance(created, dict):
+            return cast("TEntity", created)
+        try:
+            return self._row_to_entity(created)
+        except Exception:  # noqa: BLE001 — fall back to re-fetching full row if DB defaults were omitted
+            key_val = created.get(self.key_field)
+            if key_val is not None:
+                found = await self.find_by_id(key_val)
+                if found is not None:
+                    return cast("TEntity", found)
+            raise
+
+    async def update(
+        self,
+        entity: Any,
+        check_version: bool | None = None,
+    ) -> TEntity:
+        """Update *entity* and return a typed ``TEntity`` when ``entity_class`` is configured."""
+        updated = await super().update(entity, check_version=check_version)
+        if self.entity_class is dict or not isinstance(updated, dict):
+            return cast("TEntity", updated)
+        try:
+            return self._row_to_entity(updated)
+        except Exception:  # noqa: BLE001 — partial dict update lacks non-updated required fields
+            key_val = updated.get(self.key_field)
+            if key_val is not None:
+                found = await self.find_by_id(key_val)
+                if found is not None:
+                    return cast("TEntity", found)
+            return cast("TEntity", updated)
+
     async def find(
         self,
         filters: dict[str, Any]

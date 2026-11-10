@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from quadkit.contracts.cli.contributions import SchemaSetupOutcome, SchemaSetupResult
 from quadkit.contracts.data.sql.database import DatabaseProviderProtocol
+from quadkit.logging import safe_error_type
 
 _SCHEDULED_JOBS_TABLE = "scheduled_jobs"
 _WORKFLOW_STATES_TABLE = "workflow_states"
@@ -31,7 +32,10 @@ async def ensure_scheduled_jobs(db: DatabaseProviderProtocol) -> SchemaSetupOutc
             )
         )
     except Exception as exc:
-        return SchemaSetupOutcome(status=SchemaSetupResult.FAILED, message=str(exc))
+        return SchemaSetupOutcome(
+            status=SchemaSetupResult.FAILED,
+            message=f"Schema setup failed ({safe_error_type(exc)})",
+        )
 
 
 async def ensure_workflow_states(db: DatabaseProviderProtocol) -> SchemaSetupOutcome:
@@ -56,4 +60,7 @@ async def ensure_workflow_states(db: DatabaseProviderProtocol) -> SchemaSetupOut
             )
         )
     except Exception as exc:
-        return SchemaSetupOutcome(status=SchemaSetupResult.FAILED, message=str(exc))
+        return SchemaSetupOutcome(
+            status=SchemaSetupResult.FAILED,
+            message=f"Schema setup failed ({safe_error_type(exc)})",
+        )

@@ -5,13 +5,18 @@ This module includes ``DomainModel`` which acts as an "auto-dataclass" mixin.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from copy import deepcopy
-from dataclasses import MISSING
+from dataclasses import MISSING, is_dataclass
+from dataclasses import fields as dataclass_fields
+from enum import Enum
+import inspect as _inspect
 import re as _re
+from types import SimpleNamespace
 from typing import (
     Any,
     ClassVar,
-    get_type_hints,
+    get_origin,
 )
 
 from quadkit.domain.models.coercion import coerce_and_build
@@ -70,6 +75,13 @@ def _convert_pydantic_fields_for_dataclass(cls: type) -> None:
             meta["description"] = str(value.description)
         if value.exclude:
             meta["exclude"] = True
+        if value.alias:
+            meta["alias"] = str(value.alias)
+        elif isinstance(getattr(value, "validation_alias", None), str):
+            meta["alias"] = str(value.validation_alias)
+        elif hasattr(getattr(value, "validation_alias", None), "choices"):
+            choices = getattr(value.validation_alias, "choices", ())
+            meta["aliases"] = tuple(str(c) for c in choices)
 
         # Extract numeric/string constraints from annotated_types metadata objects
         # (e.g. Gt(gt=0), Ge(ge=1), Le(le=100), MinLen(min_length=2), …)
@@ -117,6 +129,35 @@ def _convert_pydantic_fields_for_dataclass(cls: type) -> None:
 
 
 _GUARD_DONE_ATTR = "_quadkit_guard_done"
+
+
+def _invoke_after_validator(
+    vfn: Any,
+    cls: type,
+    fval: Any,
+    fname: str,
+    values: dict[str, Any],
+) -> Any:
+    """Invoke a ``mode='after'`` field validator supporting both 2-arg and 3-arg ``info`` signatures."""
+    try:
+        params = list(_inspect.signature(vfn).parameters.values())
+    except (TypeError, ValueError):
+        return vfn(cls, fval)
+
+    accepts_info = len(params) >= 3 or any(
+        p.kind == _inspect.Parameter.VAR_POSITIONAL for p in params
+    )
+    if accepts_info:
+        info = SimpleNamespace(data=values, field_name=fname)
+        return vfn(cls, fval, info)
+    return vfn(cls, fval)
+
+
+def _get_config_option(cls: type, key: str, default: Any = None) -> Any:
+    cfg = getattr(cls, "model_config", None)
+    if isinstance(cfg, Mapping):
+        return cfg.get(key, default)
+    return getattr(cfg, key, default)
 
 
 def run_field_guard(model: Any) -> None:
@@ -175,6 +216,10 @@ def run_field_guard(model: Any) -> None:
                 value = vfn(cls, value)
 
         value = _coerce_value(fname, value, type_hints, f)
+        if _get_config_option(cls, "use_enum_values", False) and isinstance(
+            value, Enum
+        ):
+            value = value.value
         if value is not current:
             object.__setattr__(model, fname, value)
         values[fname] = value
@@ -184,7 +229,7 @@ def run_field_guard(model: Any) -> None:
     for fname, fval in list(values.items()):
         for mode, vfn in field_validators.get(fname, []):
             if mode == "after":
-                new_val = vfn(cls, fval)
+                new_val = _invoke_after_validator(vfn, cls, fval, fname, values)
                 if new_val is not None:
                     object.__setattr__(model, fname, new_val)
                     values[fname] = new_val
@@ -284,16 +329,18 @@ class DomainModel:
         own_annotations = vars(target_cls).get("__annotations__", {})
         dc_fields = vars(target_cls).get("__dataclass_fields__", {})
 
-        # Check if any own annotations have a dataclasses.Field class attr
-        # that isn't yet registered in __dataclass_fields__
+        # Check if any non-ClassVar/InitVar own annotations are not yet
+        # registered in target_cls.__dict__['__dataclass_fields__'] (e.g.
+        # BaseConfig subclasses declared with plain scalar defaults).
         needs_dc = False
-        for attr_name in own_annotations:
+        for attr_name, ann in own_annotations.items():
             if attr_name in dc_fields:
                 continue
-            val = vars(target_cls).get(attr_name)
-            if isinstance(val, _dc.Field):
-                needs_dc = True
-                break
+            ann_str = ann if isinstance(ann, str) else repr(ann)
+            if "ClassVar" in ann_str or "InitVar" in ann_str:
+                continue
+            needs_dc = True
+            break
 
         if not needs_dc:
             return
@@ -302,15 +349,16 @@ class DomainModel:
             getattr(getattr(b, "__dataclass_params__", None), "frozen", False)
             for b in target_cls.__mro__[1:]
         )
-        _dc.dataclass(init=False, frozen=_frozen)(target_cls)
+        try:
+            _dc.dataclass(init=False, frozen=_frozen)(target_cls)
+        except ValueError:
+            return
 
         # Refresh cached hints and validators after dataclass re-processing
         target_cls._field_validators = collect_field_validators(target_cls)  # type: ignore[attr-defined]
         target_cls._model_validators = collect_model_validators(target_cls)  # type: ignore[attr-defined]
-        try:
-            target_cls._cached_type_hints = get_type_hints(target_cls)  # type: ignore[attr-defined]
-        except (NameError, AttributeError, TypeError):
-            target_cls._cached_type_hints = None  # type: ignore[attr-defined]
+        hints = resolve_type_hints(target_cls)
+        target_cls._cached_type_hints = hints if hints else None  # type: ignore[attr-defined]
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Check if the class is a dataclass.
@@ -344,9 +392,29 @@ class DomainModel:
 
         self._init_from_dataclass_fields(dc_fields, type_hints, kwargs)
 
-        extra_keys = list(kwargs.keys())
-        for k in extra_keys:
-            object.__setattr__(self, k, kwargs.pop(k))
+        extra_mode = _get_config_option(self.__class__, "extra")
+        if extra_mode == "ignore":
+            kwargs.clear()
+        elif extra_mode == "forbid" and kwargs:
+            from quadkit.contracts.exceptions.domain import FieldError, ValidationError
+
+            errors = [
+                FieldError(
+                    field=k,
+                    message="Extra inputs are not permitted",
+                    code="extra_forbidden",
+                )
+                for k in kwargs
+            ]
+            raise ValidationError("Validation failed", errors=errors)
+        else:
+            extra_keys = list(kwargs.keys())
+            for k in extra_keys:
+                val = kwargs.pop(k)
+                cls_attr = _inspect.getattr_static(self.__class__, k, None)
+                if isinstance(cls_attr, property) and cls_attr.fset is None:
+                    continue
+                object.__setattr__(self, k, val)
 
         # The guard has already run on this path; the marker keeps the chained
         # `__post_init__` from repeating (and re-applying) the same work.
@@ -370,10 +438,20 @@ class DomainModel:
         from quadkit.contracts.exceptions.domain import FieldError, ValidationError
 
         field_validators = self.__class__._field_validators
+        use_enum_values = bool(
+            _get_config_option(self.__class__, "use_enum_values", False)
+        )
         values: dict[str, Any] = {}
         missing_fields: list[str] = []
 
         for fname, f in dc_fields.items():
+            meta = f.metadata or {}
+            alias = meta.get("alias")
+            alias_choices = meta.get("aliases", ())
+            matched_alias_key = next(
+                (cand for cand in alias_choices if cand in kwargs),
+                None,
+            )
             if fname in kwargs:
                 val = kwargs.pop(fname)
 
@@ -383,11 +461,25 @@ class DomainModel:
 
                 val = _coerce_value(fname, val, type_hints, f)
                 values[fname] = val
+            elif alias and alias in kwargs:
+                val = kwargs.pop(alias)
+
+                for mode, vfn in field_validators.get(fname, []):
+                    if mode == "before":
+                        val = vfn(self.__class__, val)
+
+                val = _coerce_value(fname, val, type_hints, f)
+                values[fname] = val
+            elif matched_alias_key is not None:
+                val = kwargs.pop(matched_alias_key)
+
+                for mode, vfn in field_validators.get(fname, []):
+                    if mode == "before":
+                        val = vfn(self.__class__, val)
+
+                val = _coerce_value(fname, val, type_hints, f)
+                values[fname] = val
             elif f.default is not MISSING:
-                # Coerced like a provided value: the guard path (a generated
-                # `__init__` followed by `__post_init__`) coerces whatever the
-                # default left on the instance, so this path has to as well or
-                # the two disagree about a defaulted field's type.
                 values[fname] = _coerce_value(fname, f.default, type_hints, f)
             elif f.default_factory is not MISSING:
                 values[fname] = _coerce_value(fname, f.default_factory(), type_hints, f)
@@ -395,6 +487,9 @@ class DomainModel:
                 values[fname] = None
             else:
                 missing_fields.append(fname)
+
+            if use_enum_values and fname in values and isinstance(values[fname], Enum):
+                values[fname] = values[fname].value
 
         if missing_fields:
             errors = [
@@ -422,7 +517,9 @@ class DomainModel:
         for fname, fval in values.items():
             for mode, vfn in field_validators.get(fname, []):
                 if mode == "after":
-                    new_val = vfn(self.__class__, fval)
+                    new_val = _invoke_after_validator(
+                        vfn, self.__class__, fval, fname, values
+                    )
                     if new_val is not None:
                         object.__setattr__(self, fname, new_val)
                         values[fname] = new_val
@@ -505,10 +602,19 @@ class DomainModel:
         mode: str = "python",
         exclude: set[str] | None = None,
         include: set[str] | None = None,
+        exclude_none: bool = False,
+        by_alias: bool = False,
         **kwargs: Any,
     ) -> dict[str, Any]:
         """Return a dict representation of the model."""
-        return model_dump_to_dict(self, mode=mode, exclude=exclude, include=include)
+        return model_dump_to_dict(
+            self,
+            mode=mode,
+            exclude=exclude,
+            include=include,
+            exclude_none=exclude_none,
+            by_alias=by_alias,
+        )
 
     def _json_serialize(self, obj: Any) -> Any:
         """Recursively convert types to JSON-serializable primitives."""
@@ -522,9 +628,13 @@ class DomainModel:
         return dumps(data).decode()
 
     @classmethod
-    def model_validate(cls, data: dict[str, Any], **kwargs: Any) -> Any:
-        """Create an instance from a dictionary, coercing scalar types."""
-        return coerce_and_build(cls, data)
+    def model_validate(cls, data: Any, **kwargs: Any) -> Any:
+        """Create an instance from a dictionary or attribute object, coercing scalar types."""
+        return coerce_and_build(
+            cls,
+            data,
+            from_attributes=kwargs.get("from_attributes"),
+        )
 
     @classmethod
     def model_validate_json(cls, json_str: str, **kwargs: Any) -> Any:
@@ -550,8 +660,20 @@ class DomainModel:
     @classmethod
     def model_json_schema(cls) -> dict[str, Any]:
         """Generate JSON schema for the model."""
-        annotations = getattr(cls, "__annotations__", {})
-        dc_fields = getattr(cls, "__dataclass_fields__", {})
+        annotations = {
+            name: hint
+            for name, hint in (
+                cls._cached_type_hints
+                or resolve_type_hints(cls)
+                or getattr(cls, "__annotations__", {})
+            ).items()
+            if get_origin(hint) is not ClassVar
+        }
+        dc_fields = (
+            {field.name: field for field in dataclass_fields(cls)}
+            if is_dataclass(cls)
+            else getattr(cls, "__dataclass_fields__", {})
+        )
         return build_json_schema(annotations, dc_fields)
 
     def __repr__(self) -> str:
@@ -570,6 +692,16 @@ class DomainModel:
         return self.model_dump() == other.model_dump()
 
     __hash__ = None  # type: ignore[assignment]
+
+    @classmethod
+    def field_names(cls) -> frozenset[str]:
+        """Return declared public field names for this model."""
+        dc_fields = getattr(cls, "__dataclass_fields__", None)
+        if isinstance(dc_fields, Mapping):
+            return frozenset(
+                name for name in dc_fields if not str(name).startswith("_")
+            )
+        return frozenset()
 
     @classmethod
     def model_rebuild(cls, **kwargs: Any) -> None:

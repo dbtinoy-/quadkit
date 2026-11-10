@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Self
 
-from quadkit.auth.config import AuthConfig
+from quadkit.auth.config import AuthConfig, UserStoreKind
 from quadkit.auth.di.sub_providers.admin_provider import AuthAdminProvider
 from quadkit.auth.di.sub_providers.authentication_provider import (
     AuthenticationProvider,
@@ -18,11 +18,13 @@ from quadkit.auth.di.sub_providers.google_oauth_provider import GoogleOAuthProvi
 from quadkit.auth.di.sub_providers.mfa_provider import MFAProvider
 from quadkit.auth.di.sub_providers.session_provider import SessionProvider
 from quadkit.auth.di.sub_providers.token_provider import TokenProvider
+from quadkit.auth.storage.session_store import SessionStore
 from quadkit.contracts.core import HealthCheckResult, HealthStatus, ProviderPriority
 from quadkit.di.provider import Provider
 from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
+    from quadkit.auth.storage.token_store import UserStoreProtocol
     from quadkit.contracts.core.di import (
         BootContainerProtocol,
         ContainerRegistrarProtocol,
@@ -59,6 +61,14 @@ class AuthBundleProvider(Provider):
             :class:`~quadkit.auth.di.sub_providers.passkey_provider.PasskeyProvider`
             to the sub-provider list (requires the WebAuthn extra to be
             installed).
+        session_store: Explicit host-owned session backend, retained through
+            eager and deferred sub-provider composition.
+        user_store: Explicit host-owned identity store, or a store kind
+            (``"memory"``/``"sql"``), forwarded to the authentication
+            sub-provider.
+        user_table: SQL identity table name, ignored unless the resolved
+            store kind is ``"sql"``.
+        cache_service: Explicit host-owned token blacklist backend.
         kwargs: Extra keyword arguments forwarded to
             :class:`~quadkit.auth.di.AuthenticationProvider`.
     """
@@ -71,9 +81,27 @@ class AuthBundleProvider(Provider):
         config: AuthConfig | None = None,
         initial_roles: dict[str, Any] | None = None,
         enable_passkeys: bool = False,
+        session_store: SessionStore | None = None,
+        *,
+        user_store: UserStoreProtocol | UserStoreKind | None = None,
+        user_table: str | None = None,
+        cache_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(name="auth_bundle", priority=ProviderPriority.SECURITY)
+        # Everything earmarked for the authentication sub-provider is
+        # kept and forwarded at composition time — documented kwargs
+        # must never be accepted and dropped.
+        self._authn_kwargs: dict[str, Any] = dict(kwargs)
+        if user_store is not None:
+            if isinstance(user_store, str):
+                self._authn_kwargs["user_store_kind"] = user_store
+            else:
+                self._authn_kwargs["user_store"] = user_store
+        if user_table is not None:
+            self._authn_kwargs["user_table"] = user_table
+        if cache_service is not None:
+            self._authn_kwargs["cache_service"] = cache_service
         self._config = config
         # Explicit config must win over the orchestrator's ``auth`` yaml
         # section injection (e.g. ``AuthModule.stub()`` / ``configure()``).
@@ -82,6 +110,7 @@ class AuthBundleProvider(Provider):
         self._config_from_factory = config is not None
         self._initial_roles: dict[str, Any] = initial_roles or {}
         self._enable_passkeys = enable_passkeys
+        self._session_store = session_store
         self._sub_providers: list[Provider] = []
         if config is not None:
             # Explicit config: compose eagerly (no ephemeral-secret noise).
@@ -98,9 +127,13 @@ class AuthBundleProvider(Provider):
         any ``register()`` call is safe — nothing has been registered yet.
         """
         cfg = self._config
-        self._authn = AuthenticationProvider(config=cfg)
-        self._token = TokenProvider(config=cfg)
-        self._session = SessionProvider(config=cfg)
+        self._authn = AuthenticationProvider(config=cfg, **self._authn_kwargs)
+        self._token = TokenProvider(
+            config=cfg,
+            token_manager=self._authn_kwargs.get("token_manager"),
+            cache_service=self._authn_kwargs.get("cache_service"),
+        )
+        self._session = SessionProvider(config=cfg, session_store=self._session_store)
         self._authz = AuthorizationProvider(
             config=cfg, initial_roles=dict(self._initial_roles)
         )
@@ -119,7 +152,10 @@ class AuthBundleProvider(Provider):
             if cfg is not None
             else {}
         )
-        if google_oauth_config:
+        # A lone empty client ID is an explicit, disabled placeholder. Other
+        # partial configurations still reach the provider and fail on startup,
+        # rather than silently hiding an operator's configuration mistake.
+        if google_oauth_config and google_oauth_config != {"client_id": ""}:
             self._sub_providers.append(
                 GoogleOAuthProvider(config=cfg, google_oauth=google_oauth_config),
             )
@@ -160,12 +196,24 @@ class AuthBundleProvider(Provider):
             # Zero-config construction is a documented dev/test mode
             # (TokenProvider generates an ephemeral secret).
             self._compose_sub_providers()
-        elif any(sp.config is None for sp in self._sub_providers):
+        elif not self._config_from_factory and any(
+            sp.config is None for sp in self._sub_providers
+        ):
             # Late-injected yaml section (configure() ran without explicit
             # config): recompose so sub-providers hold the real values.
             self._compose_sub_providers()
         for provider in self._sub_providers:
             await provider.register(container)
+
+        # Issuing, authenticating and revoking must use one manager. Separate
+        # in-process blacklists would otherwise allow a token revoked through
+        # TokenManagerProtocol to authenticate through AuthProviderProtocol.
+        authn = getattr(self, "_authn", None)
+        token_provider = getattr(self, "_token", None)
+        if authn in self._sub_providers and token_provider in self._sub_providers:
+            authn.token_manager = token_provider.token_manager
+            if authn._service is not None:
+                authn._service.token_manager = token_provider.token_manager
 
         # Register AuthConfig so application code (e.g. seed services)
         # can resolve it from the container without manual wiring.
@@ -180,6 +228,18 @@ class AuthBundleProvider(Provider):
         Args:
             container: The DI container resolver.
         """
+        token_provider = getattr(self, "_token", None)
+        if token_provider in self._sub_providers:
+            from quadkit.contracts.auth import TokenManagerProtocol
+            from quadkit.contracts.exceptions import ConfigurationError
+
+            bound = await container.resolve_optional(TokenManagerProtocol)
+            if bound is not None and bound is not token_provider.token_manager:
+                raise ConfigurationError(
+                    "AuthBundleProvider requires the TokenManagerProtocol binding "
+                    "to use the same token manager as its authenticator. "
+                    "Pass the manager to the bundle instead of prebinding another one."
+                )
         for provider in self._sub_providers:
             await provider.boot(container)
         logger.info("auth_bundle.booted")

@@ -102,6 +102,23 @@ def get_status_for_error(error: Exception) -> int:
     return 400 if isinstance(error, DomainError) else 500
 
 
+def get_default_status_for_error_type(error_type: type[Exception]) -> int:
+    """Document a declared error's default, not instance-specific overrides."""
+    if not isinstance(error_type, type) or not issubclass(error_type, Exception):
+        raise TypeError("Result error declarations must be exception classes")
+    declared = getattr(error_type, "status_code", None)
+    if declared is not None:
+        if type(declared) is not int:
+            raise ValueError(
+                "Dynamic error status requires an explicit OpenAPI operation"
+            )
+        return declared
+    for registered, status in _ERROR_STATUS_REGISTRY:
+        if issubclass(error_type, registered):
+            return status
+    return 400 if issubclass(error_type, DomainError) else 500
+
+
 def get_type_title_for_status(status: int) -> tuple[str, str]:
     """Return (type_uri, title) for a status code, with fallback."""
     return _STATUS_TYPE_TITLE.get(status, ("about:blank", "Error"))
@@ -152,6 +169,7 @@ __all__ = [
     "get_mapping_for_domain_error",
     "get_retry_after_header",
     "get_status_for_error",
+    "get_default_status_for_error_type",
     "get_type_title_for_status",
     "register_error_status",
 ]

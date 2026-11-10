@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from quadkit.contracts.core import HealthCheckResult
+    from quadkit.contracts.mailer import MessageDeliveryReceipt
 import uuid
 
 INBOX_SENT_HOOK = "notification.inbox.sent"
@@ -165,4 +166,28 @@ class InboxStoreProtocol(Protocol):
         ...
 
 
-__all__ = ["INBOX_SENT_HOOK", "InboxMessage", "InboxStoreProtocol"]
+__all__ = [
+    "INBOX_SENT_HOOK",
+    "IdempotentInboxStoreProtocol",
+    "InboxMessage",
+    "InboxStoreProtocol",
+]
+
+
+@runtime_checkable
+class IdempotentInboxStoreProtocol(Protocol):
+    """Optional durable send-once capability; legacy stores need not implement it.
+
+    A key identifies one immutable recipient/title/body/metadata intent. The
+    receipt (ID/time/digest, not content) survives message deletion. Conflicting reuse must fail, and receipt
+    creation and inbox insertion must commit or roll back together. The boolean
+    is true only for the first persisted send. This does not authenticate users.
+    """
+
+    supports_inbox_send_once_v1: bool
+
+    async def save_once(
+        self, key: str, message: InboxMessage
+    ) -> tuple[MessageDeliveryReceipt, bool]:
+        """Return the original receipt and whether this call inserted it."""
+        ...

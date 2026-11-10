@@ -9,6 +9,7 @@ import pytest
 
 from quadkit.tasks import task
 from quadkit.tasks.middleware.core import (
+    LoggingMiddleware,
     TaskExecutionContext,
     TaskMiddleware,
     TaskMiddlewarePipeline,
@@ -169,3 +170,74 @@ class TestTaskMiddlewarePipeline:
 
         assert result.success is True
         assert result.data == 10
+
+    @pytest.mark.asyncio
+    async def test_pipeline_failure_result_sanitizes_exception_text(self) -> None:
+        """Failure snapshots never retain private exception messages."""
+        class CaptureContext(TaskMiddleware):
+            context: TaskExecutionContext | None = None
+
+            async def on_error(
+                self, ctx: TaskExecutionContext, error: Exception
+            ) -> None:
+                self.context = ctx
+
+        private_error = "private /srv/app/users/user-42 traceback=secret"
+        capture = CaptureContext()
+        pipeline = TaskMiddlewarePipeline()
+        pipeline.add(capture)
+
+        async def fail() -> None:
+            raise ValueError(private_error)
+
+        with pytest.raises(ValueError):
+            await pipeline.execute(create_mock_job(), fail)
+
+        assert capture.context is not None
+        assert capture.context.result is not None
+        assert capture.context.result.error == "Task failed (ValueError)"
+        assert private_error not in str(capture.context.result.error)
+        assert "/srv/app" not in str(capture.context.result.error)
+        assert "user-42" not in str(capture.context.result.error)
+
+    @pytest.mark.asyncio
+    async def test_logging_middleware_omits_ids_and_exception_text(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """Task logs keep only status, duration, and exception type."""
+        import quadkit.tasks.middleware.core as middleware_module
+
+        logger = MagicMock()
+        monkeypatch.setattr(middleware_module, "logger", logger)
+        private_job_id = "private-job-id-42"
+        private_task_name = "private-user-task"
+        private_error = "private /srv/app/users/user-42 traceback=secret"
+        job = create_mock_job(private_job_id)
+        job.name = private_task_name
+        context = TaskExecutionContext(
+            job=job,
+            duration_ms=12.5,
+            result=JobResult.fail("Task failed (ValueError)"),
+        )
+        middleware = LoggingMiddleware()
+
+        await middleware.before_execute(context)
+        await middleware.on_error(context, ValueError(private_error))
+        await middleware.after_execute(context)
+
+        logger.info.assert_any_call("task.started")
+        logger.info.assert_any_call(
+            "task.finished",
+            status="fail",
+            duration_ms=12.5,
+        )
+        logger.error.assert_called_once_with(
+            "task.failed",
+            error_type="ValueError",
+        )
+        logged = repr(logger.mock_calls)
+        assert private_job_id not in logged
+        assert private_task_name not in logged
+        assert private_error not in logged
+        assert "/srv/app" not in logged
+        assert "user-42" not in logged

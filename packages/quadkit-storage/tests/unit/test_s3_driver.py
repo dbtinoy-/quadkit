@@ -1,13 +1,14 @@
 """Unit tests for S3 storage driver"""
 
 from datetime import timedelta
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 # Skip all tests if aiobotocore is not available
 pytest.importorskip("aiobotocore")
 
+from quadkit.storage.backends import s3 as s3_module
 from quadkit.storage.backends.s3 import S3Driver
 from quadkit.storage.exceptions import StorageError, StorageFileNotFoundError
 
@@ -25,17 +26,20 @@ class TestS3Driver:
         client.create_multipart_upload.return_value = {"UploadId": "test-upload-id"}
         client.upload_part.return_value = {"ETag": '"part-etag"'}
         client.complete_multipart_upload.return_value = {"ETag": '"multipart-etag"'}
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=False)
 
         return client
 
     @pytest.fixture
     def driver(self, mock_s3_client):
         """Create S3 driver with mock client"""
-        with patch("aiobotocore.session.get_session") as mock_session:
-            mock_session.return_value.create_client.return_value = mock_s3_client
-            driver = S3Driver(bucket="test-bucket")
-            driver.s3_client = mock_s3_client  # Override the client
-            return driver
+        session = MagicMock()
+        session.create_client.return_value = mock_s3_client
+        with patch.object(
+            s3_module.aiobotocore.session, "get_session", return_value=session
+        ):
+            return S3Driver(bucket="test-bucket")
 
     @pytest.mark.asyncio
     async def test_upload_small_file_single_part(self, driver, mock_s3_client):

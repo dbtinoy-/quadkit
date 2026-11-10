@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 import time
 from typing import Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.models.job import JobProtocol, JobResult
 
 logger = get_logger(__name__)
@@ -100,13 +100,19 @@ class TaskMiddlewarePipeline:
         except Exception as exc:
             ctx.end_time = time.monotonic()
             ctx.duration_ms = (ctx.end_time - ctx.start_time) * 1000
-            ctx.result = JobResult.fail(str(exc), duration=ctx.duration_ms / 1000)
+            ctx.result = JobResult.fail(
+                f"Task failed ({safe_error_type(exc)})",
+                duration=ctx.duration_ms / 1000,
+            )
 
             for mw in reversed(self._middleware):
                 try:
                     await mw.on_error(ctx, exc)
-                except Exception:  # noqa: BLE001 — handler isolation
-                    logger.exception("Error in middleware on_error")
+                except Exception as middleware_error:  # noqa: BLE001 — handler isolation
+                    logger.error(
+                        "task_middleware_on_error_failed",
+                        error_type=safe_error_type(middleware_error),
+                    )
 
             raise
         finally:
@@ -114,8 +120,11 @@ class TaskMiddlewarePipeline:
             for mw in reversed(self._middleware):
                 try:
                     await mw.after_execute(ctx)
-                except Exception:  # noqa: BLE001 — handler isolation
-                    logger.exception("Error in middleware after_execute")
+                except Exception as middleware_error:  # noqa: BLE001 — handler isolation
+                    logger.error(
+                        "task_middleware_after_execute_failed",
+                        error_type=safe_error_type(middleware_error),
+                    )
 
         return ctx.result
 
@@ -130,21 +139,15 @@ class LoggingMiddleware(TaskMiddleware):
 
     async def before_execute(self, ctx: TaskExecutionContext) -> None:
         """Log task start before execution."""
-        logger.info(
-            "TASK START [%s] job=%s",
-            ctx.job.name,
-            ctx.job.id,
-        )
+        logger.info("task.started")
 
     async def after_execute(self, ctx: TaskExecutionContext) -> None:
         """Log task completion status and duration after execution."""
         status = "OK" if ctx.result and ctx.result.success else "FAIL"
         logger.info(
-            "TASK %s [%s] job=%s (%.1fms)",
-            status,
-            ctx.job.name,
-            ctx.job.id,
-            ctx.duration_ms,
+            "task.finished",
+            status=status.lower(),
+            duration_ms=round(ctx.duration_ms, 1),
         )
 
     async def on_error(
@@ -154,10 +157,8 @@ class LoggingMiddleware(TaskMiddleware):
     ) -> None:
         """Log the error when a task raises an exception."""
         logger.error(
-            "TASK ERROR [%s] job=%s: %s",
-            ctx.job.name,
-            ctx.job.id,
-            error,
+            "task.failed",
+            error_type=safe_error_type(error),
         )
 
 
@@ -286,7 +287,7 @@ class TimeoutMiddleware(TaskMiddleware):
         except TimeoutError:
             duration = time.monotonic() - start_time
             return JobResult.fail(
-                f"Task timed out after {timeout}s",
+                "Task timed out (TimeoutError)",
                 job.retry_count,
                 duration,
             )
@@ -294,4 +295,8 @@ class TimeoutMiddleware(TaskMiddleware):
             # ANY handler error becomes a failed JobResult (never escapes
             # the middleware layer as a raw exception).
             duration = time.monotonic() - start_time
-            return JobResult.fail(str(exc), job.retry_count, duration)
+            return JobResult.fail(
+                f"Task failed ({safe_error_type(exc)})",
+                job.retry_count,
+                duration,
+            )

@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING
 from quadkit.contracts.core.constants import EP_PLUGINS, EP_PROVIDERS
 from quadkit.contracts.plugins import PluginDescriptor
 from quadkit.logging import get_logger
+from quadkit.primitives.namespace import refresh_namespace
 
 if TYPE_CHECKING:
     from quadkit.di.provider import Provider
@@ -67,6 +68,11 @@ def discover_providers(disabled: set[str] | None = None) -> list[Provider]:
         plugin entry point. Entries that fail to load, aren't a ``Provider``
         subclass, or require constructor arguments are skipped with a log.
     """
+    # A distribution installed after this process started is invisible until the
+    # package path is recomputed; entry points for a just-installed plugin would
+    # otherwise fail to import here.
+    refresh_namespace()
+
     from quadkit.di.provider import Provider
 
     disabled = disabled or set()
@@ -113,6 +119,10 @@ def discover_plugins() -> list[PluginDescriptor]:
     Metadata-only — never imports the plugin's actual ``Provider`` class,
     so this is cheap to call even for listing purposes (e.g. an admin UI).
     """
+    # A distribution installed after this process started is invisible until the
+    # package path is recomputed; entry points for a just-installed plugin would
+    # otherwise fail to import here.
+    refresh_namespace()
     found: list[PluginDescriptor] = []
     for ep in _entry_points(group=EP_PLUGINS):
         try:

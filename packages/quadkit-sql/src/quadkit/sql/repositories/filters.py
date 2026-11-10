@@ -90,7 +90,7 @@ class ContainsHandler:
 
 
 class IContainsHandler:
-    """Handler for icontains (ILIKE) operator."""
+    """Handler for icontains — case-insensitive containment."""
 
     def apply(
         self,
@@ -98,7 +98,10 @@ class IContainsHandler:
         value: Any,
         params: list[Any],
     ) -> tuple[str, list[Any]]:
-        return (f"{field} ILIKE ?", [*params, f"%{value}%"])
+        # `LOWER(x) LIKE LOWER(?)`, not `ILIKE`: see `Filter.to_sql`. SQLite
+        # rejects the Postgres keyword outright, so an `icontains` filter used
+        # to be a syntax error on the dialect every test runs on.
+        return (f"LOWER({field}) LIKE LOWER(?)", [*params, f"%{value}%"])
 
 
 class IsNullHandler:

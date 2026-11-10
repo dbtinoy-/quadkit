@@ -23,15 +23,13 @@ from quadkit.config.lib import (
 )
 from quadkit.config.main import QuadkitConfig
 from quadkit.contracts.core.config import ConfigProtocol
+from quadkit.contracts.core.di import ContainerResolverProtocol
 from quadkit.contracts.core.health import HealthCheckResult, HealthStatus
 from quadkit.di.provider import Provider, ProviderPriority
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 if TYPE_CHECKING:
-    from quadkit.contracts.core.di import (
-        ContainerRegistrarProtocol,
-        ContainerResolverProtocol,
-    )
+    from quadkit.contracts.core.di import ContainerRegistrarProtocol
 
 logger = get_logger(__name__)
 
@@ -70,34 +68,56 @@ class ConfigProvider(Provider):
     async def register(self, container: ContainerRegistrarProtocol) -> None:
         """Load configuration and register as a singleton."""
         if self._config_instance is None:
-            from pathlib import Path
+            section = (
+                getattr(self.config_class, "config_section", "")
+                if not issubclass(self.config_class, QuadkitConfig)
+                else ""
+            )
+            if (
+                section
+                and not self.sources
+                and not self.env_prefix
+                and isinstance(container, ContainerResolverProtocol)
+                and container.has(QuadkitConfig)
+            ):
+                quadkit_cfg = await container.resolve(QuadkitConfig)
+                self._config_instance = quadkit_cfg.get_section(
+                    section, self.config_class
+                )
+                self._registry.apply_to_instance(self._config_instance)
+            else:
+                from pathlib import Path
 
-            loader = ConfigLoader()
+                loader = ConfigLoader()
 
-            # 1. Check for default application.yaml in CWD
-            yaml_path = Path.cwd() / "application.yaml"
-            try:
-                if yaml_path.exists():
-                    loader.add_source(FileConfigSource(yaml_path))
-            except (FileNotFoundError, OSError) as e:
-                logger.debug("no_default_config", path=str(yaml_path), reason=str(e))
+                # 1. Check for default application.yaml in CWD
+                yaml_path = Path.cwd() / "application.yaml"
+                try:
+                    if yaml_path.exists():
+                        loader.add_source(FileConfigSource(yaml_path))
+                except (FileNotFoundError, OSError) as exc:
+                    logger.debug(
+                        "no_default_config",
+                        error_type=safe_error_type(exc),
+                    )
 
-            # 2. Add custom sources if provided
-            if self.sources:
-                for source in self.sources:
-                    loader.add_source(source)
+                # 2. Add custom sources if provided
+                if self.sources:
+                    for source in self.sources:
+                        loader.add_source(source)
 
-            # 3. Always add env vars
-            prefix = self.env_prefix or "QK_"
-            loader.add_source(EnvironmentConfigSource(prefix))
+                # 3. Always add env vars
+                prefix = self.env_prefix or "QK_"
+                loader.add_source(EnvironmentConfigSource(prefix))
 
-            # 4. Load and apply registry
-            self._config_instance = loader.load_sync(self.config_class)
-            self._registry.apply_to_instance(self._config_instance)
+                # 4. Load and apply registry
+                self._config_instance = loader.load_sync(self.config_class)
+                self._registry.apply_to_instance(self._config_instance)
 
         # 5. Register with multiple keys for compatibility
         container.singleton(self.config_class, instance=self._config_instance)
-        container.singleton(ConfigProtocol, instance=self._config_instance)
+        if hasattr(self._config_instance, "get_section"):
+            container.singleton(ConfigProtocol, instance=self._config_instance)
         # Also register as QuadkitConfig if it's a subclass of QuadkitConfig
         # and not already registered as the main config_class.
         if self.config_class is not QuadkitConfig and isinstance(

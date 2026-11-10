@@ -7,21 +7,29 @@
 members = [
     "core/quadkit",
     "core/quadkit-contracts",
+    "packages/quadkit-ai-agents",
+    "packages/quadkit-ai-llm",
+    "packages/quadkit-ai-mcp",
     "packages/quadkit-auth",
     "packages/quadkit-cache",
     "packages/quadkit-cli",
     "packages/quadkit-events",
     "packages/quadkit-http",
     "packages/quadkit-monitor",
+    "packages/quadkit-notification",
     "packages/quadkit-sql",
     "packages/quadkit-storage",
     "packages/quadkit-tasks",
     "packages/quadkit-testing",
     "packages/quadkit-web",
+    "packages/quadkit-workflow",
 ]
 
 [tool.uv.sources]
 quadkit = { workspace = true }
+quadkit-ai-agents = { workspace = true }
+quadkit-ai-llm = { workspace = true }
+quadkit-ai-mcp = { workspace = true }
 quadkit-auth = { workspace = true }
 quadkit-cache = { workspace = true }
 quadkit-cli = { workspace = true }
@@ -29,11 +37,13 @@ quadkit-contracts = { workspace = true }
 quadkit-events = { workspace = true }
 quadkit-http = { workspace = true }
 quadkit-monitor = { workspace = true }
+quadkit-notification = { workspace = true }
 quadkit-sql = { workspace = true }
 quadkit-storage = { workspace = true }
 quadkit-tasks = { workspace = true }
 quadkit-testing = { workspace = true }
 quadkit-web = { workspace = true }
+quadkit-workflow = { workspace = true }
 
 [tool.ruff]
 line-length = 88
@@ -67,30 +77,40 @@ markers = [
 testpaths = [
     "core/quadkit/tests",
     "core/quadkit-contracts/tests",
+    "packages/quadkit-ai-agents/tests",
+    "packages/quadkit-ai-llm/tests",
+    "packages/quadkit-ai-mcp/tests",
     "packages/quadkit-auth/tests",
     "packages/quadkit-cache/tests",
     "packages/quadkit-cli/tests",
     "packages/quadkit-events/tests",
     "packages/quadkit-http/tests",
     "packages/quadkit-monitor/tests",
+    "packages/quadkit-notification/tests",
     "packages/quadkit-sql/tests",
     "packages/quadkit-storage/tests",
     "packages/quadkit-tasks/tests",
     "packages/quadkit-testing/tests",
     "packages/quadkit-web/tests",
+    "packages/quadkit-workflow/tests",
 ]
 pythonpath = [
     "core/quadkit/src",
     "core/quadkit-contracts/src",
+    "packages/quadkit-ai-agents/src",
+    "packages/quadkit-ai-llm/src",
+    "packages/quadkit-ai-mcp/src",
     "packages/quadkit-auth/src",
     "packages/quadkit-cache/src",
     "packages/quadkit-cli/src",
     "packages/quadkit-events/src",
     "packages/quadkit-http/src",
     "packages/quadkit-monitor/src",
+    "packages/quadkit-notification/src",
     "packages/quadkit-sql/src",
     "packages/quadkit-storage/src",
     "packages/quadkit-tasks/src",
     "packages/quadkit-testing/src",
     "packages/quadkit-web/src",
+    "packages/quadkit-workflow/src",
 ]

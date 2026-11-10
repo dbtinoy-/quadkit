@@ -14,6 +14,7 @@ from typing import Any, Final
 # Critical: enable namespace-package discovery for quadkit-* distributions.
 __path__ = pkgutil.extend_path(__path__, __name__)
 
+
 from quadkit.constants import __version__
 
 _ExportSpec = tuple[str, str | None]
@@ -126,6 +127,7 @@ _EXPORTS: Final[dict[str, _ExportSpec]] = {
     "module": ("quadkit.di.module", "module"),
     "partition": ("quadkit.result", "partition"),
     "provide": ("quadkit.di.function_provider", "provide"),
+    "refresh_namespace": ("quadkit.primitives.namespace", "refresh_namespace"),
     "request_context": ("quadkit.primitives.context", "request_scope"),
     "run_application": ("quadkit.app.runner", "run_application"),
     "save_disabled": ("quadkit.plugins.state", "save_disabled"),
@@ -260,6 +262,7 @@ __all__ = [
     "ops",
     "partition",
     "provide",
+    "refresh_namespace",
     "request_context",
     "retry",
     "run_application",

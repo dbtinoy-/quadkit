@@ -14,9 +14,12 @@ def test_plugin_state_error_is_an_infrastructure_error() -> None:
     assert issubclass(PluginStateError, InfrastructureError)
 
 
-def test_plugin_state_error_carries_structured_message(tmp_path: Path) -> None:
-    err = PluginStateError("cannot write plugin state", path=str(tmp_path / "p.json"))
+def test_plugin_state_error_discards_private_path() -> None:
+    private_path = "/srv/private/PRIVATE_PLUGIN_STATE_SENTINEL.json"
+    err = PluginStateError("cannot write plugin state", path=private_path)
     assert "cannot write plugin state" in str(err)
+    assert err.path is None
+    assert private_path not in str(err)
 
 
 import json
@@ -63,17 +66,44 @@ def test_corrupt_file_is_backed_up_and_fails_open(tmp_path: Path) -> None:
     assert backups[0].read_text() == "{not valid json"
 
 
+def test_corrupt_state_log_omits_path_and_untrusted_version(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    private_dir = tmp_path / "PRIVATE_PLUGIN_STATE_PATH_SENTINEL"
+    private_dir.mkdir()
+    path = private_dir / "plugins.json"
+    path.write_text(
+        json.dumps(
+            {
+                "version": "PRIVATE_VERSION_SENTINEL /srv/private",
+                "disabled": [],
+            }
+        )
+    )
+
+    assert load_disabled(path) == set()
+
+    output = capsys.readouterr().out
+    assert "unsupported_schema_version" in output
+    assert "PRIVATE_PLUGIN_STATE_PATH_SENTINEL" not in output
+    assert "PRIVATE_VERSION_SENTINEL" not in output
+    assert "/srv/private" not in output
+
+
 def test_save_failure_raises_plugin_state_error(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     path = tmp_path / "plugins.json"
 
     def _broken_replace(*args: object, **kwargs: object) -> None:
-        raise OSError("disk full")
+        raise OSError("PRIVATE_PATH_SENTINEL /srv/private/plugins.json")
 
     monkeypatch.setattr("os.replace", _broken_replace)
-    with pytest.raises(PluginStateError):
+    with pytest.raises(PluginStateError) as err:
         save_disabled({"alpha"}, path)
+    assert "PRIVATE_PATH_SENTINEL" not in str(err.value)
+    assert "/srv/private/plugins.json" not in str(err.value)
+    assert err.value.__suppress_context__ is True
 
 
 def test_save_never_leaves_temp_file_behind(tmp_path: Path) -> None:

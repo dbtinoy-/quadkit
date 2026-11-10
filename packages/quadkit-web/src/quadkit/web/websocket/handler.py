@@ -32,7 +32,7 @@ from typing import Any, ClassVar
 from starlette.websockets import WebSocketDisconnect
 
 from quadkit import serialization as json
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.web.transport.websockets import WebSocket
 from quadkit.web.websocket.connection_id import ConnectionIDManager
 from quadkit.web.websocket.rate_limiter import WebSocketRateLimiter
@@ -159,12 +159,15 @@ class AbstractWebSocketHandler(ABC):
             await websocket.send_json(
                 {
                     "type": "error",
-                    "error": str(error),
+                    "error": "message_processing_failed",
                 },
             )
-        except (RuntimeError, ConnectionError, OSError, AttributeError):
-            # Log and swallow to avoid crashing the WebSocket handler for operational errors
-            logger.exception("Failed to send error message to websocket")
+        except (RuntimeError, ConnectionError, OSError, AttributeError) as send_error:
+            # Keep the connection failure out of logs and client-facing errors.
+            logger.warning(
+                "websocket.error_response_failed",
+                error_type=safe_error_type(send_error),
+            )
 
     async def send_json(self, websocket: WebSocket, data: dict[str, Any]) -> None:
         """Send JSON data to a websocket.
@@ -208,9 +211,10 @@ class AbstractWebSocketHandler(ABC):
             if ws != exclude:
                 try:
                     await ws.send_json(message)
-                except Exception:  # noqa: BLE001 — one dead connection must not stop the remaining broadcasts
-                    logger.exception(
-                        "Error broadcasting JSON message to websocket client",
+                except Exception as exc:  # noqa: BLE001 — one dead connection must not stop the remaining broadcasts
+                    logger.warning(
+                        "websocket.broadcast_json_failed",
+                        error_type=safe_error_type(exc),
                     )
 
     async def broadcast_text(
@@ -228,9 +232,10 @@ class AbstractWebSocketHandler(ABC):
             if ws != exclude:
                 try:
                     await ws.send_text(text)
-                except Exception:  # noqa: BLE001 — one dead connection must not stop the remaining broadcasts
-                    logger.exception(
-                        "Error broadcasting text message to websocket client",
+                except Exception as exc:  # noqa: BLE001 — one dead connection must not stop the remaining broadcasts
+                    logger.warning(
+                        "websocket.broadcast_text_failed",
+                        error_type=safe_error_type(exc),
                     )
 
     @property
@@ -313,7 +318,6 @@ class AbstractWebSocketHandler(ABC):
                 if len(user_conn_ids) >= self.max_connections_per_user:
                     logger.warning(
                         "websocket.user_connection_limit_reached",
-                        user_id=user_id,
                         max_connections_per_user=self.max_connections_per_user,
                     )
                     await websocket.close(
@@ -352,16 +356,20 @@ class AbstractWebSocketHandler(ABC):
                 except WebSocketDisconnect:
                     # Client disconnected, stop the loop gracefully
                     break
-                except (RuntimeError, ConnectionError, OSError):
-                    # Connection closed or other operational error; log and stop the loop
-                    logger.exception(
-                        "Error while receiving messages from websocket; closing connection",
+                except (RuntimeError, ConnectionError, OSError) as exc:
+                    # Connection closed or another operational error; expose type only.
+                    logger.warning(
+                        "websocket.receive_failed",
+                        error_type=safe_error_type(exc),
                     )
                     break
 
-        except Exception as e:  # noqa: BLE001 — websocket handler must catch any error to invoke on_error and clean up the connection
-            logger.exception("Unhandled websocket handler error")
-            await self.on_error(websocket, e)
+        except Exception as exc:  # noqa: BLE001 — websocket handler must catch any error to invoke on_error and clean up the connection
+            logger.warning(
+                "websocket.handler_failed",
+                error_type=safe_error_type(exc),
+            )
+            await self.on_error(websocket, exc)
         finally:
             await self.remove(websocket)
             # Clean up per-user tracking
@@ -377,8 +385,11 @@ class AbstractWebSocketHandler(ABC):
                     await self._rate_limiter.remove(connection_uuid)
             try:
                 await self.on_disconnect(websocket)
-            except Exception:  # noqa: BLE001 — disconnect is best-effort; must not mask the connection error
-                logger.exception("Error during websocket disconnect handler")
+            except Exception as exc:  # noqa: BLE001 — disconnect is best-effort; must not mask the connection error
+                logger.warning(
+                    "websocket.disconnect_handler_failed",
+                    error_type=safe_error_type(exc),
+                )
 
 
 __all__ = ["AbstractWebSocketHandler"]

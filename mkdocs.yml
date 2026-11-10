@@ -11,7 +11,7 @@
 site_name: Quadkit
 site_description: >-
   Async Python, contract-driven, container-assembled — documentation for the
-  thirteen public distributions.
+  eighteen public distributions.
 site_url: https://oridecon.dev/quadkit/
 repo_url: https://github.com/dbtinoy-/quadkit
 edit_uri: ""

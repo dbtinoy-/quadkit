@@ -59,6 +59,63 @@ logger = get_logger(__name__)
 
 _CIRCUIT_OPEN_CODE = "QK_ERR_RES_009"
 _RETRY_EXHAUSTED_CODE = "QK_ERR_RES_008"
+_CROSS_ORIGIN_SENSITIVE_HEADER_MARKERS = (
+    "authorization",
+    "auth",
+    "cookie",
+    "token",
+    "api-key",
+    "apikey",
+    "secret",
+    "credential",
+    "signature",
+)
+_CROSS_ORIGIN_HOP_HEADERS = frozenset(
+    {"host", "content-length", "transfer-encoding", "connection"}
+)
+_BODY_HEADERS = frozenset(
+    {
+        "content-length",
+        "content-type",
+        "content-encoding",
+        "transfer-encoding",
+        "digest",
+    }
+)
+
+
+def _strip_body_headers(headers: Any) -> dict[str, Any]:
+    """Remove entity headers when a redirect changes the request to GET."""
+    if not hasattr(headers, "items"):
+        return {}
+    return {
+        name: value
+        for name, value in headers.items()
+        if str(name).lower() not in _BODY_HEADERS
+    }
+
+
+def _url_origin(url: str) -> tuple[str, str, int | None]:
+    """Return a normalized URL origin tuple for redirect-boundary checks."""
+    parsed = URL(url)
+    return parsed.scheme.lower(), (parsed.host or "").lower(), parsed.port
+
+
+def _strip_cross_origin_sensitive_headers(headers: Any) -> dict[str, Any]:
+    """Remove credentials and hop-specific headers before a cross-origin hop."""
+    if not hasattr(headers, "items"):
+        return {}
+    safe_headers: dict[str, Any] = {}
+    for name, value in headers.items():
+        normalized = str(name).lower().replace("_", "-")
+        if normalized in _CROSS_ORIGIN_HOP_HEADERS:
+            continue
+        if any(
+            marker in normalized for marker in _CROSS_ORIGIN_SENSITIVE_HEADER_MARKERS
+        ):
+            continue
+        safe_headers[name] = value
+    return safe_headers
 
 
 def _is_retry_exhausted_error(exc: BaseException) -> bool:
@@ -170,7 +227,9 @@ class HTTPClient(
             force_close=self._config.pool.force_close,
             verify_ssl=getattr(self._config.pool, "verify_ssl", True),
             proxy=self._config.proxy,
-            trust_env=self._config.trust_env,
+            # Environment proxies resolve the destination remotely, bypassing
+            # the DNS pin installed by the URL-safety gate.
+            trust_env=(self._config.trust_env and not self._config.enforce_url_safety),
             cookie_jar=self._config.cookie_jar,
         )
         self._resilience = resilience
@@ -267,6 +326,8 @@ class HTTPClient(
             HTTPRetryExhaustedError: When all retry attempts are exhausted.
             HTTPConnectionError: When the connection cannot be established.
             HTTPTimeoutError: When the request times out.
+            HTTPUnsafeURLError: When the target is unsafe or a proxy would bypass
+                URL-safety enforcement.
         """
         # Build typed request context for interceptors
         request_ctx = RequestContext(
@@ -284,10 +345,27 @@ class HTTPClient(
         _kwargs = dict(kwargs)
         _kwargs["headers"] = request_ctx.headers
 
+        if self._config.enforce_url_safety and (
+            getattr(self._pool, "proxy", None) is not None
+            or _kwargs.get("proxy") is not None
+            or getattr(self._pool, "trust_env", False) is True
+        ):
+            raise HTTPUnsafeURLError(
+                "URL safety cannot be enforced through an HTTP proxy; "
+                "disable the proxy or URL-safety gate explicitly"
+            )
+
         # SSRF + redirect policy.  Automatic redirects are disabled; the
         # client follows Location hops itself so the SSRF gate re-validates
         # every target before a connection is attempted (spec finding 4).
         allow_redirects = _kwargs.pop("allow_redirects", None)
+        if allow_redirects is not None and not isinstance(allow_redirects, bool):
+            raise TypeError("allow_redirects must be a bool or None")
+        # aiohttp's automatic redirect handler cannot pass each destination
+        # through the SSRF gate. Treat an explicit True like the safe default:
+        # disable transport-level redirects and follow Location hops below.
+        if allow_redirects is True:
+            allow_redirects = None
         max_hops = max(0, int(getattr(self._config, "max_redirects", 5)))
 
         # Short-circuit immediately when circuit is already open
@@ -357,7 +435,28 @@ class HTTPClient(
                         result = release()
                         if asyncio.iscoroutine(result):
                             await result
-                    _url = str(URL(_url).join(URL(location)))
+                    response_url = str(getattr(raw, "url", _url) or _url)
+                    next_url = str(URL(response_url).join(URL(location)))
+                    # ``params`` were applied to the initial request URL by
+                    # aiohttp; do not append them again to later redirect hops.
+                    _kwargs.pop("params", None)
+                    current_method = _method.upper()
+                    if (status == 303 and current_method != "HEAD") or (
+                        status in (301, 302) and current_method == "POST"
+                    ):
+                        _method = "GET"
+                        for body_key in ("data", "json"):
+                            _kwargs.pop(body_key, None)
+                        _kwargs["headers"] = _strip_body_headers(
+                            _kwargs.get("headers", {})
+                        )
+                    if _url_origin(next_url) != _url_origin(_url):
+                        # Never carry credentials or framing headers to a new
+                        # origin when following an untrusted Location value.
+                        _kwargs["headers"] = _strip_cross_origin_sensitive_headers(
+                            _kwargs.get("headers", {})
+                        )
+                    _url = next_url
         except (
             Exception
         ) as exc:  # HTTP client must normalise all resilience library exceptions
@@ -382,4 +481,4 @@ class HTTPClient(
         for interceptor in self._interceptors:
             raw = await interceptor.intercept_response(raw)
 
-        return await _to_http_response(raw, method)
+        return await _to_http_response(raw, _method)

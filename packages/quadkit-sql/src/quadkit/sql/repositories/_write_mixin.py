@@ -1,18 +1,24 @@
-"""Write mixin for SQLRepository: create, update, soft_delete, delete_by_id, upsert."""
+"""Write mixin for SQLRepository: create, update, delete, upsert."""
 
 from __future__ import annotations
 
-from typing import Any, cast
+from collections.abc import Mapping
+from datetime import UTC, datetime
+from typing import Any, NoReturn, cast
 from uuid import UUID
 
 from quadkit.contracts.data.identifiers import Column
-from quadkit.logging import get_logger
+from quadkit.contracts.data.sql.database import provider_dialect
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.primitives import clock as ambient_clock
 from quadkit.sql.exceptions import (
+    CheckConstraintError,
     DatabaseConnectionError,
     DatabaseError,
     DuplicateKeyError,
     ForeignKeyError,
+    IntegrityError,
+    NotNullViolationError,
     QueryError,
     RepositoryError,
     TenantScopingError,
@@ -20,9 +26,151 @@ from quadkit.sql.exceptions import (
 
 logger = get_logger(__name__)
 
+#: Driver message fragments that identify *which* integrity rule a failed
+#: write broke.
+#:
+#: ``DatabaseProviderProtocol.execute_insert`` reports failure as a result
+#: (``success=False``, ``error_message=str(exc)``), not as an exception, so the
+#: provider's exception type is gone by the time the repository sees it — only
+#: the driver's text survives. Reconstructing the class from that text is the
+#: one honest option left, and doing it here rather than at each call site
+#: means every caller can catch ``DuplicateKeyError`` instead of matching
+#: strings. Patterns are the ones SQLite, Postgres, MySQL/MariaDB and SQL Server
+#: emit for the same four violations.
+_INTEGRITY_SIGNATURES: tuple[tuple[tuple[str, ...], type[Exception]], ...] = (
+    (
+        (
+            "unique constraint",
+            "duplicate key",
+            "duplicate entry",
+            "unique failed",
+            "already exists",
+        ),
+        DuplicateKeyError,
+    ),
+    (
+        (
+            "foreign key constraint",
+            "violates foreign key",
+            "cannot add or update a child row",
+        ),
+        ForeignKeyError,
+    ),
+    (
+        ("not null constraint", "null value in column", "cannot be null"),
+        NotNullViolationError,
+    ),
+    (
+        ("check constraint", "violates check constraint"),
+        CheckConstraintError,
+    ),
+)
+
+
+def _raise_write_failure(message: str, operation: str = "Insert") -> NoReturn:
+    """Raise the typed error a failed write's driver message describes.
+
+    The integrity signatures are properties of the *statement*, not of the
+    operation that issued it: a unique index on ``name`` rejects a duplicate
+    just as loudly through ``UPDATE … SET name = ?`` as through ``INSERT``. The
+    insert path has classified its failures for a while; the update paths did
+    not, so a caller renaming a row onto a taken name saw a generic
+    ``RepositoryError`` and could only tell "that name is taken" from "the
+    database is down" by matching driver text itself.
+
+    Args:
+        message: The provider's ``error_message`` for the failed statement.
+        operation: What was being attempted, for the fallback message.
+
+    Raises:
+        RepositoryError: Or one of its integrity subclasses, when the message
+            names a constraint violation.
+    """
+    lowered = (message or "").lower()
+    for signatures, error_type in _INTEGRITY_SIGNATURES:
+        if any(signature in lowered for signature in signatures):
+            raise error_type(message)
+    raise RepositoryError(
+        f"{operation} failed: {message}" if message else f"{operation} failed"
+    )
+
 
 class _WriteMixin:
-    """Provides ``create``, ``update``, ``soft_delete``, ``delete_by_id``, ``upsert__."""
+    """Provides ``create``, ``update``, ``soft_delete``, ``delete_by_id``,
+    ``delete_where`` and ``upsert``."""
+
+    _TEXT_COLUMN_TYPES: frozenset[str] = frozenset(
+        {
+            "character varying",
+            "character",
+            "varchar",
+            "char",
+            "bpchar",
+            "text",
+            "nvarchar",
+        }
+    )
+
+    def _timestamp_for_column(self, col_name: str, ts: datetime) -> datetime:
+        """Align *ts* timezone awareness with the resolved SQL column type."""
+        col_types = getattr(self, "_table_column_types", None) or {}
+        if (
+            col_types.get(col_name) == "timestamp without time zone"
+            and ts.tzinfo is not None
+        ):
+            return ts.astimezone(UTC).replace(tzinfo=None)
+        return ts
+
+    def _coerce_column_types(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Align Python values with resolved SQL column types (e.g. UUID -> str on VARCHAR)."""
+        col_types = getattr(self, "_table_column_types", None) or {}
+        if not col_types:
+            return data
+        for col_name, value in list(data.items()):
+            if isinstance(value, UUID):
+                base_type = col_types.get(col_name, "").split("(", 1)[0].strip()
+                if base_type in self._TEXT_COLUMN_TYPES:
+                    data[col_name] = str(value)
+        return data
+
+    async def _stamps_updated_at(self) -> bool:
+        """Whether the table has an ``updated_at`` column to stamp.
+
+        ``update`` used to write ``updated_at`` unconditionally, which fails the
+        same way ``create`` did on a table that keeps no audit column — the
+        UPDATE names a column the table does not have. The schema decides, once
+        per repository; an unresolvable schema keeps the old behaviour.
+        """
+        columns = await self.table_columns()  # type: ignore[attr-defined]
+        return columns is None or "updated_at" in columns
+
+    async def _stamped(self, data: dict[str, Any]) -> dict[str, Any]:
+        """Add the audit timestamps *data* omits and the table actually has.
+
+        Both write paths stamp the same two columns, and both must skip the
+        ones the table does not define — see :meth:`SQLRepository.table_columns`
+        for why stamping an absent column is a hard failure rather than a
+        harmless extra field.
+
+        Args:
+            data: The row about to be written; mutated in place.
+
+        Returns:
+            The same mapping, for call chaining.
+        """
+        columns = await self.table_columns()  # type: ignore[attr-defined]
+        self._coerce_column_types(data)
+        now = ambient_clock.now()
+        for name in ("created_at", "updated_at"):
+            if data.get(name) is not None:
+                if isinstance(data[name], datetime):
+                    data[name] = self._timestamp_for_column(name, data[name])
+                continue
+            if columns is None or name in columns:
+                data[name] = self._timestamp_for_column(name, now)
+            else:
+                data.pop(name, None)
+        return data
 
     async def create(self, entity: Any) -> Any:
         """Insert *entity* into the database.
@@ -34,16 +182,16 @@ class _WriteMixin:
             The entity with the generated primary key set.
 
         Raises:
-            RepositoryError: On database failure or constraint violation.
+            RepositoryError: On database failure.
+            IntegrityError: On constraint violation (foreign key, unique,
+                NOT NULL, CHECK). Constraint outcomes propagate typed so
+                callers can answer for them instead of receiving a
+                wrapped, indistinguishable failure.
         """
         try:
-            data = self._entity_to_dict(entity)  # type: ignore[attr-defined]
-
-            now = ambient_clock.now()
-            if "created_at" not in data:
-                data["created_at"] = now
-            if "updated_at" not in data:
-                data["updated_at"] = now
+            data = await self._stamped(
+                self._entity_to_dict(entity)  # type: ignore[attr-defined]
+            )
 
             if self.multi_tenant:  # type: ignore[attr-defined]
                 active_tenant = (
@@ -74,8 +222,15 @@ class _WriteMixin:
 
             result = await self.provider.execute_insert(self.write_table_name, data)  # type: ignore[attr-defined]
             if not result.success:
-                raise RepositoryError(result.error_message or "Insert failed")
-            if result.success and result.inserted_id:
+                _raise_write_failure(result.error_message or "")
+            # Assign the generated key only when the caller did not supply one.
+            # ``inserted_id`` is the driver's ``lastrowid``, which for a table
+            # whose primary key the caller chose (a user id, a uuid) is the
+            # SQLite rowid: assigning it would replace the real key on the
+            # in-memory entity, so the caller would hold a different identity
+            # from the row it just inserted.
+            key_supplied = self.key_field in data  # type: ignore[attr-defined]
+            if result.success and result.inserted_id and not key_supplied:
                 if isinstance(entity, dict):
                     entity[self.key_field] = result.inserted_id  # type: ignore[attr-defined]
                 else:
@@ -87,21 +242,26 @@ class _WriteMixin:
         except TenantScopingError:
             raise
         except RepositoryError:
-            # RepositoryError subclasses DatabaseError — re-raise the
-            # specific error (e.g. "Insert failed: <db detail>") instead of
-            # re-wrapping it into the generic message below.
+            # RepositoryError (and the integrity subclasses ``create`` raises
+            # for a constraint violation) carry the reason the insert failed —
+            # "this key already exists", "this column is not nullable". Wrapping
+            # them in a generic message would throw that away and leave callers
+            # matching driver strings to tell a duplicate from an outage.
+            raise
+        except IntegrityError:
+            # The integrity subclasses are not RepositoryErrors, so without
+            # this they would fall through to the catch-all below and lose the
+            # distinction ``_raise_insert_failure`` just made.
             raise
         except (
             DatabaseError,
             QueryError,
-            DuplicateKeyError,
             ForeignKeyError,
             DatabaseConnectionError,
         ) as err:
-            logger.exception(
-                "Failed create table=%s entity=%s",
-                self.table_name,  # type: ignore[attr-defined]
-                entity,
+            logger.error(
+                "repository_create_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to create entity") from err
 
@@ -140,8 +300,11 @@ class _WriteMixin:
         if key_value is None:
             raise RepositoryError("Entity must have a primary key value for update")
 
-        now = ambient_clock.now()
-        data["updated_at"] = now
+        if await self._stamps_updated_at():
+            data["updated_at"] = self._timestamp_for_column(
+                "updated_at", ambient_clock.now()
+            )
+        self._coerce_column_types(data)
 
         if self.key_field in data:  # type: ignore[attr-defined]
             del data[self.key_field]  # type: ignore[attr-defined]
@@ -167,18 +330,17 @@ class _WriteMixin:
             )
 
             if not result.success:
-                raise RepositoryError(f"Update failed: {result.error_message}")
+                _raise_write_failure(result.error_message or "", "Update")
 
             for hook in getattr(self, "_post_save_hooks", []):
                 await hook(entity)
             return entity
-        except RepositoryError:
+        except (RepositoryError, IntegrityError):
             raise
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed update table=%s entity=%s",
-                self.table_name,  # type: ignore[attr-defined]
-                entity,
+            logger.error(
+                "repository_update_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to update entity") from err
 
@@ -194,8 +356,11 @@ class _WriteMixin:
         if key_value is None:
             raise RepositoryError("Entity must have a primary key value for update")
 
-        now = ambient_clock.now()
-        data["updated_at"] = now
+        if await self._stamps_updated_at():
+            data["updated_at"] = self._timestamp_for_column(
+                "updated_at", ambient_clock.now()
+            )
+        self._coerce_column_types(data)
 
         if self.key_field in data:  # type: ignore[attr-defined]
             del data[self.key_field]  # type: ignore[attr-defined]
@@ -240,13 +405,12 @@ class _WriteMixin:
             return entity
         except OptimisticLockError:
             raise
-        except RepositoryError:
+        except (RepositoryError, IntegrityError):
             raise
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed versioned update table=%s entity=%s",
-                self.table_name,  # type: ignore[attr-defined]
-                entity,
+            logger.error(
+                "repository_versioned_update_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to update entity (optimistic lock)") from err
 
@@ -261,6 +425,7 @@ class _WriteMixin:
 
         Raises:
             RepositoryError: On database failure.
+            IntegrityError: On constraint violation (propagates typed).
         """
         try:
             data = {"deleted_at": ambient_clock.now()}
@@ -272,14 +437,18 @@ class _WriteMixin:
                 [param_key],
             )
             return cast("bool", result.success)
+        except IntegrityError:
+            raise
         except (
             DatabaseError,
             QueryError,
-            ForeignKeyError,
             DatabaseConnectionError,
         ) as err:
-            logger.exception("Failed soft_delete table=%s key=%s", self.table_name, key)  # type: ignore[attr-defined]
-            raise RepositoryError(f"Failed to soft delete entity {key}") from err
+            logger.error(
+                "repository_soft_delete_failed",
+                error_type=safe_error_type(err),
+            )
+            raise RepositoryError("Failed to soft delete entity") from err
 
     async def delete_by_id(self, key: Any) -> bool:
         """Delete entity by primary key.
@@ -292,6 +461,7 @@ class _WriteMixin:
 
         Raises:
             RepositoryError: On database failure.
+            IntegrityError: On constraint violation (propagates typed).
         """
         try:
             del_where = f"{self._key_col} = ?"  # type: ignore[attr-defined]
@@ -312,12 +482,11 @@ class _WriteMixin:
                 return affected > 0
 
             return True
-        except RepositoryError:
+        except (RepositoryError, IntegrityError):
             raise
         except (
             DatabaseError,
             QueryError,
-            ForeignKeyError,
             DatabaseConnectionError,
         ) as err:
             logger.exception(
@@ -326,6 +495,156 @@ class _WriteMixin:
                 key,
             )
             raise RepositoryError("Failed to delete entity") from err
+
+    async def update_where(
+        self,
+        data: Mapping[str, Any],
+        *filter_expressions: Any,
+        **filters: Any,
+    ) -> int:
+        """Update every row matching the filters and return how many changed.
+
+        ``update`` keys the row by its primary key. A conditional write —
+        "advance this task, but only while *this* worker still holds it" — has
+        no primary key to give, and writing it by hand puts the ownership
+        check outside the filter builder. The filters here are the ones
+        ``find_many`` accepts, and the statement goes through the provider's
+        ``execute_update`` so the affected-row count is the driver's.
+
+        A value may be a
+        :class:`~quadkit.contracts.data.identifiers.Delta`, which moves the
+        column relative to itself (``SET quota = quota + ?``) instead of
+        assigning to it. That is the statement a balance needs: read the row,
+        add in the caller and write back is two statements and a lost update
+        when two operators act at once.
+
+        Args:
+            data: Column values to write, or ``Delta`` moves.
+            *filter_expressions: Typed ``Filter`` expressions to AND together.
+            **filters: Keyword equality filters, as in ``find_many``.
+
+        Returns:
+            Number of rows the driver reported as updated. Zero is a real
+            answer, not a failure: it means the filters matched nothing (for
+            example, another worker owns the row now).
+
+        Raises:
+            RepositoryError: When *data* is empty or no filter is supplied —
+                either would rewrite every row in the table.
+            RepositoryError: On database failure.
+        """
+        if not data:
+            raise RepositoryError("update_where requires at least one column value")
+        try:
+            params: list[Any] = []
+            statement = await self._apply_filters_to_query(  # type: ignore[attr-defined]
+                "UPDATE _",  # noqa: S608 -- placeholder table, replaced by execute_update
+                params,
+                dict(filters),
+                True,
+                filter_expressions,
+            )
+            if " WHERE " not in statement:
+                # No filter means every row: refuse rather than let a missing
+                # argument rewrite the table.
+                raise RepositoryError("update_where requires at least one filter")
+            statement, params = self._rls_apply(statement, params, "UPDATE")  # type: ignore[attr-defined]
+            where_clause = statement.split(" WHERE ", 1)[1]
+            result = await self.provider.execute_update(  # type: ignore[attr-defined]
+                self.write_table_name,  # type: ignore[attr-defined]
+                dict(data),
+                where_clause,
+                params,
+            )
+            if not result.success:
+                _raise_write_failure(result.error_message or "", "Update")
+            return int(getattr(result, "affected_rows", 0) or 0)
+        except RepositoryError:
+            raise
+        except IntegrityError:
+            # The integrity subclasses carry *which* rule the statement broke —
+            # "that name is taken", "that column is not nullable". Folding them
+            # into a generic failure would leave the caller matching driver
+            # text, which is the thing the classification exists to prevent.
+            raise
+        except (
+            DatabaseError,
+            QueryError,
+            DatabaseConnectionError,
+        ) as err:
+            logger.error(
+                "repository_update_where_failed",
+                error_type=safe_error_type(err),
+            )
+            raise RepositoryError("Failed to update entities") from err
+
+    async def delete_where(
+        self,
+        *filter_expressions: Any,
+        include_deleted: bool = False,
+        **filters: Any,
+    ) -> int:
+        """Delete every row matching the filters and return how many went.
+
+        ``delete_by_id`` is the only removal a repository offered before this,
+        so a host that needed "drop the rows older than X" wrote the DELETE by
+        hand — outside the filter builder, outside row-level security, and
+        outside the dialect handling. The filters here are the same ones
+        ``find_many`` accepts (typed ``Filter`` expressions or keyword
+        equality), and the statement goes through the provider's
+        ``execute_delete`` so the affected-row count is the driver's.
+
+        Args:
+            *filter_expressions: Typed ``Filter`` expressions to AND together.
+            include_deleted: Also remove soft-deleted rows. Defaults to
+                ``False``, matching ``find_many``: a soft-delete table keeps
+                its tombstones out of a filtered purge unless asked.
+            **filters: Keyword equality filters, as in ``find_many``.
+
+        Returns:
+            Number of rows the driver reported as deleted.
+
+        Raises:
+            RepositoryError: On database failure.
+        """
+        try:
+            params: list[Any] = []
+            statement = await self._apply_filters_to_query(  # type: ignore[attr-defined]
+                "DELETE FROM _",  # noqa: S608 -- placeholder table, replaced by execute_delete
+                params,
+                dict(filters),
+                include_deleted,
+                filter_expressions,
+            )
+            if " WHERE " not in statement:
+                # A repository must not offer "delete everything": an empty
+                # filter is a bug at the call site, and a caller that really
+                # means a purge can say so with an explicit filter.
+                raise RepositoryError("delete_where requires at least one filter")
+            statement, params = self._rls_apply(statement, params, "DELETE")  # type: ignore[attr-defined]
+            where_clause = statement.split(" WHERE ", 1)[1]
+            result = await self.provider.execute_delete(  # type: ignore[attr-defined]
+                self.write_table_name,  # type: ignore[attr-defined]
+                where_clause,
+                params,
+            )
+            if not result.success:
+                raise RepositoryError(f"Delete failed: {result.error_message}")
+            affected = getattr(result, "affected_rows", 0)
+            return int(affected or 0)
+        except RepositoryError:
+            raise
+        except (
+            DatabaseError,
+            QueryError,
+            ForeignKeyError,
+            DatabaseConnectionError,
+        ) as err:
+            logger.error(
+                "repository_delete_where_failed",
+                error_type=safe_error_type(err),
+            )
+            raise RepositoryError("Failed to delete entities") from err
 
     async def upsert(
         self,
@@ -345,14 +664,12 @@ class _WriteMixin:
 
         Raises:
             RepositoryError: On database failure.
+            IntegrityError: On constraint violation (propagates typed).
         """
         try:
-            data = self._entity_to_dict(entity)  # type: ignore[attr-defined]
-            now = ambient_clock.now()
-            if "created_at" not in data:
-                data["created_at"] = now
-            if "updated_at" not in data:
-                data["updated_at"] = now
+            data = await self._stamped(
+                self._entity_to_dict(entity)  # type: ignore[attr-defined]
+            )
 
             if self.key_field not in data or data.get(self.key_field) is None:  # type: ignore[attr-defined]
                 data.pop(self.key_field, None)  # type: ignore[attr-defined]
@@ -365,33 +682,49 @@ class _WriteMixin:
             placeholders = ", ".join("?" for _ in columns)
             params = list(data.values())
 
-            safe_conflict = ", ".join(str(Column(c)) for c in conflict_cols)
-            safe_set = ", ".join(
-                f"{Column(col)} = EXCLUDED.{Column(col)}" for col in update_cols
-            )
-
-            query = (
-                f"INSERT INTO {self._table} "  # type: ignore[attr-defined]  # noqa: S608 -- validated Table()/Column() identifiers, values parameterized
-                f"({', '.join(safe_columns)}) VALUES ({placeholders}) "
-                f"ON CONFLICT ({safe_conflict}) DO UPDATE SET {safe_set}"
-            )
+            safe_columns_sql = ", ".join(safe_columns)
+            if provider_dialect(self.provider) in {"mysql", "mariadb"}:  # type: ignore[attr-defined]
+                # MySQL has no ``ON CONFLICT``: the same upsert is spelled
+                # ``ON DUPLICATE KEY UPDATE`` and the row being inserted is
+                # read back through ``VALUES(col)``. Emitting the Postgres form
+                # there is not a syntax variant, it is a hard failure on the
+                # first write of the first host that runs MySQL.
+                assigned = ", ".join(
+                    f"{Column(col)} = VALUES({Column(col)})" for col in update_cols
+                )
+                query = (
+                    f"INSERT INTO {self._table} "  # type: ignore[attr-defined]  # noqa: S608 -- validated Table()/Column() identifiers, values parameterized
+                    f"({safe_columns_sql}) VALUES ({placeholders}) "
+                    f"ON DUPLICATE KEY UPDATE {assigned}"
+                )
+            else:
+                safe_conflict = ", ".join(str(Column(c)) for c in conflict_cols)
+                assigned = ", ".join(
+                    f"{Column(col)} = EXCLUDED.{Column(col)}" for col in update_cols
+                )
+                query = (
+                    f"INSERT INTO {self._table} "  # type: ignore[attr-defined]  # noqa: S608 -- validated Table()/Column() identifiers, values parameterized
+                    f"({safe_columns_sql}) VALUES ({placeholders}) "
+                    f"ON CONFLICT ({safe_conflict}) DO UPDATE SET {assigned}"
+                )
 
             result = await self.provider.execute_query(query, params)  # type: ignore[attr-defined]
             if not result.success:
-                raise RepositoryError(
-                    f"Upsert failed: {result.error_message}",
-                )
+                _raise_write_failure(result.error_message or "", "Upsert")
             return entity
         except RepositoryError:
+            raise
+        except IntegrityError:
+            # ``upsert`` classifies its failures like ``create`` does; folding
+            # them back into the generic branch would erase that.
             raise
         except (
             DatabaseError,
             QueryError,
-            DuplicateKeyError,
             DatabaseConnectionError,
         ) as err:
-            logger.exception(
-                "Failed upsert table=%s",
-                self.table_name,  # type: ignore[attr-defined]
+            logger.error(
+                "repository_upsert_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to upsert entity") from err

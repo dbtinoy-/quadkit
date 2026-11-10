@@ -102,6 +102,73 @@ class TestHostValidationMiddleware:
         await _run(middleware, scope)
         assert inner_called
 
+    async def test_leading_dot_matches_domain_and_subdomains(self) -> None:
+        """``.example.com`` covers the apex and every subdomain (Django form)."""
+        for host in ("example.com", "api.example.com", "a.b.example.com"):
+            inner_called: list[bool] = []
+            middleware = _make_middleware([".example.com"], called=inner_called)
+            scope = _make_scope(headers=[(b"host", host.encode())])
+
+            await _run(middleware, scope)
+            assert inner_called, host
+
+    async def test_wildcard_requires_a_subdomain(self) -> None:
+        """``*.example.com`` matches subdomains but not the apex itself."""
+        inner_called: list[bool] = []
+        middleware = _make_middleware(["*.example.com"], called=inner_called)
+        await _run(middleware, _make_scope(headers=[(b"host", b"example.com")]))
+        assert not inner_called
+
+        sub_called: list[bool] = []
+        sub_middleware = _make_middleware(["*.example.com"], called=sub_called)
+        await _run(sub_middleware, _make_scope(headers=[(b"host", b"api.example.com")]))
+        assert sub_called
+
+    async def test_suffix_match_respects_label_boundary(self) -> None:
+        """A suffix entry must not accept a lookalike domain."""
+        inner_called: list[bool] = []
+        middleware = _make_middleware([".example.com"], called=inner_called)
+        scope = _make_scope(headers=[(b"host", b"evilexample.com")])
+
+        messages = await _run(middleware, scope)
+        assert not inner_called
+        assert messages[0]["status"] == 400
+
+    async def test_suffix_match_is_case_insensitive_and_port_stripped(self) -> None:
+        inner_called: list[bool] = []
+        middleware = _make_middleware([".Example.COM"], called=inner_called)
+        scope = _make_scope(headers=[(b"host", b"API.EXAMPLE.com:8443")])
+
+        await _run(middleware, scope)
+        assert inner_called
+
+    async def test_preview_style_rotating_hosts_accepted(self) -> None:
+        """Sandbox/preview hosts rotate per session — one suffix entry covers all."""
+        middleware = _make_middleware([".e2b.app"])
+        for port in (3000, 51742, 58080):
+            inner_called: list[bool] = []
+            middleware = _make_middleware([".e2b.app"], called=inner_called)
+            scope = _make_scope(
+                headers=[(b"host", f"{port}-i4p6e95b427s7lzhd7tuv.e2b.app".encode())]
+            )
+
+            await _run(middleware, scope)
+            assert inner_called, port
+
+    def test_bare_wildcard_is_refused(self) -> None:
+        """An allow-anything entry would defeat the validator — fail at wiring."""
+        import pytest
+
+        with pytest.raises(ValueError, match="accept every Host"):
+            _make_middleware(["*"])
+
+    def test_empty_suffix_is_refused(self) -> None:
+        import pytest
+
+        for entry in (".", "*."):
+            with pytest.raises(ValueError, match="empty domain suffix"):
+                _make_middleware([entry])
+
     async def test_ipv6_host_supported(self) -> None:
         inner_called: list[bool] = []
         middleware = _make_middleware(["2001:db8::1"], called=inner_called)

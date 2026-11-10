@@ -178,10 +178,10 @@ vulnerabilities privately per [SECURITY.md](https://github.com/dbtinoy-/quadkit/
 
 ## Stability
 
-Version `0.0.46` in the `0.x` series, released in lockstep with the
-other twelve distributions; APIs may change between minor versions until
-1.0 — pin an exact version (`quadkit-testing==0.0.46`) or a tight range
-(`>=0.0.46,<0.1.0`). Full policy:
+Version `0.0.50` in the `0.x` series, versioned independently of the
+other distributions; APIs may change between minor versions until
+1.0 — pin an exact version (`quadkit-testing==0.0.50`) or a tight range
+(`>=0.0.50,<0.1.0`). Full policy:
 [stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
 ## Links

@@ -117,7 +117,13 @@ async def _always_err(key: str) -> object:
     return Err("down")
 
 
-def _request(host: str = "1.2.3.4", path: str = "/api", method: str = "GET", user_id: str | None = None, headers: dict | None = None):
+def _request(
+    host: str = "1.2.3.4",
+    path: str = "/api",
+    method: str = "GET",
+    user_id: str | None = None,
+    headers: dict | None = None,
+):
     from starlette.requests import Request
 
     scope = {
@@ -125,7 +131,9 @@ def _request(host: str = "1.2.3.4", path: str = "/api", method: str = "GET", use
         "method": method,
         "path": path,
         "root_path": "",
-        "headers": [(k.lower().encode(), v.encode()) for k, v in (headers or {}).items()],
+        "headers": [
+            (k.lower().encode(), v.encode()) for k, v in (headers or {}).items()
+        ],
         "query_string": b"",
         "client": (host, 12345),
     }
@@ -172,9 +180,13 @@ class TestRateLimiterFacade:
     async def test_memory_path_raises_when_exceeded(self) -> None:
         limiter = RateLimiter()
         for _ in range(2):
-            await limiter.check_rate_limit(_request(), max_requests=2, window_seconds=60)
+            await limiter.check_rate_limit(
+                _request(), max_requests=2, window_seconds=60
+            )
         with pytest.raises(RateLimitError) as exc_info:
-            await limiter.check_rate_limit(_request(), max_requests=2, window_seconds=60)
+            await limiter.check_rate_limit(
+                _request(), max_requests=2, window_seconds=60
+            )
         assert exc_info.value.details["retry_after"] == 60
 
     async def test_redis_path(self) -> None:
@@ -185,7 +197,9 @@ class TestRateLimiterFacade:
         assert request.state.rate_limit_remaining == 7
         # now the redis says denied
         with pytest.raises(RateLimitError) as exc_info:
-            await limiter.check_rate_limit(_request(), max_requests=10, window_seconds=60)
+            await limiter.check_rate_limit(
+                _request(), max_requests=10, window_seconds=60
+            )
         assert exc_info.value.details["retry_after"] == 12
         assert len(redis.calls) == 2
         script, numkeys, key, args = redis.calls[0]
@@ -210,7 +224,9 @@ class TestRateLimiterFacade:
         assert request3.state.rate_limit_remaining == 0
         # fourth request in a max-3 window is denied
         with pytest.raises(RateLimitError):
-            await limiter.check_rate_limit(_request(), max_requests=3, window_seconds=60)
+            await limiter.check_rate_limit(
+                _request(), max_requests=3, window_seconds=60
+            )
 
     async def test_limiter_reuse_across_calls(self) -> None:
         limiter = RateLimiter()
@@ -223,7 +239,44 @@ class TestRateLimiterFacade:
         limiter = RateLimiter()  # logs a warning in __init__
         await limiter.check_rate_limit(_request(), max_requests=1, window_seconds=60)
         with pytest.raises(RateLimitError):
-            await limiter.check_rate_limit(_request(), max_requests=1, window_seconds=60)
+            await limiter.check_rate_limit(
+                _request(), max_requests=1, window_seconds=60
+            )
+
+    async def test_namespace_isolates_memory_and_redis_buckets(self) -> None:
+        limiter = RateLimiter()
+        # Exhaust default namespace (max_requests=1)
+        await limiter.check_rate_limit(_request(), max_requests=1, window_seconds=60)
+        with pytest.raises(RateLimitError):
+            await limiter.check_rate_limit(
+                _request(), max_requests=1, window_seconds=60
+            )
+
+        # Distinct "graphql" namespace does not collide with default namespace
+        await limiter.check_rate_limit(
+            _request(),
+            max_requests=1,
+            window_seconds=60,
+            namespace="graphql",
+        )
+        with pytest.raises(RateLimitError):
+            await limiter.check_rate_limit(
+                _request(),
+                max_requests=1,
+                window_seconds=60,
+                namespace="graphql",
+            )
+
+        # Redis key includes namespace prefix when supplied
+        redis = _FakeRedis(responses=[[1, 9]])
+        redis_limiter = RateLimiter(redis_client=redis)
+        await redis_limiter.check_rate_limit(
+            _request(),
+            max_requests=10,
+            window_seconds=60,
+            namespace="graphql",
+        )
+        assert redis.calls[0][2] == "rate_limit:graphql:ip:1.2.3.4"
 
 
 class TestScopeKeys:
@@ -245,7 +298,10 @@ class TestScopeKeys:
     def test_endpoint_scope(self) -> None:
         limiter = RateLimiter()
         request = _request(path="/api/things", method="POST")
-        assert limiter._get_rate_limit_key(request, "endpoint") == "endpoint:POST:/api/things"  # noqa: SLF001
+        assert (
+            limiter._get_rate_limit_key(request, "endpoint")
+            == "endpoint:POST:/api/things"
+        )  # noqa: SLF001
 
     def test_invalid_scope_raises(self) -> None:
         limiter = RateLimiter()

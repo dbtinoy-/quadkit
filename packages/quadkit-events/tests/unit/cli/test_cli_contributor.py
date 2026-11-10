@@ -26,6 +26,7 @@ def test_events_contributor_exposes_expected_generators() -> None:
         "command",
         "query",
         "projection",
+        "use_case",
     }
 
 
@@ -41,6 +42,7 @@ def test_events_contributor_paths_are_package_local() -> None:
         "quadkit.events.cli.generators.command_handler:CommandHandlerGenerator",
         "quadkit.events.cli.generators.query_handler:QueryHandlerGenerator",
         "quadkit.events.cli.generators.projection:ProjectionGenerator",
+        "quadkit.events.cli.generators.use_case:UseCaseGenerator",
     }
 
 

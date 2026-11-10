@@ -13,6 +13,8 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 from uuid import UUID
 
+from quadkit.events.exceptions import EventStoreError
+from quadkit.events.stores._history import read_consistent_history
 from quadkit.events.types import Snapshot, SnapshotStrategy
 
 if TYPE_CHECKING:
@@ -114,8 +116,8 @@ class CompositePolicy(SnapshotPolicy):
 class SnapshotManager(Generic[TState]):
     """Manages snapshot creation and retrieval for aggregates.
 
-    This is the CRITICAL component that transforms O(N) aggregate loading
-    into O(1) by storing and loading snapshots.
+    Snapshots avoid reapplying earlier events; loading still depends on the
+    retained suffix and the event store's version/read implementation.
 
     Example:
         ```python
@@ -183,14 +185,11 @@ class SnapshotManager(Generic[TState]):
         aggregate_id: str | UUID,
         aggregate_type: str,
     ) -> tuple[dict[str, Any] | None, list[Any], int]:
-        # `aggregate_type` is part of the signature for callers but not used here
-        _ = aggregate_type
         """Load aggregate state using snapshot acceleration.
 
-        This is the key method that provides O(1) loading:
-        1. Try to load the latest snapshot
-        2. Load only events AFTER the snapshot version
-        3. Return snapshot state + remaining events
+        Load the latest snapshot and its remaining events, checking that the
+        stream version is stable and the returned suffix has the expected size.
+        The checks do not establish snapshot truth or transactional isolation.
 
         Returns:
             Tuple of (snapshot_state, events_to_replay, starting_version)
@@ -200,14 +199,24 @@ class SnapshotManager(Generic[TState]):
         # Try to get latest snapshot (M-14)
         snapshot = await self._snapshot_store.get_latest(aggregate_key)
 
-        if snapshot:
+        if snapshot is not None:
+            if (
+                str(snapshot.aggregate_id) != aggregate_key
+                or snapshot.aggregate_type != aggregate_type
+                or type(snapshot.version) is not int
+                or snapshot.version < 0
+                or not isinstance(snapshot.state, dict)
+            ):
+                raise EventStoreError(
+                    "Snapshot identity, type, version or state is invalid"
+                )
             state = snapshot.state
             version = snapshot.version
             timestamp = snapshot.timestamp
 
-            # Load only events after snapshot
-            events = await self._event_store.read(
-                aggregate_key, from_version=version + 1
+            # Fail closed on a future snapshot, changing version or short suffix.
+            events = await read_consistent_history(
+                self._event_store, aggregate_key, version
             )
 
             # Update tracking
@@ -218,7 +227,7 @@ class SnapshotManager(Generic[TState]):
             return state, events, version
 
         # No snapshot - load all events
-        events = await self._event_store.read(aggregate_key)
+        events = await read_consistent_history(self._event_store, aggregate_key, 0)
         self._events_since_snapshot[aggregate_key] = len(events)
 
         return None, events, 0
@@ -238,8 +247,19 @@ class SnapshotManager(Generic[TState]):
         """
         aggregate_key = str(aggregate_id)
 
-        # Save events
-        await self._event_store.append(aggregate_key, events, expected_version)
+        if type(expected_version) is not int or expected_version < 0:
+            raise ValueError("expected_version must be a non-negative integer")
+
+        # Do not label state with a calculated version if the store did not
+        # acknowledge that exact version. An invalid acknowledgement may still
+        # mean the append committed, so callers must reconcile before retrying.
+        new_version = await self._event_store.append(
+            aggregate_key, events, expected_version
+        )
+        if type(new_version) is not int or new_version != expected_version + len(
+            events
+        ):
+            raise EventStoreError("Event store returned an unexpected stream version")
 
         # Update event count
         current_count = self._events_since_snapshot.get(aggregate_key, 0)
@@ -248,8 +268,6 @@ class SnapshotManager(Generic[TState]):
         # Check if we should snapshot
         events_since = self._events_since_snapshot[aggregate_key]
         last_time = self._last_snapshot_time.get(aggregate_key)
-        new_version = expected_version + len(events)
-
         should_snapshot = self._policy.should_snapshot(
             events_since_snapshot=events_since,
             last_snapshot_time=last_time,
@@ -311,15 +329,34 @@ class SnapshotManager(Generic[TState]):
         aggregate_id: str | UUID,
         aggregate_type: str,
         state_extractor: Callable[[], dict[str, Any]],
+        *,
+        expected_version: int | None = None,
     ) -> Snapshot:
-        """Force creation of a snapshot regardless of policy."""
+        """Snapshot caller-supplied state at the store's current version.
+
+        The caller must ensure that the state actually represents that version.
+        This operation is not atomic with event writes or state extraction.
+        """
         aggregate_key = str(aggregate_id)
+        if expected_version is not None and (
+            type(expected_version) is not int or expected_version < 0
+        ):
+            raise ValueError("expected_version must be a non-negative integer")
+        get_version = getattr(self._event_store, "get_stream_version", None)
+        if not callable(get_version):
+            raise EventStoreError("Event store does not expose a stream version")
 
-        # Get current version from event store
-        events = await self._event_store.read(aggregate_key)
-        version = len(events)
-
+        version = await get_version(aggregate_key)
+        if type(version) is not int or version < 0:
+            raise EventStoreError("Event store returned an invalid stream version")
+        if expected_version is not None and version != expected_version:
+            raise EventStoreError(
+                "Event store stream version did not match expected version"
+            )
         state = state_extractor()
+        version_after = await get_version(aggregate_key)
+        if type(version_after) is not int or version_after != version:
+            raise EventStoreError("Event store stream version changed during snapshot")
 
         return await self.create_snapshot(
             aggregate_id=aggregate_id,
@@ -334,7 +371,13 @@ class SnapshotManager(Generic[TState]):
         keep_count: int | None = None,
     ) -> int:
         """Clean up old snapshots for an aggregate."""
-        count = keep_count or self._config.max_snapshots_per_aggregate
+        count = (
+            self._config.max_snapshots_per_aggregate
+            if keep_count is None
+            else keep_count
+        )
+        if type(count) is not int or count < 0:
+            raise ValueError("keep_count must be a non-negative integer")
         count_deleted: int = await self._snapshot_store.delete_old_snapshots(
             aggregate_id, count
         )

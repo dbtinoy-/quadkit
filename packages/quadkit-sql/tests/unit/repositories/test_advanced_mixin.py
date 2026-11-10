@@ -98,6 +98,155 @@ class TestAggregate:
         assert p.params[0] == ["active"]
         assert "status" in p.queries[0]
 
+    async def test_typed_filters_reach_the_where_clause(self) -> None:
+        """A windowed aggregate takes its bounds as typed filters."""
+        from quadkit.sql.repositories.filter_objects import F
+
+        repo, p = _repo([{"count": 3, "quota_sum": 90}])
+        result = await repo.aggregate(
+            count="id",
+            sum="quota",
+            filter_expressions=(F("log_time") >= "2026-01-01", F("log_time") <= "2026-01-02"),
+        )
+        assert result == {"count": 3, "quota_sum": 90}
+        query = p.queries[0]
+        assert 'WHERE "log_time" >= ? AND "log_time" <= ?' in query
+        assert p.params[0] == ["2026-01-01", "2026-01-02"]
+
+    async def test_typed_and_keyword_filters_combine(self) -> None:
+        """Keyword equality and typed predicates land in one statement."""
+        from quadkit.sql.repositories.filter_objects import F
+
+        repo, p = _repo([{"count": 1}])
+        await repo.aggregate(count="id", filter_expressions=(F("status") >= 400,), user_id="u1")
+        assert '"status" >= ?' in p.queries[0]
+        assert '"user_id" = ?' in p.queries[0]
+        assert p.params[0] == [400, "u1"]
+
+    async def test_bucket_is_projected_and_grouped(self) -> None:
+        """A bucket is a computed key: selected under its alias and grouped."""
+        from quadkit.sql.repositories.filter_objects import Bucket
+
+        repo, p = _repo([{"created_at": 0, "model": "gpt-4o", "count": 2}])
+        result = await repo.aggregate(
+            count="*",
+            group_by="model",
+            bucket=Bucket("start_time", 3600, "created_at"),
+        )
+        query = p.queries[0]
+        expression = '("start_time" - ("start_time" % 3600))'
+        assert f'SELECT {expression} AS "created_at", "model", COUNT(*) AS count' in query
+        assert query.endswith(f'GROUP BY "model", {expression}')
+        assert result == [{"created_at": 0, "model": "gpt-4o", "count": 2}]
+
+    async def test_count_distinct_counts_values_not_rows(self) -> None:
+        """"How many users" is `COUNT(DISTINCT col)`, not a fetched list.
+
+        A plain `count` answers "how many rows", so a panel asking for the
+        number of distinct users with a session had to read every row and count
+        in Python. The aggregate projects the distinct count directly.
+        """
+        repo, p = _repo([{"count_distinct": 3}])
+        result = await repo.aggregate(count_distinct="user_id")
+
+        assert 'SELECT COUNT(DISTINCT "user_id") AS count_distinct' in p.queries[0]
+        # No bare COUNT(*) is added alongside it.
+        assert "COUNT(*) AS count" not in p.queries[0]
+        assert result == {"count_distinct": 3}
+
+    async def test_count_and_count_distinct_can_share_a_statement(self) -> None:
+        """Both counts can be projected together, and both are aliased."""
+        repo, p = _repo([{"count": 10, "count_distinct": 4}])
+        result = await repo.aggregate(count="*", count_distinct="user_id")
+
+        query = p.queries[0]
+        assert 'COUNT(*) AS count' in query
+        assert 'COUNT(DISTINCT "user_id") AS count_distinct' in query
+        assert result == {"count": 10, "count_distinct": 4}
+
+    async def test_date_bucket_projects_the_calendar_day(self) -> None:
+        """A date bucket groups on ``DATE(column)``, portable across the dialects.
+
+        "Sign-ups per day" is a projection of an expression, so it could not be
+        expressed through ``aggregate``'s column-name ``group_by``; callers
+        hand-wrote the statement or fetched every row and counted in Python.
+        """
+        from quadkit.sql.repositories.filter_objects import DateBucket
+
+        repo, p = _repo([{"day": "2026-01-02", "count": 3}])
+        result = await repo.aggregate(count="*", bucket=DateBucket("created_at", "day"))
+
+        query = p.queries[0]
+        assert 'SELECT DATE("created_at") AS "day", COUNT(*) AS count' in query
+        assert query.endswith('GROUP BY DATE("created_at")')
+        assert result == [{"day": "2026-01-02", "count": 3}]
+
+    async def test_date_bucket_accepts_several_keys(self) -> None:
+        """A date bucket and a numeric bucket share one list and one GROUP BY."""
+        from quadkit.sql.repositories.filter_objects import Bucket, DateBucket
+
+        repo, p = _repo([{"day": "2026-01-02", "model": "gpt-4o", "count": 1}])
+        await repo.aggregate(
+            count="*",
+            group_by="model",
+            bucket=(DateBucket("created_at", "day"), Bucket("start_time", 3600, "hour")),
+        )
+
+        query = p.queries[0]
+        assert 'DATE("created_at") AS "day"' in query
+        assert '("start_time" - ("start_time" % 3600)) AS "hour"' in query
+        assert query.endswith('GROUP BY "model", DATE("created_at"), ("start_time" - ("start_time" % 3600))')
+
+    async def test_date_bucket_rejects_a_bad_column_or_alias(self) -> None:
+        """Both halves are validated before any SQL exists."""
+        from quadkit.contracts.data.sql.sql import InvalidIdentifierError
+
+        from quadkit.sql.repositories.filter_objects import DateBucket
+
+        with pytest.raises((ValueError, InvalidIdentifierError)):
+            DateBucket('created_at"; DROP TABLE t; --', "day")
+        with pytest.raises((ValueError, InvalidIdentifierError)):
+            DateBucket("created_at", 'day"')
+
+    async def test_bucket_alone_groups_the_statement(self) -> None:
+        """`bucket` without `group_by` still returns one row per bucket."""
+        from quadkit.sql.repositories.filter_objects import Bucket
+
+        repo, p = _repo([{"created_at": 7200, "count": 5}])
+        await repo.aggregate(count="*", bucket=Bucket("start_time", 3600, "created_at"))
+        assert p.queries[0].endswith('GROUP BY ("start_time" - ("start_time" % 3600))')
+
+    async def test_bucket_accepts_several_keys(self) -> None:
+        """Two buckets project and group together, in declaration order."""
+        from quadkit.sql.repositories.filter_objects import Bucket
+
+        repo, p = _repo([{"created_at": 0, "id_sum": 1}])
+        await repo.aggregate(
+            sum="id",
+            bucket=[Bucket("start_time", 3600, "created_at"), Bucket("end_time", 86_400, "day")],
+        )
+        query = p.queries[0]
+        assert '"start_time" - ("start_time" % 3600)) AS "created_at"' in query
+        assert '"end_time" - ("end_time" % 86400)) AS "day"' in query
+        # Declaration order is preserved in the projection, and each key is
+        # both selected and grouped.
+        assert query.index("created_at") < query.index('"day"')
+        assert "GROUP BY" in query and query.count("% 86400") == 2
+
+    async def test_bucket_rejects_a_bad_size_or_column(self) -> None:
+        """Both halves are validated before any SQL is built."""
+        from quadkit.contracts.data.sql.sql import InvalidIdentifierError
+        from quadkit.sql.repositories.filter_objects import Bucket
+
+        with pytest.raises(ValueError):
+            Bucket("start_time", 0, "created_at")
+        with pytest.raises(ValueError):
+            Bucket("start_time", True, "created_at")  # type: ignore[arg-type]
+        with pytest.raises(InvalidIdentifierError):
+            Bucket("start_time; DROP TABLE x", 3600, "created_at")
+        with pytest.raises(InvalidIdentifierError):
+            Bucket("start_time", 3600, "created at")
+
     async def test_failure_raises_repository_error(self) -> None:
         from quadkit.sql.exceptions import RepositoryError
 

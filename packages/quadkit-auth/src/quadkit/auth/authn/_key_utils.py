@@ -54,4 +54,23 @@ def normalize_jwt_keys(
     return result
 
 
-__all__ = ["normalize_jwt_keys"]
+def rsa_key_material(private_pem: str) -> dict[str, SecretStr]:
+    """Pair an RSA signing key with its public verification key."""
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
+    private = serialization.load_pem_private_key(private_pem.encode(), password=None)
+    if not isinstance(private, RSAPrivateKey):
+        raise TypeError("JWT RSA algorithm requires an RSA private key")
+    public = (
+        private.public_key()
+        .public_bytes(
+            serialization.Encoding.PEM,
+            serialization.PublicFormat.SubjectPublicKeyInfo,
+        )
+        .decode("utf-8")
+    )
+    return {"private": SecretStr(private_pem), "public": SecretStr(public)}
+
+
+__all__ = ["normalize_jwt_keys", "rsa_key_material"]

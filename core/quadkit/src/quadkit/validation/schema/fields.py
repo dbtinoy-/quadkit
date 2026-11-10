@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pydantic import AliasChoices as AliasChoices
 from pydantic import ConfigDict as ConfigDict
 from pydantic import EmailStr as EmailStr
 from pydantic import Field as Field
@@ -27,14 +28,30 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 __all__ = [
+    "AliasChoices",
     "ConfigDict",
     "EmailStr",
     "Field",
     "HttpUrl",
     "SecretStr",
+    "computed_field",
     "field_validator",
     "model_validator",
 ]
+
+
+def computed_field(func: Any = None, **kwargs: Any) -> Any:
+    """Mark a method or property as a computed field included in ``DomainModel.model_dump()``."""
+
+    def _wrap(target: Any) -> Any:
+        raw: Any = target.fget if isinstance(target, property) else target
+        if raw is not None:
+            raw._computed_field = True
+        return target if isinstance(target, property) else property(target)
+
+    if func is not None:
+        return _wrap(func)
+    return _wrap
 
 
 def field_validator(

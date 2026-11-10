@@ -78,6 +78,9 @@ class WebProvider(Provider):
 
     name = "web"
     priority = ProviderPriority.PRESENTATION
+    # Conditional GraphQL discovery needs its declarative bindings in place.
+    # The existing optional lifecycle edge also preserves web-only applications.
+    optional_dependencies: tuple[str, ...] = ("graphql",)
 
     config_key: str | None = "web"
     config_model: type[Any] | None = WebConfig
@@ -403,9 +406,13 @@ class WebProvider(Provider):
 
         # 2. Authentication
         if self.web_config.enable_auth:
-            await AuthIntegration.configure(
+            authentication_documentation = await AuthIntegration.configure(
                 app, cast("Any", container), self.web_config
             )
+            if self.openapi_generator is not None:
+                self.openapi_generator.authentication_middleware = (
+                    authentication_documentation
+                )
 
         # 3. GraphQL - WebSocket routes (HTTP handled by web contributor)
         await GraphQLIntegration.configure(app, container)

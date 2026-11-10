@@ -16,6 +16,7 @@ Typical usage::
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from functools import lru_cache
 import re
 from typing import Final
@@ -263,6 +264,58 @@ class Schema(Identifier):
     """A validated SQL schema name."""
 
 
+@dataclass(frozen=True)
+class Delta:
+    """A relative column assignment: ``col = col + amount``.
+
+    A counter is not a value the caller knows. Moving a balance down by a
+    refund, up by a credit grant, or sideways by a rollback has to read and
+    write in one statement — ``SET quota = quota + ?`` — or two concurrent
+    callers each write a total derived from a stale read and one of the two
+    movements disappears. Rewriting the statement by hand to get that is what
+    puts a raw ``UPDATE`` outside the repository, its filters and its
+    row-level security, so the provider's update path accepts the arithmetic
+    directly:
+
+    Example::
+
+        await repo.update_where(
+            {"quota": Delta("quota", -credits)},
+            F("user_id") == tenant_id,
+        )
+
+    ``amount`` is bound as a parameter, never interpolated; only the column
+    name is rendered into the statement, and it goes through :class:`Column`
+    in the constructor, so an unquotable name fails here rather than at the
+    driver. A negative amount emits ``col + -N``, which every supported dialect
+    reads as subtraction.
+    """
+
+    field_name: str
+    amount: int | float
+
+    def __post_init__(self) -> None:
+        """Validate the column name and the amount."""
+        # Constructing the Column validates and quotes the name; it raises
+        # ``InvalidIdentifierError`` here rather than letting a bad column
+        # reach the statement builder.
+        _ = self.column
+        # ``bool`` is an ``int``; a flag is not a movement, and silently
+        # adding ``True`` to a balance is a bug that reads as arithmetic.
+        if isinstance(self.amount, bool) or not isinstance(self.amount, (int, float)):
+            msg = f"Delta amount must be a number, got {type(self.amount).__name__}"
+            raise TypeError(msg)
+
+    @property
+    def column(self) -> Column:
+        """The validated, quoted column being moved."""
+        return Column(self.field_name)
+
+    def to_sql(self) -> str:
+        """Render the assignment's right-hand side: ``"col" + ?``."""
+        return f"{self.column} + ?"
+
+
 # ---------------------------------------------------------------------------
 # Composite types
 # ---------------------------------------------------------------------------
@@ -389,6 +442,7 @@ __all__ = [
     "DEFAULT_MAX_IDENTIFIER_LENGTH",
     "MAX_IDENTIFIER_LENGTHS",
     "Column",
+    "Delta",
     "Identifier",
     "QualifiedTable",
     "Schema",

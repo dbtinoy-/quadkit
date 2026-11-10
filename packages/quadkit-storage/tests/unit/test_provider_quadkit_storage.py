@@ -1,14 +1,15 @@
 """Unit tests for storage provider"""
 
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from quadkit.contracts import BlobStoreProtocol
+from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.di import Container
-from quadkit.storage.config import StorageLocalConfig, StorageConfig
 from quadkit.storage.backends.local import LocalDriver
 from quadkit.storage.backends.memory import MemoryDriver
+from quadkit.storage.config import StorageConfig, StorageLocalConfig
 from quadkit.storage.di.provider import StorageProvider
 
 
@@ -136,6 +137,30 @@ class TestStorageProvider:
         result = await provider.health_check()
         assert result.status.value == "healthy"
         assert result.details["driver"] == "memory"
+
+    @pytest.mark.asyncio
+    async def test_health_check_replaces_zero_duration_on_frozen_result(self):
+        """A zero-duration result is timed without mutating the frozen result."""
+        provider = StorageProvider(StorageConfig(default_driver="memory"))
+        await provider.register(Container())
+        original = HealthCheckResult(
+            component="storage.memory",
+            status=HealthStatus.HEALTHY,
+        )
+
+        with (
+            patch.object(
+                MemoryDriver,
+                "health_check",
+                new=AsyncMock(return_value=original),
+            ),
+            patch("time.time", side_effect=[1.0, 2.0, 2.25]),
+        ):
+            result = await provider.health_check()
+
+        assert result.duration_ms == pytest.approx(250.0)
+        assert original.duration_ms == 0.0
+        assert result is not original
 
     # ------------------------------------------------------------------
     # Config validation tests (P0: fail fast with clear error messages)

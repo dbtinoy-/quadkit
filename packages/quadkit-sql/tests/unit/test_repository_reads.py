@@ -1,8 +1,5 @@
 """Repository read operations: find/exists/count."""
 
-#!/usr/bin/env python3
-"""Unit tests for RepositoryProtocol"""
-
 from typing import Any
 from unittest.mock import AsyncMock, Mock
 
@@ -10,8 +7,6 @@ import pytest
 
 from quadkit.sql.exceptions import DatabaseError, RepositoryError
 from quadkit.sql.repositories.base import SQLRepository
-
-
 
 
 class TestRepository:
@@ -96,7 +91,7 @@ class TestRepository:
         """Test finding entity by ID with database failure"""
         mock_provider.execute_query.side_effect = DatabaseError("database error")
 
-        with pytest.raises(RepositoryError, match="Failed to find entity by id 1"):
+        with pytest.raises(RepositoryError, match="Failed to find entity"):
             await concrete_repository.find_by_id(1)
 
     @pytest.mark.asyncio

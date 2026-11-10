@@ -16,8 +16,7 @@ from quadkit.sql.exceptions import (
     DatabaseConnectionError,
     DatabaseError,
     DatabaseTimeoutError,
-    DuplicateKeyError,
-    ForeignKeyError,
+    IntegrityError,
     QueryError,
 )
 
@@ -174,13 +173,19 @@ class _QueryMixin:
                 await self.db_provider.execute_insert(table, data),  # type: ignore[attr-defined]
             )
         except (QueryError, DatabaseError) as exc:
+            # Integrity violations (foreign key, unique, NOT NULL, CHECK)
+            # are expected, caller-actionable outcomes: the caller can
+            # distinguish them by type and answer for them. Folding them
+            # into ``success=False`` would destroy that distinction and
+            # push callers toward parsing error strings, so the whole
+            # family propagates typed — as duplicate/foreign-key errors
+            # already did on this path.
             if isinstance(
                 exc,
                 (
                     DatabaseConnectionError,
                     DatabaseTimeoutError,
-                    DuplicateKeyError,
-                    ForeignKeyError,
+                    IntegrityError,
                 ),
             ):
                 raise
@@ -208,7 +213,10 @@ class _QueryMixin:
                 await self.db_provider.execute_update(table, data, where, params),  # type: ignore[attr-defined]
             )
         except (QueryError, DatabaseError) as exc:
-            if isinstance(exc, (DatabaseConnectionError, DatabaseTimeoutError)):
+            if isinstance(
+                exc,
+                (DatabaseConnectionError, DatabaseTimeoutError, IntegrityError),
+            ):
                 raise
             return UpdateResult(
                 success=False,
@@ -229,7 +237,10 @@ class _QueryMixin:
                 await self.db_provider.execute_delete(table, where, params),  # type: ignore[attr-defined]
             )
         except (QueryError, DatabaseError) as exc:
-            if isinstance(exc, (DatabaseConnectionError, DatabaseTimeoutError)):
+            if isinstance(
+                exc,
+                (DatabaseConnectionError, DatabaseTimeoutError, IntegrityError),
+            ):
                 raise
             return DeleteResult(
                 success=False,

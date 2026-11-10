@@ -39,6 +39,7 @@ if TYPE_CHECKING:
         LoggerFactoryImpl,
         get_logger,
     )
+    from quadkit.logging.safe import safe_error_type as safe_error_type
     from quadkit.logging.types import LogLevel as LogLevel
 
 _LAZY_IMPORTS: dict[str, str] = {
@@ -67,6 +68,8 @@ _LAZY_IMPORTS: dict[str, str] = {
     "LoggingConfig": "quadkit.logging.config.models",
     # provider
     "LoggingProvider": "quadkit.logging.di.provider",
+    # safe error reporting
+    "safe_error_type": "quadkit.logging.safe",
 }
 
 # Logger is a public alias for LoggerProtocol (same module, different attr name).
@@ -118,4 +121,5 @@ __all__ = (
     "configure_logging",
     "get_logger",
     "reset_logging",
+    "safe_error_type",
 )

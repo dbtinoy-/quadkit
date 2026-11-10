@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-cli"
-version = "0.0.46"
+version = "0.0.50"
 description = "Command-line interface for Quadkit Framework - Project scaffolding, code generation, and development tools"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -33,12 +33,12 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "typer[all]>=0.9.0,<1",
+    "typer>=0.9.0,<1",
     "click>=8.1.0,<9",
     "rich>=13.0.0,<14",
     "jinja2>=3.1.0,<4",
-    "quadkit>=0.0.2",
-    "quadkit-contracts>=0.0.2",
+    "quadkit>=0.0.50",
+    "quadkit-contracts>=0.0.50",
     "pyyaml>=6.0,<7",
     "httpx>=0.25.0,<1",
     "watchfiles>=0.21.0,<2",

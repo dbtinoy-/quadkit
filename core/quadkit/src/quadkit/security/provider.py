@@ -18,6 +18,8 @@ from quadkit.contracts.security import (
     HasherProtocol,
     InputSanitizerProtocol,
     KeyDerivationProtocol,
+    SecretNotFoundError,
+    SecretStoreProtocol,
 )
 from quadkit.di.provider import Provider, ProviderPriority
 from quadkit.logging import get_logger
@@ -25,11 +27,15 @@ from quadkit.security.config import HashingConfig, InputSanitizerConfig, Securit
 from quadkit.security.guards.chain import GuardChainImpl
 from quadkit.security.hashing import PBKDF2KDF, Blake2bHasher, Sha256Hasher
 from quadkit.security.sanitization.sanitizer import InputSanitizer
+from quadkit.security.secrets.store import EnvSecretStore
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from quadkit.contracts.core.di import (
         BootContainerProtocol,
         ContainerRegistrarProtocol,
+        ContainerResolverProtocol,
     )
 
 logger = get_logger(__name__)
@@ -147,4 +153,90 @@ class SecurityProvider(Provider):
         """No resources to release."""
 
 
-__all__ = ["SecurityProvider"]
+class EnvSecretsProvider(Provider):
+    """DI provider for :class:`~quadkit.security.secrets.EnvSecretStore`.
+
+    Registers both ``EnvSecretStore`` and ``SecretStoreProtocol`` singletons,
+    and validates ``required_keys`` during ``boot()`` (failing closed in
+    production while logging structured warnings in non-production profiles).
+    """
+
+    name = "env_secrets"
+    priority = ProviderPriority.INFRASTRUCTURE
+
+    def __init__(
+        self,
+        *,
+        required_keys: Sequence[str] | None = None,
+        clear_after_read: bool = False,
+    ) -> None:
+        super().__init__()
+        self._required_keys: tuple[str, ...] = tuple(required_keys or ())
+        self._clear_after_read = clear_after_read
+        self._store: EnvSecretStore | None = None
+
+    async def register(self, container: ContainerRegistrarProtocol) -> None:
+        """Register ``EnvSecretStore`` under concrete and protocol types."""
+        store = EnvSecretStore(clear_after_read=self._clear_after_read)
+        self._store = store
+        container.singleton(EnvSecretStore, store)
+        container.singleton(SecretStoreProtocol, store)
+
+    async def boot(self, container: ContainerResolverProtocol) -> None:
+        """Validate required secrets against the active environment."""
+        if not self._required_keys:
+            return
+
+        store = self._store
+        if store is None:
+            store = await container.resolve(EnvSecretStore)
+            self._store = store
+
+        from quadkit.config import QuadkitConfig
+
+        quadkit_config = await container.resolve_optional(QuadkitConfig)
+        is_prod = (
+            bool(quadkit_config.is_production) if quadkit_config is not None else False
+        )
+
+        missing = [key for key in self._required_keys if not store.has_secret(key)]
+        if not missing:
+            logger.info(
+                "required_secrets_verified",
+                verified_count=len(self._required_keys),
+            )
+            return
+
+        if is_prod:
+            joined = ", ".join(missing)
+            raise SecretNotFoundError(f"Missing required production secrets: {joined}")
+
+        logger.warning(
+            "missing_secrets_non_production",
+            missing_keys=missing,
+        )
+
+    async def health_check(self, timeout: float = 5.0) -> HealthCheckResult:
+        """Report secret-store availability and required-key status."""
+        store = self._store
+        if store is None:
+            return HealthCheckResult(
+                component="env_secrets",
+                status=HealthStatus.DEGRADED,
+                message="EnvSecretStore not yet registered",
+            )
+        missing = [key for key in self._required_keys if not store.has_secret(key)]
+        if missing:
+            return HealthCheckResult(
+                component="env_secrets",
+                status=HealthStatus.DEGRADED,
+                message=f"Missing configured secret keys: {', '.join(missing)}",
+            )
+        return HealthCheckResult(
+            component="env_secrets",
+            status=HealthStatus.HEALTHY,
+            message="Environment secret store operational",
+        )
+
+
+__all__ = ["EnvSecretsProvider", "SecurityProvider"]

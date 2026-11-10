@@ -38,7 +38,7 @@ async def test_slo_monitor_and_worker_resolve_after_boot_with_task_manager():
 
     container = Container()
     task_manager = BackgroundTaskManager()
-    container.singleton(TaskManagerProtocol, task_manager)  # type: ignore[type-abstract]
+    container.singleton(TaskManagerProtocol, task_manager)
 
     await provider.register(container)
     await provider.boot(container)
@@ -91,3 +91,28 @@ async def test_slo_types_not_registered_when_slo_disabled():
     assert not container.has(SLOEvaluationWorker)
 
     await provider.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_default_logging_alert_dispatcher_registered_and_overridable() -> None:
+    """MonitorProvider registers LoggingAlertDispatcher by default without overriding custom bindings."""
+    from quadkit.contracts.observability.metrics import AlertDispatcherProtocol
+    from quadkit.monitor.alerts.alerting import LoggingAlertDispatcher
+
+    provider = MonitorProvider(backend=_make_backend(), config=MonitorConfig())
+    container = Container()
+    await provider.register(container)
+
+    resolved = await container.resolve(AlertDispatcherProtocol)
+    assert isinstance(resolved, LoggingAlertDispatcher)
+
+    # Custom binding registered beforehand wins over the default
+    custom_container = Container()
+    custom_dispatcher = AsyncMock(spec=AlertDispatcherProtocol)
+    custom_container.singleton(AlertDispatcherProtocol, custom_dispatcher)
+    custom_provider = MonitorProvider(backend=_make_backend(), config=MonitorConfig())
+    await custom_provider.register(custom_container)
+
+    assert await custom_container.resolve(AlertDispatcherProtocol) is custom_dispatcher
+    await provider.shutdown()
+    await custom_provider.shutdown()

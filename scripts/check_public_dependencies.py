@@ -34,6 +34,11 @@ PUBLISHED_DISTRIBUTIONS = frozenset(
         "quadkit-tasks",
         "quadkit-http",
         "quadkit-monitor",
+        "quadkit-ai-llm",
+        "quadkit-ai-agents",
+        "quadkit-ai-mcp",
+        "quadkit-workflow",
+        "quadkit-notification",
     }
 )
 DISTRIBUTION_NAME = re.compile(r"^([A-Za-z0-9][A-Za-z0-9._-]*)")

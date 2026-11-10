@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from quadkit.contracts.infra.cache.protocols import CacheBackendProtocol
+from quadkit.contracts.infra.redis import RedisClientProtocol
 from quadkit.di.module import DynamicModule, Module, module
 
 if TYPE_CHECKING:
@@ -63,6 +64,7 @@ class CacheModule(Module):
             providers=[provider],
             exports=[
                 CacheBackendProtocol,
+                RedisClientProtocol,
                 SemanticCacheProtocol,
                 CacheAdminContributor,
             ],
@@ -96,7 +98,7 @@ class CacheModule(Module):
         return DynamicModule(
             module=cls,
             providers=[CacheProvider(config=config)],
-            exports=[CacheBackendProtocol],
+            exports=[CacheBackendProtocol, RedisClientProtocol],
         )
 
 

@@ -118,6 +118,10 @@ if TYPE_CHECKING:
         StreamNotFoundError,
         WebhookDeliveryError,
     )
+    from quadkit.events.handlers.di_binder import (
+        bind_event_handler,
+        subscribe_event_handlers,
+    )
     from quadkit.events.handlers.registry import (
         HandlerRegistry,
     )
@@ -382,6 +386,15 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "from_bus": ("quadkit.events.reactive", "from_bus"),
     "from_store": ("quadkit.events.reactive", "from_store"),
     "retry_with_resilience": ("quadkit.events.reactive", "retry_with_resilience"),
+    # DI handler binding
+    "bind_event_handler": (
+        "quadkit.events.handlers.di_binder",
+        "bind_event_handler",
+    ),
+    "subscribe_event_handlers": (
+        "quadkit.events.handlers.di_binder",
+        "subscribe_event_handlers",
+    ),
 }
 
 

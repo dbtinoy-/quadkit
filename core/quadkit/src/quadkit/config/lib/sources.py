@@ -12,7 +12,7 @@ from typing import Any, TypeVar
 from quadkit.config.lib.merge import deep_merge, interpolate_env_vars
 from quadkit.contracts.exceptions import ConfigurationError
 from quadkit.contracts.exceptions.domain import ValidationError
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 T = TypeVar("T")
 
@@ -116,38 +116,35 @@ class FileConfigSource(ConfigSource):
         self._path = Path(path)
 
     def load_sync(self) -> dict[str, Any]:
-        if not self._path.exists():
-            return {}
         try:
+            if not self._path.exists():
+                return {}
             contents = self._path.read_text(encoding="utf-8")
             return self._parse(contents)
-        except (OSError, UnicodeDecodeError) as err:
-            raise ConfigurationError(
-                f"Failed to load config from {self._path}: {err}",
-            ) from err
+        except (OSError, UnicodeDecodeError):
+            raise ConfigurationError("Failed to load config file") from None
 
     async def load(self) -> dict[str, Any]:
         import anyio
 
         p = anyio.Path(self._path)
-        if not await p.exists():
-            return {}
         try:
+            if not await p.exists():
+                return {}
             contents = await p.read_text(encoding="utf-8")
             return self._parse(contents)
-        except (OSError, UnicodeDecodeError) as err:
-            raise ConfigurationError(
-                f"Failed to load config from {self._path}: {err}",
-            ) from err
+        except (OSError, UnicodeDecodeError):
+            raise ConfigurationError("Failed to load config file") from None
 
     def _parse(self, contents: str) -> dict[str, Any]:
         """Parse JSON or YAML content."""
         if self._path.suffix.lower() == ".json":
-            data = json.loads(contents)
+            try:
+                data = json.loads(contents)
+            except json.JSONDecodeError:
+                raise ConfigurationError("Config file contains invalid JSON") from None
             if not isinstance(data, dict):
-                raise ConfigurationError(
-                    f"Config file {self._path} must contain a JSON object",
-                )
+                raise ConfigurationError("Config file must contain a JSON object")
             return data
 
         # Try JSON first, then YAML
@@ -161,17 +158,17 @@ class FileConfigSource(ConfigSource):
         try:
             import yaml
 
-            data = yaml.safe_load(contents)
+            try:
+                data = yaml.safe_load(contents)
+            except yaml.YAMLError:
+                raise ConfigurationError("Config file contains invalid YAML") from None
             if not isinstance(data, dict):
-                raise ConfigurationError(
-                    f"Config file {self._path} must contain a mapping",
-                )
+                raise ConfigurationError("Config file must contain a mapping")
             return data
-        except ImportError as err:
+        except ImportError:
             raise ConfigurationError(
-                f"YAML support not available for {self._path}. "
-                "Install PyYAML: pip install pyyaml",
-            ) from err
+                "YAML support is not available. Install PyYAML: pip install pyyaml"
+            ) from None
 
     def get_name(self) -> str:
         return f"file({self._path})"
@@ -261,11 +258,10 @@ class DirectoryConfigSource(ConfigSource):
                     deep_merge(merged, {stem: data})
                 else:
                     deep_merge(merged, data)
-            except (OSError, json.JSONDecodeError, ConfigurationError):
+            except (OSError, json.JSONDecodeError, ConfigurationError) as exc:
                 self._logger.warning(
-                    "Failed to load config from %s",
-                    path,
-                    exc_info=True,
+                    "config_directory_file_load_failed",
+                    error_type=safe_error_type(exc),
                 )
 
         return merged
@@ -374,10 +370,11 @@ class ConfigLoader:
                 # would silently boot the app on partial defaults, so fail
                 # fast (consistent with ${VAR} interpolation, QK_ERR_CFG_001).
                 raise
-            except Exception:  # noqa: BLE001 — genuinely optional sources (e.g. a network-backed source that is momentarily unreachable) may be skipped; driver errors are not builtin OSError types. FileConfigSource wraps its own read errors in ConfigurationError, so file problems still fail fast.
-                self._logger.exception(
-                    "Failed to load config from %s",
-                    source.get_name(),
+            except Exception as exc:  # noqa: BLE001 — genuinely optional sources may be skipped; file errors fail fast above.
+                self._logger.warning(
+                    "config_source_load_failed",
+                    source_type=type(source).__name__,
+                    error_type=safe_error_type(exc),
                 )
                 continue
             if not source.pre_interpolated:
@@ -399,10 +396,11 @@ class ConfigLoader:
                 # Malformed config content is a hard error — fail fast
                 # instead of booting on partial defaults (see _collect_sync).
                 raise
-            except Exception:  # noqa: BLE001 — optional source load failures (including driver errors) are logged and skipped
-                self._logger.exception(
-                    "Failed to load config from %s",
-                    source.get_name(),
+            except Exception as exc:  # noqa: BLE001 — optional source load failures are logged and skipped.
+                self._logger.warning(
+                    "config_source_load_failed",
+                    source_type=type(source).__name__,
+                    error_type=safe_error_type(exc),
                 )
                 continue
             if not source.pre_interpolated:

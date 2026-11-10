@@ -219,10 +219,14 @@ class StandardModule(Module):
             if name not in consumed and name not in provider_names:
                 providers.append(provider)
 
+        exports = list(_STANDARD_EXPORTS)
+        if config_class is not None and config_class not in exports:
+            exports.append(config_class)
+
         return DynamicModule(
             module=cls,
             providers=providers,
-            exports=list(_STANDARD_EXPORTS),
+            exports=exports,
             is_global=True,
         )
 

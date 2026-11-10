@@ -3,12 +3,19 @@
 from __future__ import annotations
 
 from quadkit.contracts.cli.contributions import DoctorCheckContribution
-from quadkit.contracts.cli.types import GeneratorDefinition, GeneratorOption
+from quadkit.contracts.cli.types import (
+    STRUCTURED_ENTITY_SPEC_CAPABILITY,
+    GeneratorDefinition,
+    GeneratorOption,
+)
 
 _FIELDS_OPTION = GeneratorOption(
     name="fields",
     type_hint="str",
-    description="Field spec in name:type[?][!unique][!fk=Model][=default] format",
+    description=(
+        "Field spec in name:type[?][!unique][!indexed]"
+        "[!fk=table.column][!ondelete=cascade][=default] format"
+    ),
 )
 
 # (name, description, generator_path, output_dir) — titles derive via make()
@@ -122,6 +129,10 @@ _TITLES: dict[str, str] = {
     "websocket": "Generate WebSocket",
 }
 
+_STRUCTURED_ENTITY_GENERATORS: frozenset[str] = frozenset(
+    {"controller", "graphql", "resource"}
+)
+
 _GENERATOR_DEFINITIONS: tuple[GeneratorDefinition, ...] = tuple(
     GeneratorDefinition.make(
         name,
@@ -132,6 +143,11 @@ _GENERATOR_DEFINITIONS: tuple[GeneratorDefinition, ...] = tuple(
         category="web",
         options=_OPTIONS.get(name, ()),
         title=_TITLES.get(name),
+        capabilities=(
+            (STRUCTURED_ENTITY_SPEC_CAPABILITY,)
+            if name in _STRUCTURED_ENTITY_GENERATORS
+            else ()
+        ),
     )
     for name, description, generator_path, output_dir in _SPECS
 )

@@ -16,7 +16,7 @@ Example:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, ClassVar, cast
+from typing import Any, ClassVar, Literal, cast
 
 from quadkit.auth import constants as const
 from quadkit.config import BaseConfig
@@ -25,6 +25,11 @@ from quadkit.logging import get_logger
 from quadkit.validation import ConfigDict, Field, SecretStr, model_validator
 
 _logger = get_logger(__name__)
+
+#: The identity-store selections the authentication provider can boot:
+#: ``memory`` (ephemeral, dev/test) or ``sql`` (persistent, through the
+#: application's ``DatabaseProviderProtocol``).
+UserStoreKind = Literal["memory", "sql"]
 
 
 @dataclass(init=False)
@@ -392,6 +397,8 @@ class AuthConfig(BaseConfig):
         name: Configuration name (default: "auth")
         enabled: Whether the auth module is enabled
         users: Initial users to create
+        user_store: Identity store selection (``memory`` or ``sql``)
+        user_table: Table the SQL identity store owns (default ``users``)
         roles: Role definitions for RBAC
         rbac: RBAC system configuration
         token: JWT configuration
@@ -420,6 +427,18 @@ class AuthConfig(BaseConfig):
     users: list[AuthUserConfig] = Field(
         default_factory=list,
         description="Initial users",
+    )
+    user_store: UserStoreKind = Field(
+        default="memory",
+        description="Identity store: 'memory' keeps users in-process "
+        "(dev/test; accounts vanish on restart); 'sql' persists them "
+        "through the application's DatabaseProviderProtocol. An explicit "
+        "user_store passed to AuthModule.configure() wins over this.",
+    )
+    user_table: str = Field(
+        default="users",
+        description="Table the SQL identity store owns (created at boot "
+        "when missing). Ignored unless user_store is 'sql'.",
     )
     roles: dict[str, AuthRoleConfig] = Field(
         default_factory=dict,
@@ -495,4 +514,5 @@ __all__ = [
     "PasswordConfig",
     "RBACConfig",
     "TOTPConfig",
+    "UserStoreKind",
 ]

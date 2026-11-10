@@ -23,6 +23,7 @@ class SagaGenerator(GeneratorBase):
         self,
         name: str,
         *,
+        doc: str | None = None,
         dry_run: bool = False,
         force: bool = False,
         **options: Any,
@@ -31,6 +32,8 @@ class SagaGenerator(GeneratorBase):
 
         Args:
             name: Saga name, e.g. ``"OrderFulfillment"`` or ``"order_fulfillment"``.
+            doc: Optional first line for the module docstring. Blank keeps
+                the generated ``"<Name> saga orchestrator."`` line byte-for-byte.
             dry_run: Compute output paths without writing.
             force: Overwrite an existing file.
 
@@ -39,9 +42,11 @@ class SagaGenerator(GeneratorBase):
         """
         saga_name = self._to_pascal_case(name)
         saga_snake = self._to_snake_case(name)
+        doc_line = str(doc or "").strip() or f"{saga_name} saga orchestrator."
         context: dict[str, Any] = {
             "saga_name": saga_name,
             "saga_name_snake": saga_snake,
+            "doc": doc_line,
         }
         content = self.render_template("saga.py.jinja2", context)
         file_path = self.output_dir / f"{saga_snake}_saga.py"

@@ -2,9 +2,9 @@
 lives behind a small protocol; the provider binds the production client
 (or a test fake) so handlers never import httpx or read secrets.
 
-External integration seam for the AI Assistant demo. Quadkit ships no AI
-client; this is the boundary where any OpenAI-compatible chat endpoint
-plugs in. The fake used by tests implements the same protocol — no
+External integration seam for the AI Assistant demo. This application-owned
+client is separate from the Quadkit AI LLM integration and targets an
+OpenAI-compatible chat endpoint. The fake used by tests implements the same protocol — no
 network, no API key.
 """
 

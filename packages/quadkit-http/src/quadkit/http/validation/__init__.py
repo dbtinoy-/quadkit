@@ -18,12 +18,17 @@ from quadkit.http.validation.primitives import (
     validate_positive_int,
     validate_timeout,
 )
-from quadkit.http.validation.url import validate_host, validate_url
+from quadkit.http.validation.url import (
+    validate_host,
+    validate_public_url,
+    validate_url,
+)
 
 __all__ = [
     "validate_host",
     "validate_port",
     "validate_positive_int",
+    "validate_public_url",
     "validate_timeout",
     "validate_url",
 ]

@@ -4,10 +4,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from quadkit.tasks.dlq import redis_dlq as dlq_module
 from quadkit.tasks.dlq.redis_dlq import RedisDLQBackend
 
 
@@ -43,11 +44,21 @@ class TestRedisDLQBackend:
         return RedisDLQBackend(redis=mock_redis, queue_name="test", max_entries=1000)
 
     @pytest.mark.asyncio
-    async def test_push_stores_entry(self, dlq: RedisDLQBackend, mock_redis: MagicMock) -> None:
+    async def test_push_stores_entry(
+        self,
+        dlq: RedisDLQBackend,
+        mock_redis: MagicMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
         """push() should serialize the job and call lpush + ltrim atomically."""
         job = _FakeJob(id="job-1", queue="emails", payload={"to": "a@b.com"})
+        logger = MagicMock()
+        monkeypatch.setattr(dlq_module, "logger", logger)
 
         await dlq.push(job, error="Connection refused")
+        logger.info.assert_called_once_with("dlq_job_stored")
+        assert "job-1" not in repr(logger.info.call_args)
+        assert "emails" not in repr(logger.info.call_args)
 
         pipe = mock_redis.pipeline.return_value
         pipe.lpush.assert_called_once()
@@ -67,14 +78,17 @@ class TestRedisDLQBackend:
 
         job = _FakeJob(id="job-99", queue="tasks", payload={})
 
-        await dlq.push(job, error="timeout")
+        private_error = "private /srv/app/users/user-42 traceback=secret"
+        await dlq.push(job, error=private_error)
 
         pipe = mock_redis.pipeline.return_value
         raw = pipe.lpush.call_args[0][1]
         entry = loads_str(raw)
 
         assert entry["job_id"] == "job-99"
-        assert entry["error"] == "timeout"
+        assert entry["error"] == "Task failed"
+        assert private_error not in raw
+        assert "user-42" not in raw
         assert "failed_at" in entry
 
     @pytest.mark.asyncio
@@ -84,7 +98,9 @@ class TestRedisDLQBackend:
         """list_entries() should decode serialized entries from Redis."""
         from quadkit.serialization import dumps_str
 
-        raw_entry = dumps_str({"job_id": "x", "error": "err", "failed_at": "2024-01-01T00:00:00"})
+        raw_entry = dumps_str(
+            {"job_id": "x", "error": "err", "failed_at": "2024-01-01T00:00:00"}
+        )
         mock_redis.lrange = AsyncMock(return_value=[raw_entry])
 
         entries = await dlq.list_entries(limit=10)
@@ -92,6 +108,24 @@ class TestRedisDLQBackend:
         assert len(entries) == 1
         assert entries[0]["job_id"] == "x"
         mock_redis.lrange.assert_awaited_once_with(dlq._key, 0, 9)
+
+    @pytest.mark.asyncio
+    async def test_list_entries_decodes_bytes_from_raw_redis_client(
+        self, dlq: RedisDLQBackend, mock_redis: MagicMock
+    ) -> None:
+        """list_entries() should decode bytes entries when decode_responses=False."""
+        from quadkit.serialization import dumps
+
+        raw_entry = dumps(
+            {"job_id": "bytes-1", "error": "boom", "failed_at": "2026-01-01T00:00:00"}
+        )
+        mock_redis.lrange = AsyncMock(return_value=[raw_entry])
+
+        entries = await dlq.list_entries(limit=5)
+
+        assert len(entries) == 1
+        assert entries[0]["job_id"] == "bytes-1"
+        assert entries[0]["error"] == "boom"
 
     @pytest.mark.asyncio
     async def test_size_returns_llen(
@@ -106,9 +140,7 @@ class TestRedisDLQBackend:
         mock_redis.llen.assert_awaited_once_with(dlq._key)
 
     @pytest.mark.asyncio
-    async def test_max_entries_respected(
-        self, mock_redis: MagicMock
-    ) -> None:
+    async def test_max_entries_respected(self, mock_redis: MagicMock) -> None:
         """ltrim should use max_entries - 1 as the upper bound."""
         dlq = RedisDLQBackend(redis=mock_redis, queue_name="q", max_entries=500)
         job = _FakeJob(id="j1", queue="q", payload={})

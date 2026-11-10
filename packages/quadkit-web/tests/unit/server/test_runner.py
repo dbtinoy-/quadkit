@@ -177,7 +177,10 @@ class TestRunServer:
         assert config.app is mock_app
         assert config.host == "0.0.0.0"
         assert config.port == 8080
-        assert config.kwargs == {"workers": 2}
+        # workers is runner-managed since 2026-10-24: popped before
+        # dispatch (and warned about — in-process Uvicorn cannot honour
+        # it), never forwarded raw into uvicorn.Config.
+        assert config.kwargs == {}
 
     def test_instance_uses_default_host_and_port(self) -> None:
         """App instance: run_server defaults to 127.0.0.1:8000."""
@@ -211,6 +214,61 @@ class TestRunServer:
         with pytest.raises(RuntimeError, match="run_server_async"):
             run_server("module:app")
 
+    def test_config_workers_forwarded_to_sync_granian(self) -> None:
+        """web.server.workers/reload reach the multiprocess supervisor.
+
+        Regression: the runner read only host/port from config, so
+        ``workers: 4`` in application.yaml was silently decorative.
+        """
+        mock_granian_cls = MagicMock()
+        mock_granian_instance = MagicMock()
+        mock_granian_cls.return_value = mock_granian_instance
+        mock_granian_module = MagicMock()
+        mock_granian_module.Granian = mock_granian_cls
+        mock_constants_module = MagicMock()
+        mock_constants_module.Interfaces = SimpleNamespace(ASGI="asgi")
+
+        server_cfg = SimpleNamespace(
+            backend="granian", host="127.0.0.1", port=9400, workers=3, reload=True
+        )
+        config = SimpleNamespace(
+            get_section=lambda _name, _model: SimpleNamespace(server=server_cfg)
+        )
+        app = SimpleNamespace(config=config)
+
+        with (
+            patch.dict(
+                "sys.modules",
+                {
+                    "granian": mock_granian_module,
+                    "granian.constants": mock_constants_module,
+                },
+            ),
+            patch(
+                "quadkit.web.server.runner._to_import_string",
+                return_value="module:create_app",
+            ),
+        ):
+            from quadkit.web.server.runner import run_server
+
+            run_server(app)
+
+        call_kwargs = mock_granian_cls.call_args[1]
+        assert call_kwargs["port"] == 9400
+        assert call_kwargs["workers"] == 3
+        assert call_kwargs["reload"] is True
+
+    def test_import_string_underivable_returns_none(self) -> None:
+        """No create_app in sight -> None, never an invented class path.
+
+        The old fallback returned 'quadkit.app.base:Application', which a
+        factory-mode server would happily construct and serve — a blank
+        application instead of an honest fallback.
+        """
+        from quadkit.web.server.runner import _to_import_string
+
+        assert _to_import_string(object()) is None
+
 
 class TestRunServerAsync:
     """Test suite for run_server_async (async entry point)."""
@@ -239,34 +297,133 @@ class TestRunServerAsync:
         assert config.port == 9100
 
     @pytest.mark.asyncio
-    async def test_granian_runs_in_executor(self) -> None:
-        """Async run_server_async runs Granian off the calling loop."""
-        mock_granian_cls = MagicMock()
-        mock_granian_instance = MagicMock()
-        mock_granian_cls.return_value = mock_granian_instance
-        mock_interfaces = MagicMock()
-        mock_interfaces.ASGI = "asgi"
+    async def test_granian_async_serves_embedded_in_loop(self) -> None:
+        """Async Granian serves the app object embedded, in the calling loop.
 
-        mock_granian_module = MagicMock()
-        mock_granian_module.Granian = mock_granian_cls
-        mock_constants_module = MagicMock()
-        mock_constants_module.Interfaces = mock_interfaces
+        SERVER-1 regression: the multiprocess ``Granian.serve()`` installs
+        signal handlers, so dispatching it to an executor thread (the old
+        behaviour, which this test used to assert) can never start. The
+        async path must use ``granian.server.embed.Server`` awaited on
+        the loop's own thread. The fake below records the thread its
+        ``serve()`` ran on — a stand-in that cannot raise in an executor
+        would pass vacuously, which is how the original bug shipped;
+        ``tests/integration/test_runner_live.py`` drives the real server.
+        """
+        servers: list[Any] = []
+
+        class FakeEmbedServer:
+            def __init__(self, target: Any, **kwargs: Any) -> None:
+                self.target = target
+                self.kwargs = kwargs
+                self.serve_thread: threading.Thread | None = None
+                servers.append(self)
+
+            async def serve(self) -> None:
+                self.serve_thread = threading.current_thread()
+
+            def stop(self) -> None:  # pragma: no cover - not exercised here
+                pass
+
+        embed_module = SimpleNamespace(Server=FakeEmbedServer)
+        constants_module = SimpleNamespace(
+            Interfaces=SimpleNamespace(ASGI="asgi")
+        )
+        app = object()
 
         with patch.dict(
             "sys.modules",
             {
-                "granian": mock_granian_module,
-                "granian.constants": mock_constants_module,
+                "granian": SimpleNamespace(),
+                "granian.constants": constants_module,
+                "granian.server.embed": embed_module,
             },
         ):
             from quadkit.web.server import run_server_async
 
-            await run_server_async("module:app", host="127.0.0.1", port=9200, workers=2)
+            await run_server_async(
+                app,
+                host="127.0.0.1",
+                port=9200,
+                workers=2,
+                ssl_certificate="cert.pem",
+                pid_file="/var/run/x.pid",
+            )
 
-        mock_granian_cls.assert_called_once()
-        call_args = mock_granian_cls.call_args
-        assert call_args[0][0] == "module:app"
-        assert call_args[1]["address"] == "127.0.0.1"
-        assert call_args[1]["port"] == 9200
-        assert call_args[1]["workers"] == 2
-        mock_granian_instance.serve.assert_called_once()
+        assert len(servers) == 1
+        server = servers[0]
+        # The object passed in is the object served — no import-string
+        # round-trip, no factory.
+        assert server.target is app
+        assert server.kwargs["address"] == "127.0.0.1"
+        assert server.kwargs["port"] == 9200
+        assert server.kwargs["interface"] == "asgi"
+        assert server.kwargs["factory"] is False
+        # Multiprocess kwargs are translated (ssl_certificate -> ssl_cert)
+        # or dropped (pid_file, workers), never forwarded raw.
+        assert server.kwargs["ssl_cert"] == "cert.pem"
+        assert "workers" not in server.kwargs
+        assert "pid_file" not in server.kwargs
+        # And it all happened on the loop's thread, not an executor's.
+        assert server.serve_thread is threading.main_thread()
+
+    @pytest.mark.asyncio
+    async def test_granian_async_string_factory_resolved(self) -> None:
+        """A 'module:create_app' string resolves to a factory target."""
+        servers: list[Any] = []
+
+        class FakeEmbedServer:
+            def __init__(self, target: Any, **kwargs: Any) -> None:
+                self.target = target
+                self.kwargs = kwargs
+                servers.append(self)
+
+            async def serve(self) -> None:
+                pass
+
+            def stop(self) -> None:  # pragma: no cover - not exercised here
+                pass
+
+        def create_app() -> object:
+            return object()
+
+        app_module = SimpleNamespace(create_app=create_app)
+        with patch.dict(
+            "sys.modules",
+            {
+                "granian": SimpleNamespace(),
+                "granian.constants": SimpleNamespace(
+                    Interfaces=SimpleNamespace(ASGI="asgi")
+                ),
+                "granian.server.embed": SimpleNamespace(Server=FakeEmbedServer),
+                "some_app_module": app_module,
+            },
+        ):
+            from quadkit.web.server import run_server_async
+
+            await run_server_async("some_app_module:create_app", port=9201)
+
+        assert len(servers) == 1
+        assert servers[0].target is create_app
+        assert servers[0].kwargs["factory"] is True
+
+    @pytest.mark.asyncio
+    async def test_unknown_backend_raises(self) -> None:
+        """A configured backend outside the supported set is an error.
+
+        The runner used to log 'hypercorn' (then unimplemented) or any
+        other name and quietly serve Uvicorn. backend is an instruction:
+        unknown names raise with the supported list.
+        """
+        server_cfg = SimpleNamespace(
+            backend="daphne", host="127.0.0.1", port=9300, workers=1, reload=False
+        )
+        config = SimpleNamespace(
+            get_section=lambda _name, _model: SimpleNamespace(server=server_cfg)
+        )
+        app = SimpleNamespace(config=config)
+
+        with patch.dict("sys.modules", {"daphne": SimpleNamespace()}):
+            from quadkit.web.server import run_server_async
+
+            with pytest.raises(RuntimeError, match="Unsupported ASGI server backend"):
+                await run_server_async(app)

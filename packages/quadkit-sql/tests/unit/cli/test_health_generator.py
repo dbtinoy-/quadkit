@@ -26,8 +26,8 @@ async def test_generated_health_check_returns_canonical_result(tmp_path: Path) -
     health = await check.check()  # type: ignore[union-attr]
 
     assert health.component == "disk_space"
-    assert health.status.value == "healthy"
-    assert health.details == {}
+    assert health.status.value == "unhealthy"
+    assert health.details == {"implementation_required": True}
 
 
 @pytest.mark.parametrize(
@@ -75,3 +75,43 @@ def test_the_generated_module_is_lint_clean(tmp_path: Path) -> None:
         cwd=tmp_path,
     )
     assert check.returncode == 0, check.stdout
+
+
+@pytest.mark.parametrize("critical", [False, True])
+async def test_unimplemented_probe_cannot_report_a_healthy_dependency(
+    tmp_path: Path, critical: bool
+) -> None:
+    """A placeholder must remain non-healthy even in a composite result."""
+    from quadkit.contracts.core.health import (
+        AggregateHealthResult,
+        HealthCheckResult,
+        HealthStatus,
+    )
+
+    result = HealthCheckGenerator(tmp_path).generate("orders", critical=critical)
+    path = Path(result.files_created[0])
+    namespace: dict[str, object] = {}
+    exec(compile(path.read_text(), str(path), "exec"), namespace)  # noqa: S102
+    factory = namespace["Orders"]
+    assert callable(factory)
+    check = factory()
+    assert check.critical is critical
+    health = await check.check()
+    assert health.status is HealthStatus.UNHEALTHY
+    assert not health.is_healthy()
+    assert health.details == {"implementation_required": True}
+    assert "not implemented" in health.error
+    composite = AggregateHealthResult(
+        components=[HealthCheckResult("framework", HealthStatus.HEALTHY), health]
+    )
+    assert not composite.is_healthy()
+    assert "# @TODO:" in path.read_text()
+
+    from quadkit.monitor.health.checker import HealthChecker
+
+    checker = HealthChecker()
+    assert not checker.has(check.name)
+    checker.add(check.name, check.check)
+    status, results = await checker.run_all_with_summary()
+    assert status is HealthStatus.UNHEALTHY
+    assert results[check.name].details == {"implementation_required": True}

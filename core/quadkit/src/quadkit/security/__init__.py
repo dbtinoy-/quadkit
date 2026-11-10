@@ -51,6 +51,7 @@ from quadkit.security.hooks import (
 )
 
 # -- Provider (Task 2) -------------------------------------------------------
+from quadkit.security.provider import EnvSecretsProvider as EnvSecretsProvider
 from quadkit.security.provider import SecurityProvider as SecurityProvider
 
 # -- Sanitization (Task 2) ---------------------------------------------------
@@ -61,6 +62,7 @@ from quadkit.security.secrets import FileSecretStore as FileSecretStore
 # -- Secrets (Task 2) --------------------------------------------------------
 from quadkit.security.secrets import InMemorySecretStore as InMemorySecretStore
 from quadkit.security.secrets import SecretValue as SecretValue
+from quadkit.security.signing import HmacSigner as HmacSigner
 
 __all__ = [
     "PBKDF2KDF",
@@ -70,9 +72,11 @@ __all__ = [
     "EncryptionError",
     "EncryptionService",
     "EnvSecretStore",
+    "EnvSecretsProvider",
     "FileSecretStore",
     "GuardChainImpl",
     "HashingConfig",
+    "HmacSigner",
     "InMemorySecretStore",
     "InputSanitizer",
     "MiddlewareGuardError",

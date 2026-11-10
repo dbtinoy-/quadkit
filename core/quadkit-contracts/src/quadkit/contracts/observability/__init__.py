@@ -17,6 +17,7 @@ from quadkit.contracts.observability.metrics import (
     MetricProtocol,
     MetricsBackendProtocol,
     MetricsCollectorProtocol,
+    MetricsExpositionProtocol,
     MetricsFactoryProtocol,
     MetricsRecorderProtocol,
 )
@@ -33,6 +34,7 @@ __all__ = [
     "MetricsBackendProtocol",
     "MetricsCollectionError",
     "MetricsCollectorProtocol",
+    "MetricsExpositionProtocol",
     "MetricsFactoryProtocol",
     "MetricsRecorderProtocol",
     "ObservabilityProtocol",

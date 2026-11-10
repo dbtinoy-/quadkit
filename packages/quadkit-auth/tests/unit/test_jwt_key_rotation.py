@@ -8,6 +8,7 @@ import pytest
 
 from quadkit.auth.authn.core import User
 from quadkit.auth.authn.jwt import JWTTokenManager
+from quadkit.contracts.infra.cache import CacheBackendProtocol
 from quadkit.validation import SecretStr
 
 
@@ -28,8 +29,9 @@ class TestJWTTokenManager:
     @pytest.fixture
     def token_manager(self) -> JWTTokenManager:
         """Create JWT token manager with multiple keys."""
-        mock_cache = AsyncMock()
+        mock_cache = AsyncMock(spec=CacheBackendProtocol)
         mock_cache.exists.return_value = False
+        mock_cache.set.return_value = True
         return JWTTokenManager(
             current_key_id="key-2024-01",
             keys={
@@ -51,7 +53,9 @@ class TestJWTTokenManager:
 
         # Verify token with correct key
         payload = jwt.decode(
-            token, token_manager.keys["key-2024-01"].get_secret_value(), algorithms=["HS256"],
+            token,
+            token_manager.keys["key-2024-01"].get_secret_value(),
+            algorithms=["HS256"],
         )
         assert payload["sub"] == user.user_id
         assert payload["type"] == "access"
@@ -66,7 +70,9 @@ class TestJWTTokenManager:
 
         # Verify token with correct key
         payload = jwt.decode(
-            token, token_manager.keys["key-2024-01"].get_secret_value(), algorithms=["HS256"],
+            token,
+            token_manager.keys["key-2024-01"].get_secret_value(),
+            algorithms=["HS256"],
         )
         assert payload["sub"] == user.user_id
         assert payload["type"] == "refresh"
@@ -127,6 +133,7 @@ class TestJWTTokenManager:
 
         # Should fail verification
         from quadkit.auth.exceptions import TokenInvalidError
+
         result = await token_manager.verify_token(unknown_token, "access")
         assert result.is_err()
         assert isinstance(result.unwrap_err(), TokenInvalidError)
@@ -138,7 +145,9 @@ class TestJWTTokenManager:
         old_token = token_manager.create_access_token(user)
 
         # Rotate to new key (must be at least 32 bytes for HS256)
-        await token_manager.rotate_key("key-2024-04", "new-secret-key-at-least-32-bytes-long")
+        await token_manager.rotate_key(
+            "key-2024-04", "new-secret-key-at-least-32-bytes-long"
+        )
 
         # Verify current key ID changed
         assert token_manager.current_key_id == "key-2024-04"
@@ -196,7 +205,9 @@ class TestJWTTokenManager:
         token_manager.cache_service = cache_service
 
         # Rotate key
-        await token_manager.rotate_key("key-2024-04", "new-secret-key-at-least-32-bytes")
+        await token_manager.rotate_key(
+            "key-2024-04", "new-secret-key-at-least-32-bytes"
+        )
 
         # Create new token with new key
         new_token = token_manager.create_access_token(user)

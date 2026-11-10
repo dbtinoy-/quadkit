@@ -6,10 +6,13 @@ from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any, cast
 
 from quadkit.logging import get_logger
-from quadkit.serialization import dumps_str, loads_str
+from quadkit.serialization import dumps_str, loads, loads_str
+from quadkit.tasks.safe_errors import safe_failure_message
 
 if TYPE_CHECKING:
     from redis.asyncio import Redis
+
+    from quadkit.contracts.infra.redis import RedisClientProtocol
 
 logger = get_logger(__name__)
 
@@ -34,11 +37,11 @@ class RedisDLQBackend:
 
     def __init__(
         self,
-        redis: Redis,
+        redis: Redis | RedisClientProtocol,
         queue_name: str = "default",
         max_entries: int = _MAX_ENTRIES,
     ) -> None:
-        self._redis = redis
+        self._redis: Any = redis
         self._key = _DLQ_KEY.format(queue_name=queue_name)
         self._max_entries = max_entries
 
@@ -47,14 +50,14 @@ class RedisDLQBackend:
 
         Args:
             job: The failed job (must have id, queue, payload, retry_count attributes).
-            error: The error message or traceback string.
+            error: A failure message; arbitrary message text is discarded.
         """
         entry = dumps_str(
             {
                 "job_id": job.id,
                 "queue": job.queue,
                 "payload": job.payload,
-                "error": error,
+                "error": safe_failure_message(error),
                 "failed_at": datetime.now(UTC).isoformat(),
                 "retry_count": getattr(job, "retry_count", 0),
             }
@@ -64,7 +67,7 @@ class RedisDLQBackend:
         pipe.ltrim(self._key, 0, self._max_entries - 1)
         await pipe.execute()
 
-        logger.info("dlq_job_stored", job_id=job.id, queue=job.queue, key=self._key)
+        logger.info("dlq_job_stored")
 
     async def list_entries(self, limit: int = 100) -> list[dict[str, Any]]:
         """Retrieve the most recent DLQ entries.
@@ -76,7 +79,12 @@ class RedisDLQBackend:
             List of DLQ entry dicts, most recent first.
         """
         raw = await cast("Any", self._redis.lrange(self._key, 0, limit - 1))
-        return [loads_str(entry) for entry in raw]
+        return [
+            loads(bytes(entry))
+            if isinstance(entry, (bytes, bytearray))
+            else loads_str(entry)
+            for entry in raw
+        ]
 
     async def size(self) -> int:
         """Return the current number of entries in the DLQ.

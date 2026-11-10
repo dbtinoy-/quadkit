@@ -10,6 +10,10 @@ __path__ = __import__("pkgutil").extend_path(__path__, __name__)
 from quadkit.cli.constants import __version__ as __version__
 
 if TYPE_CHECKING:
+    from typer import Argument, Exit, Option, echo
+    from typer import Typer as CLIApp
+    from typer.testing import CliRunner
+
     from quadkit.cli.config import CLIConfig
     from quadkit.cli.exceptions import (
         CliError,
@@ -32,19 +36,25 @@ if TYPE_CHECKING:
     )
 
 _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
+    "Argument": ("typer", "Argument"),
+    "CLIApp": ("typer", "Typer"),
     "CLIApplicationProtocol": ("quadkit.cli.protocols", "CLIApplicationProtocol"),
     "CLIConfig": ("quadkit.cli.config", "CLIConfig"),
     "CLIContext": ("quadkit.cli.runtime", "CLIContext"),
     "CLIModule": ("quadkit.cli.module", "CLIModule"),
     "CLIRunnerProtocol": ("quadkit.cli.protocols", "CLIRunnerProtocol"),
     "CliError": ("quadkit.cli.exceptions", "CliError"),
+    "CliRunner": ("typer.testing", "CliRunner"),
     "CommandProtocol": ("quadkit.cli.protocols", "CommandProtocol"),
     "ConfigNotFoundError": ("quadkit.cli.exceptions", "ConfigNotFoundError"),
+    "Exit": ("typer", "Exit"),
+    "Option": ("typer", "Option"),
     "ProviderNotInstalledError": (
         "quadkit.cli.exceptions",
         "ProviderNotInstalledError",
     ),
     "OutputManager": ("quadkit.cli.output", "OutputManager"),
+    "echo": ("typer", "echo"),
     "handle_errors": ("quadkit.cli.runtime", "handle_errors"),
     "find_config": ("quadkit.cli.lib", "find_config"),
     "load_config_yaml": ("quadkit.cli.lib", "load_config_yaml"),
@@ -70,16 +80,22 @@ def __dir__() -> list[str]:
 
 
 __all__ = [
+    "Argument",
+    "CLIApp",
     "CLIApplicationProtocol",
     "CLIConfig",
     "CLIContext",
     "CLIModule",
     "CLIRunnerProtocol",
     "CliError",
+    "CliRunner",
     "CommandProtocol",
     "ConfigNotFoundError",
+    "Exit",
+    "Option",
     "OutputManager",
     "ProviderNotInstalledError",
+    "echo",
     "find_config",
     "handle_errors",
     "load_config_yaml",

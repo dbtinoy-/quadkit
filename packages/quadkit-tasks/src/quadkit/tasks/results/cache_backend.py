@@ -18,7 +18,7 @@ import asyncio
 from typing import TYPE_CHECKING, Any
 
 from quadkit import serialization as json
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.result import Result
 from quadkit.tasks.models.job import JobResult
 from quadkit.tasks.results.core import ResultStore
@@ -82,8 +82,11 @@ class CacheBackendResultStore(ResultStore):
                 raw = raw.decode()
             data = json.loads(raw)
             return JobResult.from_dict(data)
-        except (ValueError, KeyError, TypeError, OSError):
-            logger.warning("Failed to deserialise cached task result", exc_info=True)
+        except (ValueError, KeyError, TypeError, OSError) as exc:
+            logger.warning(
+                "task_result_deserialization_failed",
+                error_type=safe_error_type(exc),
+            )
             return None
 
     async def _index(self) -> list[str]:

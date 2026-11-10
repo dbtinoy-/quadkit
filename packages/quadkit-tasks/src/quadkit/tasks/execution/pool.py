@@ -246,7 +246,7 @@ class WorkerPool:
                 worker = self._create_worker(worker_id, result_store=self._result_store)
                 self.workers.append(worker)
                 await worker.start()
-                self.logger.info("Added %s", worker_id)
+                self.logger.info("worker_pool.worker_added")
         else:
             # Remove workers
             workers_to_remove = self.workers[new_size:]

@@ -1,5 +1,6 @@
 """Tests for validation coercion module."""
-import datetime
+
+import datetime as dt
 from enum import Enum
 from uuid import UUID, uuid4
 
@@ -83,6 +84,7 @@ class TestCoerceToBool:
 
 class Color(Enum):
     """Test enum."""
+
     RED = "red"
     GREEN = "green"
     BLUE = "blue"
@@ -117,15 +119,15 @@ class TestCoerceFieldValue:
         """Test datetime coercion from ISO string."""
         dt_str = "2024-01-15T10:30:00"
         result = coerce_field_value(
-            "created_at", dt_str, {"created_at": datetime.datetime}, None
+            "created_at", dt_str, {"created_at": dt.datetime}, None
         )
-        assert result == datetime.datetime.fromisoformat(dt_str)
+        assert result == dt.datetime.fromisoformat(dt_str)
 
     def test_coerce_datetime_preserves_datetime(self) -> None:
         """Test that datetime objects pass through."""
-        original = datetime.datetime.now()
+        original = dt.datetime.now()
         result = coerce_field_value(
-            "created_at", original, {"created_at": datetime.datetime}, None
+            "created_at", original, {"created_at": dt.datetime}, None
         )
         assert result == original
 
@@ -204,3 +206,31 @@ class TestCoerceFieldValue:
         """Test passthrough for non-type hints."""
         result = coerce_field_value("field", "value", {"field": "not_a_type"}, None)
         assert result == "value"
+
+    def test_nested_model_validation_error_is_not_swallowed_into_raw_dict(
+        self,
+    ) -> None:
+        """Nested BaseConfig/DomainModel validator errors must raise, not leave a dict."""
+        from dataclasses import dataclass
+
+        from quadkit.config import BaseConfig
+        from quadkit.validation import Field, ValidationError, model_validator
+
+        @dataclass(init=False)
+        class _InnerConfig(BaseConfig):
+            audience: str | None = Field(default=None)
+
+            @model_validator(mode="after")
+            def _require_audience(self) -> "_InnerConfig":
+                if not self.audience:
+                    raise ValueError("audience is required")
+                return self
+
+        @dataclass(init=False)
+        class _OuterConfig(BaseConfig):
+            inner: _InnerConfig = Field(
+                default_factory=lambda: _InnerConfig(audience="ok")
+            )
+
+        with pytest.raises((ValidationError, ValueError), match="audience is required"):
+            _OuterConfig(inner={"audience": None})

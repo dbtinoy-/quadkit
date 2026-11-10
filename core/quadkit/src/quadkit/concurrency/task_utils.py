@@ -11,7 +11,7 @@ import asyncio
 from collections.abc import Coroutine
 from typing import Any, TypeVar
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 logger = get_logger(__name__)
 
@@ -30,8 +30,7 @@ def _handle_task_exception(task: asyncio.Task[Any]) -> None:
     if exc is not None:
         logger.error(
             "background_task_failed",
-            task_name=task.get_name(),
-            exc_info=exc,
+            error_type=safe_error_type(exc),
         )
 
 

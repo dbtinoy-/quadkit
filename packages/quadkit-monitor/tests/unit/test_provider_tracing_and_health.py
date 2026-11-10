@@ -20,12 +20,13 @@ class DummyContainer:
         self._factories = {}
         self._resolved = {}
 
-    def singleton(self, key, factory):
-        if callable(factory):
-            self._factories[key] = factory
+    def singleton(self, key, factory=None, *, instance=None):
+        value = instance if instance is not None else factory
+        if instance is None and callable(value):
+            self._factories[key] = value
         else:
-            self.mapping[key] = factory
-            self._resolved[key] = factory
+            self.mapping[key] = value
+            self._resolved[key] = value
 
     async def resolve(self, cls):
         if cls in self._resolved:

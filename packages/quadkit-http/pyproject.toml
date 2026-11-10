@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-http"
-version = "0.0.46"
+version = "0.0.50"
 description = "Outbound HTTP client for the Quadkit Framework"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -27,8 +27,8 @@ authors = [{ name = "Quadkit Framework Team", email = "hello@oridecon.dev" }]
 maintainers = [{ name = "Quadkit Framework Team", email = "hello@oridecon.dev" }]
 
 dependencies = [
-    "quadkit-contracts>=0.0.2",
-    "quadkit>=0.0.2",
+    "quadkit-contracts>=0.0.50",
+    "quadkit>=0.0.50",
     "aiohttp>=3.9.0",
     "jinja2>=3.1.0",
     "yarl>=1.9.0,<2",

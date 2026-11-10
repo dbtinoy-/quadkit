@@ -27,6 +27,7 @@ class _CacheRegistrationMixin:
     _initialize_serializers: Callable[..., None]
     get_backend: Callable[..., CacheBackendProtocol]
     get_default_service: Callable[..., CacheService]
+    get_redis_client: Callable[..., Any]
     get_service: Callable[..., CacheService]
     _backends: dict[str, CacheBackendProtocol]
     """See :class:`CacheProvider`."""
@@ -87,11 +88,15 @@ class _CacheRegistrationMixin:
         # with the per-name bindings below.  CacheService → the ergonomic bare-value facade.
         from quadkit.cache.service.core import CacheService  # noqa: PLC0415
         from quadkit.contracts.infra.cache.protocols import CacheBackendProtocol
+        from quadkit.contracts.infra.redis import RedisClientProtocol
 
         container.singleton(
             CacheBackendProtocol, factory=lambda: self.get_backend(None)
         )
         container.singleton(CacheService, factory=self.get_default_service)
+        container.singleton(
+            RedisClientProtocol, factory=lambda: self.get_redis_client(None)
+        )
 
         # Named bindings — one per configured, enabled backend
         if self.config:

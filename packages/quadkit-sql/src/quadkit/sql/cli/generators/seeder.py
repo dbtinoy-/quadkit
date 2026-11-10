@@ -5,8 +5,8 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
-from quadkit.contracts.cli.generators import resolve_options
-from quadkit.contracts.cli.parsers import parse_fields
+from quadkit.contracts.cli.generators import pluralize_identifier, resolve_options
+from quadkit.contracts.cli.parsers import EntitySpec, resolve_field_specs
 from quadkit.sql.cli.generators.base import GenerationResult, GeneratorBase
 
 
@@ -20,6 +20,7 @@ class SeederGenerator(GeneratorBase):
     # provider, and `quadkit db seed` imports the same modules, which a file
     # outside ``src/`` cannot be. `--output seeds` still works.
     default_output_dir = "src/seeders"
+    supports_entity_spec = True
 
     def __init__(self, output_dir: str | Path = "src/seeders") -> None:
         super().__init__(output_dir=output_dir)
@@ -34,6 +35,7 @@ class SeederGenerator(GeneratorBase):
         self,
         name: str,
         *,
+        entity_spec: EntitySpec | None = None,
         dry_run: bool = False,
         force: bool = False,
         **options: Any,
@@ -41,15 +43,34 @@ class SeederGenerator(GeneratorBase):
         """Generate a database seeder module.
 
         Args:
-            name: Model/table name (e.g. ``"User"`` or ``"users"``).
+            name: Singular model name (e.g. ``"User"``).
+            entity_spec: Structured entity alternative to a field string.
             dry_run: Compute output paths without writing.
             force: Overwrite an existing file.
 
         Returns:
             ``GenerationResult`` with created/skipped/overwritten paths.
         """
+        if entity_spec is None and isinstance(options.get("entity_spec"), EntitySpec):
+            entity_spec = options["entity_spec"]
+        if entity_spec is not None and self._to_snake_case(
+            entity_spec.name
+        ) != self._to_snake_case(name):
+            raise ValueError(
+                f"entity_spec.name {entity_spec.name!r} does not match "
+                f"generator name {name!r}"
+            )
         fields_raw = options.get("fields") or options.get("fields_str") or ""
-        field_specs = parse_fields(fields_raw) if isinstance(fields_raw, str) else []
+        if fields_raw and not isinstance(fields_raw, str):
+            raise TypeError("Seeder fields option must be a field-spec string")
+        field_specs = resolve_field_specs(fields_raw or None, entity_spec)
+        # A seed must never invent a foreign-key value: with FK
+        # enforcement on, a fabricated UUID fails at insert. A nullable
+        # FK samples as None; a required FK suppresses the sample row
+        # entirely (the template explains why and what to author).
+        required_foreign_keys = [
+            spec.name for spec in field_specs if spec.fk is not None and spec.required
+        ]
         fields = [
             {
                 "name": spec.name,
@@ -58,22 +79,32 @@ class SeederGenerator(GeneratorBase):
                 "unique": spec.unique,
                 "fk": spec.fk,
                 "default": spec.default,
-                "sample_value": self._get_sample_value(name, spec.name, spec.type),
+                "sample_value": (
+                    "None"
+                    if spec.fk is not None and not spec.required
+                    else self._get_sample_value(name, spec.name, spec.type)
+                ),
             }
             for spec in field_specs
         ]
 
-        table_name = self._to_snake_case(name)
+        model_snake = self._to_snake_case(name)
+        table_name = (
+            entity_spec.table_name
+            if entity_spec is not None
+            else pluralize_identifier(model_snake)
+        )
         content = self.render_template(
             "seeder.py.jinja2",
             {
                 "model_name": self._to_pascal_case(name),
-                "file_name": table_name,
+                "file_name": model_snake,
                 "table_name": table_name,
                 "fields": fields,
+                "required_foreign_keys": required_foreign_keys,
             },
         )
-        file_path = self.output_dir / f"{table_name}.py"
+        file_path = self.output_dir / f"{model_snake}.py"
         self.stage(file_path, content)
         return self.finalize(self.commit(resolve_options(dry_run=dry_run, force=force)))
 

@@ -34,10 +34,10 @@ def make_domain_event() -> Any:
 
 
 class _FakeTxn:
-    def __init__(self, provider: "_FakeSqlProvider") -> None:
+    def __init__(self, provider: _FakeSqlProvider) -> None:
         self._provider = provider
 
-    async def __aenter__(self) -> "_FakeTxn":
+    async def __aenter__(self) -> _FakeTxn:
         self._provider.in_transaction += 1
         return self
 
@@ -61,11 +61,23 @@ class _FakeSqlProvider:
         self.calls.append(("execute", sql))
         if "INSERT" in sql.upper() and self.insert_error is not None:
             raise self.insert_error
-        return SimpleNamespace(rows=[])
+        return SimpleNamespace(rows=[], success=True)
 
     async def execute_query(self, sql: str, params: Any = None) -> Any:
         self.calls.append(("query", sql))
-        return SimpleNamespace(rows=[{"version": self.version}])
+        if "MIN(stream_version)" in sql:
+            return SimpleNamespace(
+                rows=[
+                    {
+                        "compacted_through": 0,
+                        "min_version": 1 if self.version else None,
+                        "max_version": self.version,
+                        "event_count": self.version,
+                    }
+                ],
+                success=True,
+            )
+        return SimpleNamespace(rows=[{"version": self.version}], success=True)
 
 
 class TestPostgresAdvisoryLock:
@@ -75,7 +87,9 @@ class TestPostgresAdvisoryLock:
             PostgresEventStoreConfig,
         )
 
-        config = PostgresEventStoreConfig(dsn="postgresql://test", events_table="events")
+        config = PostgresEventStoreConfig(
+            dsn="postgresql://test", events_table="events"
+        )
         return PostgresEventStore(config=config, provider=provider)
 
     @pytest.mark.asyncio
@@ -161,9 +175,7 @@ class TestSqliteUniqueViolationMapping:
 
     @pytest.mark.asyncio
     async def test_unrelated_errors_propagate(self) -> None:
-        provider = _FakeSqlProvider(
-            version=0, insert_error=RuntimeError("boom")
-        )
+        provider = _FakeSqlProvider(version=0, insert_error=RuntimeError("boom"))
         store = self._store(provider)
 
         with pytest.raises(RuntimeError, match="boom"):
@@ -174,7 +186,7 @@ class _FakeAsyncIter:
     def __init__(self, items: list[Any]) -> None:
         self._items = iter(items)
 
-    def __aiter__(self) -> "_FakeAsyncIter":
+    def __aiter__(self) -> _FakeAsyncIter:
         return self
 
     async def __anext__(self) -> Any:
@@ -205,7 +217,11 @@ class _FakeCollection:
             raise self.insert_error
 
     async def find_one_and_update(
-        self, query: Any, update: Any, upsert: bool = False, return_document: bool = True
+        self,
+        query: Any,
+        update: Any,
+        upsert: bool = False,
+        return_document: bool = True,
     ) -> Any:
         # Counters collection only: always serve an incremented counter.
         return {"_id": "global_sequence", "value": 1}
@@ -219,7 +235,7 @@ class _FakeCollection:
 
 
 class _FakeSession:
-    async def __aenter__(self) -> "_FakeSession":
+    async def __aenter__(self) -> _FakeSession:
         return self
 
     async def __aexit__(self, *exc: object) -> None:
@@ -266,7 +282,9 @@ class TestMongoDuplicateKeyZeroVersion:
         await store.connect()
 
         with pytest.raises(ConcurrencyError) as exc_info:
-            await store.append("fresh-stream", [make_domain_event()], expected_version=0)
+            await store.append(
+                "fresh-stream", [make_domain_event()], expected_version=0
+            )
 
         # expected_version=0 must survive as 0 (the pre-fix
         # ``expected_version or current_version`` coerced it to the
@@ -291,3 +309,67 @@ class TestMongoDuplicateKeyZeroVersion:
         assert events.deleted_filters == [
             {"stream_id": "stream-1", "stream_version": {"$lte": 7}}
         ]
+
+
+@pytest.mark.asyncio
+async def test_postgres_outbox_locks_stream_before_staging() -> None:
+    from quadkit.events.stores import (
+        OutboxEventStore,
+        PostgresEventStore,
+        PostgresEventStoreConfig,
+    )
+
+    provider = _FakeSqlProvider(version=0)
+    inner = PostgresEventStore(
+        config=PostgresEventStoreConfig(dsn="postgresql://test", events_table="events"),
+        provider=provider,
+    )
+    outbox = OutboxEventStore(inner)
+    assert (
+        await outbox.append("stream-1", [make_domain_event()], expected_version=0) == 1
+    )
+    sql = [statement for _, statement in provider.calls]
+    assert "pg_advisory_xact_lock" in sql[0]
+    assert "MAX(stream_version)" in sql[1]
+    assert 'INSERT INTO "events"' in sql[2]
+    assert 'INSERT INTO "event_outbox"' in sql[3]
+    assert provider.in_transaction == 0
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("failure", ["lock", "version", "event", "outbox"])
+async def test_postgres_outbox_rejects_failed_provider_results(failure: str) -> None:
+    from quadkit.events.exceptions import EventStoreError
+    from quadkit.events.stores import (
+        OutboxEventStore,
+        PostgresEventStore,
+        PostgresEventStoreConfig,
+    )
+
+    class FailureProvider(_FakeSqlProvider):
+        async def execute(self, sql: str, params: Any = None) -> Any:
+            result = await super().execute(sql, params)
+            if (
+                (failure == "lock" and "pg_advisory_xact_lock" in sql)
+                or (failure == "event" and 'INSERT INTO "events"' in sql)
+                or (failure == "outbox" and 'INSERT INTO "event_outbox"' in sql)
+            ):
+                return SimpleNamespace(success=False, rows=[])
+            return result
+
+        async def execute_query(self, sql: str, params: Any = None) -> Any:
+            result = await super().execute_query(sql, params)
+            return (
+                SimpleNamespace(success=False, rows=[])
+                if failure == "version"
+                else result
+            )
+
+    provider = FailureProvider()
+    inner = PostgresEventStore(
+        config=PostgresEventStoreConfig(dsn="postgresql://test", events_table="events"),
+        provider=provider,
+    )
+    with pytest.raises(EventStoreError):
+        await OutboxEventStore(inner).append("stream-1", [make_domain_event()])
+    assert provider.in_transaction == 0

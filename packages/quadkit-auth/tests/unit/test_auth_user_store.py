@@ -32,6 +32,7 @@ from quadkit.auth.exceptions import (
     TokenExpiredError as TokenExpiredErrorAuth,
     TokenInvalidError,
 )
+from quadkit.auth.exceptions import EmailExistsError, UsernameExistsError
 from quadkit.contracts.auth.token import VerifiedToken
 from quadkit.result import Err, Ok
 
@@ -74,165 +75,66 @@ class TestInMemoryUserStore:
         assert user.roles == ["user"]
 
     @pytest.mark.asyncio
-    async def test_get_user_by_id(self):
-        """Test getting user by ID"""
-        created_user = await self.store.create_user(
-            name="testuser", email="test@example.com", hashed_password="hashed123",
+    async def test_duplicate_name_raises_username_exists(self):
+        """Duplicate name is a typed conflict, not a bare ValueError."""
+        await self.store.create_user(
+            name="testuser",
+            email="a@example.com",
+            hashed_password="hashed123",
         )
+        with pytest.raises(UsernameExistsError, match="Name 'testuser' already exists"):
+            await self.store.create_user(
+                name="testuser",
+                email="b@example.com",
+                hashed_password="hashed123",
+            )
 
-        retrieved_user = await self.store.get_user_by_id(created_user.user_id)
-        assert retrieved_user is not None
-        assert retrieved_user.user_id == created_user.user_id
+    @pytest.mark.asyncio
+    async def test_duplicate_email_raises_email_exists(self):
+        """Duplicate email is a typed conflict, not a bare ValueError."""
+        await self.store.create_user(
+            name="usera",
+            email="test@example.com",
+            hashed_password="hashed123",
+        )
+        with pytest.raises(
+            EmailExistsError, match=r"Email 'test@example\.com' already exists"
+        ):
+            await self.store.create_user(
+                name="userb",
+                email="test@example.com",
+                hashed_password="hashed123",
+            )
 
     # username-based lookups are deprecated; authentication should use email
     # the following test verifies we can still retrieve by email instead.
     @pytest.mark.asyncio
     async def test_get_user_by_email_after_creation(self):
-        """Test getting user by email instead of username"""
-        await self.store.create_user(
-            name="testuser", email="test@example.com", hashed_password="hashed123",
+        """Test getting user by email instead of username."""
+        created = await self.store.create_user(
+            name="testuser",
+            email="test@example.com",
+            hashed_password="hashed123",
         )
 
         user = await self.store.get_user_by_email("test@example.com")
-    #         assert user is not None
-    #         assert user.name == "testuser"
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_duplicate_name(self):
-    #         """Test duplicate name handling"""
-    @pytest.mark.asyncio
-    async def test_get_user_by_email(self):
-        """Test getting user by email"""
-        user = await self.store.get_user_by_email("test@example.com")
-    #         assert user is not None
-    #         assert user.email == "test@example.com"
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_update_user(self):
-    #         """Test user update"""
-    #         from quadkit.auth.authn.core import User
-    # 
-    #         user = User(
-    #             user_id="test_user_id",
-    #             name="testuser",
-    #             email="test@example.com",
-    #             roles=["user", "admin"],
-    #         )
-    # 
-    #         await self.store.update_user(user)
-    #         # Ensure execute_update was used
-    #         self.mock_db.execute_update.assert_awaited()
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_delete_user(self):
-    #         """Test user deletion"""
-    #         await self.store.delete_user("test_user_id")
-    #         # Ensure execute_delete was used
-    #         self.mock_db.execute_delete.assert_awaited()
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_list_users(self):
-    #         """Test user listing"""
-    #         users = await self.store.list_users()
-    #         assert isinstance(users, list)
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_count_users(self):
-    #         """Test user counting"""
-    #         self.mock_db.execute_query = AsyncMock(return_value=[{"count": 1}])
-    #         count = await self.store.count_users()
-    #         assert count == 1
-    # 
-    # 
-    # class TestMongoDBUserStore:
-    #     """Test MongoDB-based user store"""
-    # 
-    #     def setup_method(self):
-    #         """Setup test method"""
-    #         from quadkit.testing import MockDatabaseProvider
-    # 
-    #         # Create mock database provider
-    #         self.mock_db = MockDatabaseProvider()
-    # 
-    #         # Mock MongoDB database and collection
-    #         mock_collection = MagicMock()
-    #         mock_doc = {
-    #             "_id": "test_user_id",
-    #             "username": "testuser",
-    #             "email": "test@example.com",
-    #             "hashed_password": "hashed123",
-    #             "is_active": True,
-    #             "is_verified": False,
-    #             "roles": ["user"],
-    #             "permissions": ["read"],
-    #             "profile": {"key": "value"},
-    #             "login_count": 0,
-    #         }
-    # 
-    #         mock_collection.insert_one = AsyncMock()
-    #         mock_collection.find_one = AsyncMock(return_value=mock_doc)
-    #         mock_collection.replace_one = AsyncMock()
-    #         mock_collection.delete_one = AsyncMock()
-    # 
-    #         # Set up find() chain properly
-    #         class MockAsyncIterator:
-    #             def __init__(self, items):
-    #                 self.items = iter(items)
-    # 
-    #             def __aiter__(self):
-    #                 return self
-    # 
-    #             async def __anext__(self):
-    #                 try:
-    #                     return next(self.items)
-    #                 except StopIteration:
-    #                     raise StopAsyncIteration from None
-    # 
-    #         mock_cursor = MockAsyncIterator([mock_doc])
-    # 
-    #         mock_find = MagicMock()
-    #         mock_find.skip.return_value.limit.return_value = mock_cursor
-    #         mock_collection.find = MagicMock(return_value=mock_find)
-    # 
-    #         mock_collection.count_documents = AsyncMock(return_value=1)
-    # 
-    #         mock_db = MagicMock()
-    #         mock_db.__getitem__.return_value = mock_collection
-    # 
-    #         self.mock_db.db = mock_db
-    #         self.store = MongoDBUserStore(self.mock_db)
-    # 
-    #     @pytest.mark.asyncio
-    #     async def test_create_user(self):
-    #         """Test user creation"""
-    #         user = await self.store.create_user(
-    #             name="testuser",
-    #             email="test@example.com",
-    #             hashed_password="hashed123",
-    #             roles=["user"],
-    #             permissions=["read"],
-    #             profile={"key": "value"},
-    #         )
-    # 
-    #         assert user.user_id is not None
-    #         assert user.username == "testuser"
+        assert user is not None
+        assert user.user_id == created.user_id
         assert user.email == "test@example.com"
-        assert user.roles == ["user"]
+
 
     @pytest.mark.asyncio
     async def test_get_user_by_id(self):
         """Test getting user by ID"""
-        user = await self.store.get_user_by_id("test_user_id")
-    #         assert user is not None
-    #         assert user.user_id == "test_user_id"
-    #         assert user.name == "testuser"
-    # 
-    #     @pytest.mark.asyncio
-    #     #     async def test_get_user_by_username(self):
-    #     #         """Test getting user by username"""
-    #     #         user = await self.store.get_user_by_username("testuser")
-    #     #         assert user is not None
-    #         assert user.username == "testuser"
+        created_user = await self.store.create_user(
+            name="testuser",
+            email="test@example.com",
+            hashed_password="hashed123",
+        )
+
+        user = await self.store.get_user_by_id(created_user.user_id)
+        assert user is not None
+        assert user.user_id == created_user.user_id
 
     @pytest.mark.asyncio
     async def test_get_user_by_email(self):
@@ -290,7 +192,6 @@ class TestInMemoryUserStore:
     @pytest.mark.asyncio
     async def test_user_permission_management(self):
         pytest.skip("add_user_permission method not implemented in authz service")
-
 
     def test_authorization_checks(self):
         """Test authorization helper methods via User model"""

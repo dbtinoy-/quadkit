@@ -10,7 +10,7 @@ from uuid import UUID
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.contracts.data.identifiers import Table
-from quadkit.events.exceptions import ConcurrencyError
+from quadkit.events.exceptions import ConcurrencyError, EventStoreError
 from quadkit.events.stores.base import AbstractEventStore, StoredEvent
 from quadkit.events.stores.postgres.queries import PostgresQueries
 from quadkit.logging import get_logger
@@ -75,10 +75,12 @@ class PostgresEventStore(AbstractEventStore):
             # optimistic check, double-appending events. The per-stream
             # advisory lock (held until transaction end) makes the check
             # authoritative; the key is stable across connections.
-            await self.provider.execute(
+            lock = await self.provider.execute(
                 "SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))",
                 [stream_id],
             )
+            if not lock.success:
+                raise EventStoreError("Could not lock event stream")
             return await self._write_events(stream_id, events, expected_version)
 
     async def _write_events(
@@ -106,6 +108,8 @@ class PostgresEventStore(AbstractEventStore):
             PostgresQueries.GET_STREAM_VERSION.format(table=self._table),
             [stream_id],
         )
+        if not res.success:
+            raise EventStoreError("Could not read event stream version")
         current_version = int(res.rows[0]["version"]) if res.rows else 0
 
         if expected_version is not None and current_version != expected_version:
@@ -116,7 +120,7 @@ class PostgresEventStore(AbstractEventStore):
             event_data = self._serialize_event(event)
             event_id = getattr(event, "id", None) or getattr(event, "event_id", None)
 
-            await self.provider.execute(
+            result = await self.provider.execute(
                 PostgresQueries.INSERT_EVENT.format(table=self._table),
                 [
                     stream_id,
@@ -128,6 +132,9 @@ class PostgresEventStore(AbstractEventStore):
                     getattr(event, "timestamp", None),
                 ],
             )
+
+            if not result.success:
+                raise EventStoreError("Could not write event")
 
         return current_version + len(events)
 

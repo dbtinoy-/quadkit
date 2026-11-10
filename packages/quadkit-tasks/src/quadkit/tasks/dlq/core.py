@@ -29,6 +29,7 @@ from typing import Any
 from quadkit.contracts.infra.tasks import JobStatus
 from quadkit.logging import get_logger
 from quadkit.tasks.models.job import JobProtocol
+from quadkit.tasks.safe_errors import safe_failure_message
 
 logger = get_logger(__name__)
 
@@ -44,6 +45,11 @@ class FailureRecord:
     attempt_count: int = 0
     metadata: dict[str, Any] = field(default_factory=dict)
 
+    def __post_init__(self) -> None:
+        """Discard unsafe free-form failure details at the record boundary."""
+        self.error = safe_failure_message(self.error)
+        self.traceback = None
+
     def to_dict(self) -> dict[str, Any]:
         """Serialize the failure record to a plain dictionary."""
         return {
@@ -54,8 +60,8 @@ class FailureRecord:
             "job_priority": self.job.priority,
             "job_max_retries": self.job.max_retries,
             "job_timeout": self.job.timeout,
-            "error": self.error,
-            "traceback": self.traceback,
+            "error": safe_failure_message(self.error),
+            "traceback": None,
             "failed_at": self.failed_at,
             "attempt_count": self.attempt_count,
             "metadata": self.metadata,
@@ -124,8 +130,8 @@ class DeadLetterQueue:
         """
         # Evict oldest if at capacity
         while len(self._failures) >= self._max_size:
-            evicted_id, _ = self._failures.popitem(last=False)
-            logger.debug("DLQ evicted oldest entry: %s", evicted_id)
+            self._failures.popitem(last=False)
+            logger.debug("dlq.oldest_record_evicted")
 
         self._failures[job.id] = FailureRecord(
             job=job,
@@ -135,12 +141,7 @@ class DeadLetterQueue:
             metadata=metadata,
         )
         self._total_added += 1
-        logger.info(
-            "DLQ: added job %s (%s): %s",
-            job.id,
-            job.name,
-            error[:100],
-        )
+        logger.info("dlq.job_added")
 
     def get(self, job_id: str) -> FailureRecord | None:
         """Get a specific failure record."""
@@ -184,7 +185,7 @@ class DeadLetterQueue:
         job.completed_at = None
         job.result = None
         self._total_retried += 1
-        logger.info("DLQ: retrying job %s (%s)", job.id, job.name)
+        logger.info("dlq.job_retry_requested")
         return job
 
     def retry_all(self) -> list[JobProtocol]:

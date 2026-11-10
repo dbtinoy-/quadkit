@@ -63,13 +63,35 @@ class TestRelayChannel:
         with pytest.raises(ValueError):
             make_channel(name="")
 
-    def test_rejects_empty_upstream_base_url(self) -> None:
-        with pytest.raises(ValueError):
-            make_channel(upstream_base_url="")
+    def test_allows_an_empty_upstream_base_url(self) -> None:
+        """An adaptor-backed channel is never dialled, so it needs no URL.
 
-    def test_rejects_empty_models(self) -> None:
-        with pytest.raises(ValueError):
-            make_channel(models=())
+        The invariant that a *configured* gateway must have one lives in the
+        loader, and the transport refuses to build a URL without it — a
+        routing model that must also describe offline rows cannot enforce it.
+        """
+        assert make_channel(upstream_base_url="").upstream_base_url == ""
+
+    def test_empty_models_is_catch_all(self) -> None:
+        """No catalogue means "serves anything", not an invalid channel.
+
+        new-api needs this for aggregators and for providers whose catalogue
+        is not enumerable; selection ranks these below channels that name the
+        requested model, so the validation that used to reject them was
+        blocking a routing model rather than protecting one.
+        """
+        channel = make_channel(models=())
+
+        assert channel.models == ()
+
+    def test_catch_all_accepts_any_alias_in_its_model_map(self) -> None:
+        channel = make_channel(models=(), model_map={"alias": "upstream"})
+
+        assert channel.resolve_model("alias") == "upstream"
+
+    def test_declared_catalogue_still_rejects_unlisted_map_keys(self) -> None:
+        with pytest.raises(ValueError, match="model_map keys must be listed"):
+            make_channel(models=("a",), model_map={"b": "c"})
 
     def test_rejects_non_positive_timeout(self) -> None:
         with pytest.raises(ValueError):

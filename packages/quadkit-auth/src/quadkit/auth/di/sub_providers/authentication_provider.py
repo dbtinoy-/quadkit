@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Annotated, Any, cast
 
 from pydantic import SecretStr
 
+from quadkit.auth import constants as const
 from quadkit.auth.authn.password_hasher import (
     Argon2idKeyDerivation,
     Argon2idPasswordHasher,
@@ -15,6 +16,7 @@ from quadkit.auth.authn.password_hasher import (
 )
 from quadkit.auth.authn.security import PasswordHasher, PasswordPolicy
 from quadkit.auth.authn.services import AuthenticationService
+from quadkit.auth.storage._deferred_store import DeferredUserStore
 from quadkit.auth.storage.token_store import InMemoryUserStore, UserStoreProtocol
 from quadkit.contracts import HealthCheckResult, HealthStatus, ProviderPriority
 from quadkit.contracts.auth import PasswordHasherProtocol, PasswordPolicyProtocol
@@ -31,7 +33,7 @@ __all__ = ["AuthenticationProvider"]
 from quadkit.result import Err, Result
 
 if TYPE_CHECKING:
-    from quadkit.auth.config import AuthConfig
+    from quadkit.auth.config import AuthConfig, UserStoreKind
     from quadkit.auth.mfa.manager import MFAManager
     from quadkit.contracts.auth.exceptions import TokenError
     from quadkit.contracts.auth.token import VerifiedToken
@@ -48,6 +50,9 @@ def _build_token_manager(
     jwt_algorithm: str,
     cache_service: Any,
     required_audience: str | None = None,
+    access_expiration_hours: float = 24,
+    refresh_expiration_days: float = 30,
+    grace_period_seconds: float = const.DEFAULT_JWT_KEY_ROTATION_GRACE_PERIOD_SECONDS,
 ) -> Any:
     """Build a JWTTokenManager from the supplied credentials.
 
@@ -68,7 +73,9 @@ def _build_token_manager(
 
     if jwt_algorithm.startswith(("RS", "PS")):
         if secret_key and "-----BEGIN" in secret_key:
-            keys: dict[str, Any] = {"default": {"private": secret_key}}
+            from quadkit.auth.authn._key_utils import rsa_key_material
+
+            keys: dict[str, Any] = {"default": rsa_key_material(secret_key)}
         else:
             try:
                 from cryptography.hazmat.primitives import serialization
@@ -108,6 +115,9 @@ def _build_token_manager(
             algorithm=jwt_algorithm,
             cache_service=cache_service,
             required_audience=required_audience,
+            access_expiration_hours=access_expiration_hours,
+            refresh_expiration_days=refresh_expiration_days,
+            grace_period_seconds=grace_period_seconds,
         )
 
     # Symmetric algorithm: use secret_key directly (single-secret mode)
@@ -135,6 +145,9 @@ def _build_token_manager(
         algorithm=jwt_algorithm,
         cache_service=cache_service,
         required_audience=required_audience,
+        access_expiration_hours=access_expiration_hours,
+        refresh_expiration_days=refresh_expiration_days,
+        grace_period_seconds=grace_period_seconds,
     )
 
 
@@ -177,7 +190,16 @@ class AuthenticationProvider(Provider):
         password_policy: Override the password policy derived from ``config.password``.
             When *None* the policy is built from config; falls back to ``PasswordPolicy()``
             when config is also absent.
-        user_store: Override the user store.  Defaults to :class:`InMemoryUserStore`.
+        user_store: Override the user store with a ready instance. When
+            supplied it wins over ``user_store_kind``/config selection.
+        user_store_kind: Identity-store selection (``"memory"`` or
+            ``"sql"``). Overrides ``config.user_store``; ``"sql"`` defers
+            store construction to :meth:`boot`, which resolves the
+            application's ``DatabaseProviderProtocol`` (registration never
+            needs a live database) and initializes the store's table
+            before the authentication service is built.
+        user_table: Table the SQL identity store owns. Overrides
+            ``config.user_table``; defaults to ``users``.
         token_manager: Supply a fully constructed token manager.  When *None* and
             ``config.token`` is present the manager is built automatically from the
             JWT configuration.
@@ -192,6 +214,8 @@ class AuthenticationProvider(Provider):
         *,
         password_policy: PasswordPolicy | None = None,
         user_store: UserStoreProtocol | None = None,
+        user_store_kind: UserStoreKind | None = None,
+        user_table: str | None = None,
         token_manager: Any = None,
         cache_service: Any = None,
         mfa_service: MFAManager | None = None,
@@ -204,7 +228,32 @@ class AuthenticationProvider(Provider):
             self.password_policy = PasswordPolicy.from_config(config.password)
         else:
             self.password_policy = PasswordPolicy()
-        self.user_store = user_store or InMemoryUserStore()
+        # Identity-store resolution, most explicit first: a ready
+        # instance, then this constructor's selection, then the config
+        # field, then the ephemeral default. "sql" cannot be built yet
+        # (the database provider is a container service), and QuadKit
+        # module visibility can hide it from this provider even during
+        # boot — so the services get a deferred store that materialises
+        # the SQL store over the root resolver on first use (boot
+        # attempts an early resolve so the first request doesn't wait).
+        resolved_kind = (
+            user_store_kind
+            or (config.user_store if config is not None else None)
+            or "memory"
+        )
+        self._user_table = (
+            user_table or (config.user_table if config is not None else None) or "users"
+        )
+        self._user_store_kind = "explicit" if user_store is not None else resolved_kind
+        self._boot_container: BootContainerProtocol | None = None
+        self._deferred_sql_store: DeferredUserStore | None = None
+        if user_store is not None:
+            self.user_store = user_store
+        elif resolved_kind == "sql":
+            self._deferred_sql_store = DeferredUserStore(self._build_sql_user_store)
+            self.user_store = self._deferred_sql_store
+        else:
+            self.user_store = InMemoryUserStore()
         self.mfa_service = mfa_service
 
         # Auto-create a JWTTokenManager from config when no override is supplied.
@@ -213,11 +262,17 @@ class AuthenticationProvider(Provider):
             and config is not None
             and getattr(config, "token", None) is not None
         ):
+            from quadkit.auth.di.sub_providers._token_durations import token_durations
+
+            access, refresh, grace = token_durations(config.token)
             token_manager = _build_token_manager(
                 secret_key=config.token.secret_key.get_secret_value(),
                 jwt_algorithm=config.token.algorithm,
                 cache_service=cache_service,
                 required_audience=config.token.required_audience,
+                access_expiration_hours=access,
+                refresh_expiration_days=refresh,
+                grace_period_seconds=grace,
             )
 
         self.token_manager = token_manager
@@ -373,8 +428,73 @@ class AuthenticationProvider(Provider):
                 factory=lambda: CompositeRequestAuthenticator(auth_provider),
             )
 
+    async def _build_sql_user_store(self) -> UserStoreProtocol:
+        """Materialise the SQL identity store over the root resolver.
+
+        Runs at most once (the deferred store memoises). Requesting
+        SQL without a database provider is a configuration error,
+        never a silent fall-back to ephemeral users.
+        """
+        from quadkit.auth.storage._sql_store import SQLUserStore
+        from quadkit.contracts import DatabaseProviderProtocol
+
+        container = self._boot_container
+        db_provider = None
+        if container is not None and hasattr(container, "resolve_optional"):
+            db_provider = await container.resolve_optional(DatabaseProviderProtocol)
+        if db_provider is None:
+            raise ConfigurationError(
+                "Auth user_store='sql' requires a DatabaseProviderProtocol "
+                "registered in the container (e.g. the quadkit-sql "
+                "database module); none was found. Register a database "
+                "or select user_store='memory' for ephemeral dev/test "
+                "identities."
+            )
+        store = SQLUserStore(db_provider, table_name=self._user_table)
+        await store.initialize()
+        logger.info("auth.sql_user_store_initialized", table=self._user_table)
+        return store
+
+    async def _initialize_sql_user_store(
+        self, container: BootContainerProtocol
+    ) -> None:
+        """Stash the root resolver and try to build the SQL store early.
+
+        Registration must not require a database (providers register
+        before anything boots), and during boot the database module's
+        exports may be invisible to this provider under QuadKit's
+        module-visibility rules (only imported/global modules' exports
+        are visible). So boot attempts the resolve — when visible the
+        store's DDL runs now and no auth query can precede it — and
+        otherwise leaves the deferred store to resolve on first use in
+        the caller's unrestricted context. Pending is *reported*, not
+        hidden: a warning here, DEGRADED health until resolved, and a
+        loud configuration error if the first use still finds no
+        database provider.
+        """
+        if self._deferred_sql_store is None:
+            return
+        self._boot_container = container
+        from quadkit.contracts import DatabaseProviderProtocol
+
+        db_provider = None
+        if container is not None and hasattr(container, "resolve_optional"):
+            db_provider = await container.resolve_optional(DatabaseProviderProtocol)
+        if db_provider is None:
+            logger.warning(
+                "auth.sql_user_store_deferred",
+                table=self._user_table,
+                reason=(
+                    "no DatabaseProviderProtocol visible during boot; "
+                    "the SQL identity store will resolve on first use"
+                ),
+            )
+            return
+        await self._deferred_sql_store.resolve()
+
     async def boot(self, container: BootContainerProtocol) -> None:
         """Initialize authentication provider and register with kernel health registry."""
+        await self._initialize_sql_user_store(container)
         logger.info("AuthenticationProvider started")
         hooks = await container.resolve_optional(HookRegistryProtocol)
         self.service.set_hook_registry(hooks)
@@ -507,13 +627,36 @@ class AuthenticationProvider(Provider):
         return await self.service.get_user_from_token(token)
 
     async def health_check(self, timeout: float = 5.0) -> HealthCheckResult:
-        """Check authentication provider health."""
+        """Check authentication provider health.
+
+        A SQL identity store that was requested but not yet resolved
+        (deferred past boot) reports ``DEGRADED`` rather than claiming
+        healthy persistence it does not have; once materialised it is
+        healthy only when its DDL has run.
+        """
+        from quadkit.auth.storage._sql_store import SQLUserStore
+
+        details: dict[str, Any] = {
+            "service": "authentication",
+            "password_policy": str(self.password_policy),
+            "user_store_type": type(self.user_store).__name__,
+            "user_store": self._user_store_kind,
+        }
+        status = HealthStatus.HEALTHY
+        if self._deferred_sql_store is not None:
+            resolved = self._deferred_sql_store.resolved_store
+            if resolved is None:
+                status = HealthStatus.DEGRADED
+                details["identity_store"] = "sql requested; resolves on first use"
+            elif isinstance(resolved, SQLUserStore):
+                details["user_table"] = resolved.table_name
+                details["identity_store"] = (
+                    "sql" if resolved.initialized else "sql-uninitialized"
+                )
+                if not resolved.initialized:
+                    status = HealthStatus.DEGRADED
         return HealthCheckResult(
             component=self.name,
-            status=HealthStatus.HEALTHY,
-            details={
-                "service": "authentication",
-                "password_policy": str(self.password_policy),
-                "user_store_type": type(self.user_store).__name__,
-            },
+            status=status,
+            details=details,
         )

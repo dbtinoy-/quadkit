@@ -43,7 +43,7 @@ class WebSocketHandlerGenerator(GeneratorBase):
             {
                 "name": self._to_pascal_case(name),
                 "snake_name": snake_name,
-                "snake_name_plural": f"{snake_name}s",
+                "snake_name_plural": self._pluralize(snake_name),
             },
         )
         self.stage(file_path, content)

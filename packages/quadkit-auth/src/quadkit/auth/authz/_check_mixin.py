@@ -5,13 +5,13 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from quadkit.contracts.audit import AuditEntry, AuditLoggerProtocol
+from quadkit.contracts.exceptions import AuthorizationError
 from quadkit.logging import get_logger
 from quadkit.primitives import clock as ambient_clock
 from quadkit.result import Ok, Result
 
 if TYPE_CHECKING:
     from quadkit.auth.authz._parsers import ValueParserRegistry
-    from quadkit.auth.exceptions import AuthorizationError
 
 logger = get_logger(__name__)
 
@@ -50,17 +50,25 @@ class _AuthCheckMixin:
 
         # Gather user roles
         user_roles = set()
-
-        if hasattr(user, "roles") and user.roles:
-            user_roles.update(self._parse_list(user.roles))
-        if hasattr(user, "role") and user.role:
-            user_roles.add(str(user.role))
+        user_roles_attr = (
+            user.get("roles")
+            if isinstance(user, dict)
+            else getattr(user, "roles", None)
+        )
+        if user_roles_attr:
+            user_roles.update(self._parse_list(user_roles_attr))
+        user_role_attr = (
+            user.get("role") if isinstance(user, dict) else getattr(user, "role", None)
+        )
+        if user_role_attr:
+            user_roles.add(str(user_role_attr))
         # Check superuser/admin bypass
-        if (
-            getattr(user, "is_superuser", False)
-            or "admin" in user_roles
-            or "superuser" in user_roles
-        ):
+        is_super = (
+            user.get("is_superuser", False)
+            if isinstance(user, dict)
+            else getattr(user, "is_superuser", False)
+        )
+        if is_super or "admin" in user_roles or "superuser" in user_roles:
             return True
 
         # 1. Direct role check
@@ -112,7 +120,11 @@ class _AuthCheckMixin:
                     return True
 
             # 3. Permission Pattern check (Fallback if no ABAC policy matched)
-            user_id = getattr(user, "user_id", None) or getattr(user, "id", None)
+            user_id = (
+                (user.get("user_id") or user.get("id"))
+                if isinstance(user, dict)
+                else (getattr(user, "user_id", None) or getattr(user, "id", None))
+            )
             now = ambient_clock.monotonic()
 
             user_perms = None
@@ -126,8 +138,13 @@ class _AuthCheckMixin:
             if user_perms is None:
                 user_perms = self._get_user_permissions(effective_roles)
                 # Mix in direct user permissions
-                if hasattr(user, "permissions") and user.permissions:
-                    user_perms.update(self._parse_list(user.permissions))
+                direct_perms = (
+                    user.get("permissions")
+                    if isinstance(user, dict)
+                    else getattr(user, "permissions", None)
+                )
+                if direct_perms:
+                    user_perms.update(self._parse_list(direct_perms))
 
                 if user_id:
                     # Bounded cache: evict the oldest entry (by insertion order)
@@ -144,7 +161,7 @@ class _AuthCheckMixin:
                         user_perms,
                     )
 
-            required_perm = f"{resource}.{action}"
+            required_perm = resource if resource == action else f"{resource}.{action}"
             if self._has_permission(user_perms, required_perm):
                 return True
 
@@ -253,7 +270,7 @@ class _AuthCheckMixin:
         ``False`` on ``Err`` (i.e. if the authorization check itself fails).
         """
         result = await self.authorize(user, action, resource)
-        return result.unwrap_or(False)
+        return result.unwrap_or(False) is True
 
     async def can_view(self, user: Any, resource: str, record: Any = None) -> bool:
         """Grant view when the user holds ``<resource>.view`` (record ignored for now)."""
@@ -283,15 +300,16 @@ class _AuthCheckMixin:
         """Check whether *user* is allowed to perform *action* on *resource*.
 
         This is the primary authorization method.  Satisfies the
-        :class:`~quadkit.contracts.auth.guard.AuthorizerProtocol` protocol (note:
-        the contracts protocol declares ``-> bool``; this implementation
-        returns ``Result[bool, AuthorizationError]`` to make failures
-        explicit.  Use :meth:`can` when a plain ``bool`` is required).
+        :class:`~quadkit.contracts.auth.guard.AuthorizerProtocol` protocol.
+        Use :meth:`can` when an exact boolean decision is required. A successful
+        evaluation (``is_ok()``) is not itself a permission grant.
 
         ``Ok(True)``  — access granted.
         ``Ok(False)`` — access denied.
-        ``Err(AuthorizationError)`` — the authorization check itself failed
-            (e.g. policy engine error); callers should treat this as denied.
+        The contract also permits ``Err(AuthorizationError)`` for domain failures;
+        consumers must treat it as denied. Infrastructure/policy-engine and audit
+        exceptions propagate from this implementation, rather than being silently
+        converted to a denial or a successful decision.
 
         Args:
             user: Authenticated user object.

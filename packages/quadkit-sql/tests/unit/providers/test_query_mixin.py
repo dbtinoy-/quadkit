@@ -17,6 +17,7 @@ from quadkit.contracts.data.sql.database import (
 from quadkit.sql.exceptions import (
     DatabaseConnectionError,
     DuplicateKeyError,
+    ForeignKeyError,
     QueryError,
 )
 from quadkit.sql.providers._query_mixin import _QueryMixin
@@ -221,6 +222,13 @@ class TestExecuteInsert:
         with pytest.raises(DuplicateKeyError):
             await host.execute_insert("users", {"name": "a"})
 
+    async def test_foreign_key_propagates(self) -> None:
+        provider = AsyncMock()
+        provider.execute_insert = AsyncMock(side_effect=ForeignKeyError("fk"))
+        host = _Host(db_provider=provider)
+        with pytest.raises(ForeignKeyError):
+            await host.execute_insert("users", {"name": "a"})
+
     async def test_connection_error_propagates(self) -> None:
         provider = AsyncMock()
         provider.execute_insert = AsyncMock(
@@ -257,6 +265,13 @@ class TestExecuteUpdate:
         with pytest.raises(DatabaseConnectionError):
             await host.execute_update("users", {}, "x")
 
+    async def test_integrity_error_propagates_typed(self) -> None:
+        provider = AsyncMock()
+        provider.execute_update = AsyncMock(side_effect=ForeignKeyError("fk"))
+        host = _Host(db_provider=provider)
+        with pytest.raises(ForeignKeyError):
+            await host.execute_update("users", {}, "x")
+
 
 class TestExecuteDelete:
     async def test_success_passthrough(self) -> None:
@@ -274,6 +289,13 @@ class TestExecuteDelete:
         res = await host.execute_delete("users", "x")
         assert res.success is False
         assert "locked" in (res.error_message or "")
+
+    async def test_restricted_delete_propagates_typed(self) -> None:
+        provider = AsyncMock()
+        provider.execute_delete = AsyncMock(side_effect=ForeignKeyError("fk"))
+        host = _Host(db_provider=provider)
+        with pytest.raises(ForeignKeyError):
+            await host.execute_delete("users", "x")
 
 
 class TestExecuteRaw:

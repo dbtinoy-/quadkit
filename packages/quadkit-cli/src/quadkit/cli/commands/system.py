@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from importlib import import_module
 from pathlib import Path
 from typing import Any
@@ -59,8 +60,18 @@ def health(
         "--strict",
         help="Fail on non-critical issues too",
     ),
+    app_target: str | None = typer.Option(
+        None,
+        "--app",
+        help="Explicit Quadkit Application instance (module:app); starts real providers",
+    ),
+    checks: list[str] | None = typer.Option(
+        None,
+        "--check",
+        help="Runtime check contributor:name (repeatable; requires --app)",
+    ),
 ) -> None:
-    """Check the health of the current Quadkit project."""
+    """Check project files; explicitly opt into application runtime probes."""
     out = OutputManager()
     from quadkit.cli.contributors.runtime import ContributorRuntime  # noqa: PLC0415
 
@@ -79,27 +90,51 @@ def health(
         icon = "[success]✓[/success]" if passed else "[error]✗[/error]"
         out.print(f"{icon} {label}")
 
-    runtime = ContributorRuntime.from_entry_points()
-    for check in runtime.health_checks:
+    if bool(app_target) != bool(checks):
+        raise typer.BadParameter("Use --app and at least one --check together")
+    if app_target and checks:
+        from quadkit.cli.commands.runtime_health import (
+            run_runtime_checks,
+            select_checks,
+        )
+
+        runtime = ContributorRuntime.from_entry_points()
         try:
-            fn = _resolve_callable(check.check_path)
-            result: CheckResult = fn()
-            results.append(result)
-            icon = result.icon
-            color = result.color
-            out.print(
-                f"  [{color}]{icon}[/{color}] [{color}]{check.name}[/{color}]"
-                f"  {result.message}"
-            )
-        except Exception as exc:
+            selected = select_checks(runtime.health_checks, checks)
+        except ValueError as exc:
+            raise typer.BadParameter(
+                "Select unique installed contributor:name checks with valid metadata"
+            ) from exc
+        try:
+            results.extend(asyncio.run(run_runtime_checks(app_target, selected)))
+        except Exception as exc:  # Command boundary; never echo exception text.
             results.append(
                 CheckResult(
-                    name=check.name,
+                    name="runtime",
                     status=CheckStatus.FAIL,
-                    message=str(exc),
+                    message=f"Runtime health could not complete ({type(exc).__name__})",
                 )
             )
-            out.print(f"  [red]✗[/red] {check.name}: {exc}")
+        for contributor in runtime.errors:
+            results.append(
+                CheckResult(
+                    name=contributor,
+                    status=CheckStatus.WARNING,
+                    message="Contribution discovery failed; runtime coverage is incomplete",
+                )
+            )
+    else:
+        results.append(
+            CheckResult(
+                name="runtime",
+                status=CheckStatus.WARNING,
+                message="Runtime health not run; opt in with --app module:app --check contributor:name",
+            )
+        )
+    for result in results[len(project_checks) :]:
+        out.print(
+            f"  [{result.color}]{result.icon} {result.name}: {result.message}[/{result.color}]"
+        )
 
     failures = [r for r in results if r.status == CheckStatus.FAIL]
     if strict:

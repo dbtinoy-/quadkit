@@ -4,19 +4,21 @@ from __future__ import annotations
 
 import html
 import re
+from typing import Any
 
 from quadkit.logging import get_logger
 from quadkit.security.config import InputSanitizerConfig
 
 logger = get_logger(__name__)
 
+_nh3: Any = None
 try:
-    import nh3 as _nh3  # type: ignore[import-not-found]
+    import nh3 as _nh3_mod
 
+    _nh3 = _nh3_mod
     _NH3_AVAILABLE = True
 except ImportError:  # pragma: no cover
     _NH3_AVAILABLE = False
-    _nh3 = None
 
 # Safe conservative defaults for the standalone sanitize_html function.
 _DEFAULT_TAGS: frozenset[str] = frozenset(

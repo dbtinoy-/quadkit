@@ -4,11 +4,13 @@ count, exists."""
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
-from quadkit.sql.exceptions import DatabaseError
+from quadkit.sql.exceptions import DatabaseError, RepositoryError
 from quadkit.sql.providers.base_provider import QueryResult
+import quadkit.sql.repositories._read_mixin as read_mixin_module
 from quadkit.sql.repositories.base import SQLRepository
 
 
@@ -93,7 +95,7 @@ class TestFindById:
             raise DatabaseError("db down")
 
         p.execute_query = boom  # type: ignore[method-assign]
-        with pytest.raises(RepositoryError, match="Failed to find entity by id 1"):
+        with pytest.raises(RepositoryError, match="Failed to find entity"):
             await repo.find_by_id(1)
 
 
@@ -126,6 +128,28 @@ class TestFindMany:
         repo, _ = _repo([])
         assert await repo.find_many() == []
 
+    async def test_failure_logs_only_exception_type(self, monkeypatch) -> None:
+        private_fingerprint = "sha256:private-guest-fingerprint-7b2f"
+        private_path = "/srv/private/tenant-42/source.db"
+        private_message = f"token={private_fingerprint} at {private_path}"
+        logger = MagicMock()
+        monkeypatch.setattr(read_mixin_module, "logger", logger)
+        repo, provider = _repo()
+
+        async def fail_query(query: str, params: Any = None) -> QueryResult:
+            raise DatabaseError(private_message)
+
+        provider.execute_query = fail_query  # type: ignore[method-assign]
+        with pytest.raises(RepositoryError, match="Failed to find entities"):
+            await repo.find_many(guest_fingerprint=private_fingerprint)
+
+        logged = repr(logger.mock_calls)
+        assert "DatabaseError" in logged
+        assert private_fingerprint not in logged
+        assert private_path not in logged
+        assert private_message not in logged
+        logger.exception.assert_not_called()
+
 
 class TestFindOne:
     async def test_first_match(self) -> None:
@@ -136,6 +160,53 @@ class TestFindOne:
     async def test_none_when_empty(self) -> None:
         repo, _ = _repo([])
         assert await repo.find_one(status="x") is None
+
+
+class PostgresProvider(QueryRecordingProvider):
+    """Recording provider that reports Postgres, so the SQL shape can be pinned."""
+
+    database_type = "postgres"
+
+
+class TestRowLocking:
+    """``lock=True`` renders ``FOR UPDATE`` — where the dialect can express it.
+
+    A caller that reads a row and then writes it back (consume a one-shot
+    credit, advance a work item) needs the read to hold the row until the
+    transaction ends; without the lock two callers both read the same state and
+    both "succeed". SQLite has no row locks and rejects the clause as raw text,
+    so the lock is dialect-gated rather than always appended.
+    """
+
+    async def test_find_one_locks_on_postgres(self) -> None:
+        provider = PostgresProvider([{"id": 1}])
+        repo = DictRepo(provider)
+        await repo.find_one(lock=True, id=1)
+        query, params = provider.queries[0]
+        assert query.endswith("FOR UPDATE")
+        assert params == [1]
+
+    async def test_find_many_locks_after_limit(self) -> None:
+        """``FOR UPDATE`` follows LIMIT/OFFSET; before them it is a syntax error."""
+        provider = PostgresProvider([])
+        repo = DictRepo(provider)
+        await repo.find_many(lock=True, limit=1, offset=0)
+        query, _ = provider.queries[0]
+        assert query.index("LIMIT") < query.index("FOR UPDATE")
+
+    async def test_sqlite_never_emits_the_clause(self) -> None:
+        """The default host is SQLite, which rejects ``FOR UPDATE``."""
+        repo, p = _repo([{"id": 1}])
+        await repo.find_one(lock=True, id=1)
+        query, _ = p.queries[0]
+        assert "FOR UPDATE" not in query
+
+    async def test_no_lock_unless_asked(self) -> None:
+        provider = PostgresProvider([{"id": 1}])
+        repo = DictRepo(provider)
+        await repo.find_one(id=1)
+        query, _ = provider.queries[0]
+        assert "FOR UPDATE" not in query
 
 
 class TestCount:

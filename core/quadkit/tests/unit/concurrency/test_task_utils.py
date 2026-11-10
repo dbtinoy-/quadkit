@@ -37,17 +37,20 @@ class TestCreateTrackedTask:
         task_set: set[asyncio.Task] = set()
 
         async def failing() -> None:
-            raise ValueError("test_error")
+            raise ValueError("PRIVATE_EXCEPTION_SENTINEL /srv/private/task")
 
         with patch("quadkit.concurrency.task_utils.logger") as mock_logger:
-            task = create_tracked_task(failing(), task_set, name="failing_task")
+            task = create_tracked_task(
+                failing(), task_set, name="PRIVATE_TASK_ID_SENTINEL"
+            )
             await asyncio.gather(task, return_exceptions=True)
             # Done-callbacks are scheduled via loop.call_soon; yield once
             # so the exception-logging callback actually runs.
             await asyncio.sleep(0)
             mock_logger.error.assert_called_once()
-            call_kwargs = mock_logger.error.call_args
-            assert call_kwargs[0][0] == "background_task_failed"
+            call_args, call_kwargs = mock_logger.error.call_args
+            assert call_args == ("background_task_failed",)
+            assert call_kwargs == {"error_type": "ValueError"}
 
     @pytest.mark.asyncio
     async def test_cancelled_task_does_not_log(self) -> None:

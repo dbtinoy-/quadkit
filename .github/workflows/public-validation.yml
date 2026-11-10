@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
-      # The thirteen packages classify 3.11-3.13 on PyPI — this matrix is
+      # The eighteen packages classify 3.11-3.13 on PyPI — this matrix is
       # what proves that claim.
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -51,7 +51,12 @@ jobs:
             packages/quadkit-events \
             packages/quadkit-tasks \
             packages/quadkit-http \
-            packages/quadkit-monitor; do
+            packages/quadkit-monitor \
+            packages/quadkit-ai-llm \
+            packages/quadkit-ai-agents \
+            packages/quadkit-ai-mcp \
+            packages/quadkit-workflow \
+            packages/quadkit-notification; do
             python -m build "$package" --wheel --outdir dist
           done
 
@@ -110,4 +115,9 @@ jobs:
             packages/quadkit-events/tests \
             packages/quadkit-tasks/tests \
             packages/quadkit-http/tests \
-            packages/quadkit-monitor/tests
+            packages/quadkit-monitor/tests \
+            packages/quadkit-ai-llm/tests \
+            packages/quadkit-ai-agents/tests \
+            packages/quadkit-ai-mcp/tests \
+            packages/quadkit-workflow/tests \
+            packages/quadkit-notification/tests

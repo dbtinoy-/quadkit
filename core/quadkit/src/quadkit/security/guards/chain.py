@@ -9,7 +9,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from quadkit.contracts.exceptions.middleware import MiddlewareGuardError
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 if TYPE_CHECKING:
     from quadkit.contracts.web import GuardProtocol
@@ -103,15 +103,13 @@ class GuardChainImpl:
                     logger.warning(
                         "guard_denied",
                         guard_type=type(guard).__name__,
-                        subject=context.get("subject") or context.get("user_id"),
-                        resource=context.get("resource") or context.get("path"),
                     )
                     return False
             except (RuntimeError, ValueError, TypeError, OSError, AttributeError) as e:
                 logger.error(
                     "guard_error",
                     guard_type=type(guard).__name__,
-                    error=str(e),
+                    error_type=safe_error_type(e),
                 )
                 if self._propagate_exceptions:
                     raise
@@ -139,8 +137,6 @@ class GuardChainImpl:
                     logger.warning(
                         "guard_rejected",
                         guard_type=type(guard).__name__,
-                        subject=context.get("subject") or context.get("user_id"),
-                        resource=context.get("resource") or context.get("path"),
                     )
                     raise MiddlewareGuardError(
                         message=message,
@@ -149,15 +145,16 @@ class GuardChainImpl:
             except MiddlewareGuardError:
                 raise
             except Exception as e:  # noqa: BLE001 — guard error boundary: non-GuardErrors logged and surfaced
+                error_type = safe_error_type(e)
                 logger.error(
                     "guard_exception",
                     guard_type=type(guard).__name__,
-                    error=str(e),
+                    error_type=error_type,
                 )
                 raise MiddlewareGuardError(
-                    message=f"GuardProtocol error: {e}",
+                    message=f"Guard evaluation failed ({error_type})",
                     guard=type(guard).__name__,
-                ) from e
+                ) from None
 
     def __len__(self) -> int:
         """Return the number of guards in the chain."""

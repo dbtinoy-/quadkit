@@ -1,12 +1,11 @@
 """Query execution, transaction and table-operation tests for BaseDatabaseProvider."""
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, Mock
+from unittest.mock import AsyncMock, Mock
 
 import pytest
 
 from quadkit.contracts.data import (
-    ConnectionPoolProtocol,
     DeleteResult,
     InsertResult,
     QueryLoggerProtocol,
@@ -26,6 +25,7 @@ class ConcreteDatabaseProvider(DatabaseDriver):
 
     async def _create_connection(self):
         conn = Mock()
+        conn.execute = AsyncMock()
         self._connections_created.append(conn)
         return conn
 
@@ -37,9 +37,9 @@ class ConcreteDatabaseProvider(DatabaseDriver):
     ) -> list[dict[str, Any]]:
         if "SELECT 1" in sql:
             return [{"health_check": 1}]
-        elif "sqlite_master" in sql:
+        if "sqlite_master" in sql:
             return [{"name": "test_table"}]
-        elif "PRAGMA table_info" in sql:
+        if "PRAGMA table_info" in sql:
             return [
                 {
                     "name": "id",
@@ -172,10 +172,13 @@ class TestBaseDatabaseProviderQueryExecution:
         provider = ConcreteDatabaseProvider("sqlite:///test.db")
         await provider.connect()
 
-        with pytest.raises(ValueError):
+        async def fail_inside_transaction() -> None:
             async with provider.transaction():
                 assert provider.transaction_manager.in_transaction is True
                 raise ValueError("Test exception")
+
+        with pytest.raises(ValueError, match="Test exception"):
+            await fail_inside_transaction()
 
         assert provider.transaction_manager.in_transaction is False
         assert provider.transaction_manager._transaction_connection is None
@@ -290,7 +293,7 @@ class TestBaseDatabaseProviderQueryExecution:
         call_args = mock_query_logger.log_query.call_args[0][0]
 
         assert call_args.sql == "SELECT * FROM test_table"
-        assert list(call_args.params) == ["param"]
+        assert call_args.params is None
         assert call_args.success is True
         assert call_args.execution_time >= 0
 
@@ -315,6 +318,6 @@ class TestBaseDatabaseProviderQueryExecution:
         call_args = mock_query_logger.log_query.call_args[0][0]
 
         assert call_args.success is False
-        assert "Query failed" in call_args.error_message
+        assert call_args.error_message == "RuntimeError"
 
         provider._execute_query_raw = original_method

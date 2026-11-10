@@ -4,6 +4,7 @@ from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
+from quadkit import serialization as json
 from quadkit.auth.authn.core import User
 from quadkit.auth.authz.guards import (
     AuthorizationGuard,
@@ -13,7 +14,6 @@ from quadkit.auth.authz.guards import (
     require_permissions,
     require_roles,
 )
-from quadkit import serialization as json
 
 
 class TestAuthorizationGuard:
@@ -36,8 +36,10 @@ class TestAuthorizationGuard:
 
         mock_service = Mock()
         mock_service.has_any_role = Mock(return_value=True)
-        mock_service.can = AsyncMock(return_value=True)
-        guard = AuthorizationGuard(roles=["admin"], permissions=["write"], auth_service=mock_service)
+        mock_service.has_any_permission = Mock(return_value=True)
+        guard = AuthorizationGuard(
+            roles=["admin"], permissions=["write"], auth_service=mock_service
+        )
         assert await guard.check_authorization(user)
 
     @pytest.mark.asyncio
@@ -70,7 +72,9 @@ class TestAuthorizationGuard:
 
         mock_service = Mock()
         mock_service.has_any_role = Mock(return_value=False)
-        guard = AuthorizationGuard(roles=["admin"], permissions=["write"], auth_service=mock_service)
+        guard = AuthorizationGuard(
+            roles=["admin"], permissions=["write"], auth_service=mock_service
+        )
         assert not await guard.check_authorization(user)
 
     @pytest.mark.asyncio
@@ -86,8 +90,10 @@ class TestAuthorizationGuard:
 
         mock_service = Mock()
         mock_service.has_any_role = Mock(return_value=True)
-        mock_service.can = AsyncMock(return_value=False)
-        guard = AuthorizationGuard(roles=["admin"], permissions=["write"], auth_service=mock_service)
+        mock_service.has_any_permission = Mock(return_value=False)
+        guard = AuthorizationGuard(
+            roles=["admin"], permissions=["write"], auth_service=mock_service
+        )
         assert not await guard.check_authorization(user)
 
     def test_get_error_message_roles(self):
@@ -114,7 +120,9 @@ class TestRouteGuard:
         self.mock_service = Mock()
         self.mock_service.has_any_role = Mock(return_value=True)
         self.mock_service.can = AsyncMock(return_value=True)
-        self.auth_guard = AuthorizationGuard(roles=["admin"], auth_service=self.mock_service)
+        self.auth_guard = AuthorizationGuard(
+            roles=["admin"], auth_service=self.mock_service
+        )
         self.route_guard = RouteGuard(self.auth_guard)
 
     @pytest.mark.asyncio
@@ -153,7 +161,7 @@ class TestRouteGuard:
         assert "Required roles: admin" in content["message"]
 
 
-class Testrequire_authDecorator:
+class TestRequireAuthDecorator:
     """Test require_auth decorator"""
 
     def setup_method(self):
@@ -163,10 +171,13 @@ class Testrequire_authDecorator:
         self.mock_request.state.user = None
         self.mock_request.headers = {}
 
-    def _make_mock_service(self, *, has_any_role: bool = True, can: bool = True) -> Mock:
+    def _make_mock_service(
+        self, *, has_any_role: bool = True, can: bool = True
+    ) -> Mock:
         """Build a mock AuthorizationService."""
         svc = Mock()
         svc.has_any_role = Mock(return_value=has_any_role)
+        svc.has_any_permission = Mock(return_value=can)
         svc.can = AsyncMock(return_value=can)
         return svc
 
@@ -186,7 +197,9 @@ class Testrequire_authDecorator:
             return {"success": True}
 
         mock_svc = self._make_mock_service(has_any_role=True)
-        with patch("quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc):
+        with patch(
+            "quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc
+        ):
             result = await test_handler(self.mock_request)
             assert result == {"success": True}
 
@@ -220,7 +233,9 @@ class Testrequire_authDecorator:
             return {"success": True}
 
         mock_svc = self._make_mock_service(has_any_role=False)
-        with patch("quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc):
+        with patch(
+            "quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc
+        ):
             result = await test_handler(self.mock_request)
             assert result.status_code == 403
             content = json.loads(result.body.decode())
@@ -254,7 +269,9 @@ class Testrequire_authDecorator:
             return {"success": True}
 
         mock_svc = self._make_mock_service(has_any_role=True)
-        with patch("quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc):
+        with patch(
+            "quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc
+        ):
             result = await test_handler(self.mock_request)
             assert result == {"success": True}
 
@@ -274,7 +291,9 @@ class Testrequire_authDecorator:
             return {"success": True}
 
         mock_svc = self._make_mock_service(can=True)
-        with patch("quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc):
+        with patch(
+            "quadkit.auth.authz.guards.AuthorizationService", return_value=mock_svc
+        ):
             result = await test_handler(self.mock_request)
             assert result == {"success": True}
 
@@ -318,3 +337,91 @@ class Testrequire_authDecorator:
         result = await test_handler(request=self.mock_request)
         # This will fail because request.state.user is not set, but the decorator found the request
         assert result.status_code == 401  # No user set
+
+    @pytest.mark.asyncio
+    async def test_require_permissions_end_to_end_dict_and_wildcard(self):
+        """Real AuthorizationService handles dotted permissions, dict users, and wildcards."""
+
+        @require_permissions("media.create")
+        async def upload_handler(_self, request):
+            return {"ok": True}
+
+        self.mock_request.state.user = {"user_id": "u1", "permissions": ["media.*"]}
+        assert await upload_handler(object(), self.mock_request) == {"ok": True}
+
+        self.mock_request.state.user = {"user_id": "u2", "permissions": ["media.read"]}
+        denied = await upload_handler(object(), self.mock_request)
+        assert denied.status_code == 403
+
+
+class TestGuardAgainstRealService:
+    """Guards evaluated by a real AuthorizationService (no mocks).
+
+    The mock-based tests above pin call shapes; they cannot see
+    argument *semantics*. Passing a permission string as both the
+    action and the resource composed ``perm.perm`` as the required
+    grant, so an exact ``orders.read`` grant never satisfied an
+    ``orders.read`` requirement — every test still passed. These use
+    the real service so that class of bug cannot hide again.
+    """
+
+    def setup_method(self):
+        from quadkit.auth.authz.service import AuthorizationService
+
+        self.service = AuthorizationService()
+        self.service.set_roles(
+            {
+                "editor": {
+                    "permissions": ["orders.read", "orders.update"],
+                    "inherits": ["viewer"],
+                },
+                "viewer": {"permissions": ["products.read"]},
+            }
+        )
+        self.editor = User(
+            user_id="u1", name="ed", email="ed@example.com", roles=["editor"]
+        )
+
+    @pytest.mark.asyncio
+    async def test_dotted_permission_matches_role_grant(self):
+        guard = AuthorizationGuard(
+            permissions=["orders.read"], auth_service=self.service
+        )
+        assert await guard.check_authorization(self.editor)
+
+    @pytest.mark.asyncio
+    async def test_dotted_permission_denied_without_grant(self):
+        guard = AuthorizationGuard(
+            permissions=["orders.delete"], auth_service=self.service
+        )
+        assert not await guard.check_authorization(self.editor)
+
+    @pytest.mark.asyncio
+    async def test_inherited_role_grant_satisfies_guard(self):
+        guard = AuthorizationGuard(
+            permissions=["products.read"], auth_service=self.service
+        )
+        assert await guard.check_authorization(self.editor)
+
+    @pytest.mark.asyncio
+    async def test_wildcard_grant_still_satisfies(self):
+        from quadkit.auth.authz.service import AuthorizationService
+
+        svc = AuthorizationService()
+        svc.set_roles({"ops": {"permissions": ["orders.*"]}})
+        user = User(user_id="u2", name="op", email="op@example.com", roles=["ops"])
+        guard = AuthorizationGuard(permissions=["orders.delete"], auth_service=svc)
+        assert await guard.check_authorization(user)
+
+    @pytest.mark.asyncio
+    async def test_dotless_scope_matches_direct_permission(self):
+        user = User(
+            user_id="u3",
+            name="w",
+            email="w@example.com",
+            permissions=["write"],
+        )
+        guard = AuthorizationGuard(permissions=["write"], auth_service=self.service)
+        assert await guard.check_authorization(user)
+        guard = AuthorizationGuard(permissions=["admin"], auth_service=self.service)
+        assert not await guard.check_authorization(user)

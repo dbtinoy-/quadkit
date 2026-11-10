@@ -3,10 +3,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import re
 from typing import Any, cast
 
 from quadkit.contracts import DatabaseProviderProtocol
+from quadkit.contracts.cli.generators import pluralize_identifier, snake_case
 from quadkit.logging import get_logger
 from quadkit.sql.lib import entity_to_dict
 
@@ -136,21 +136,17 @@ class SnakeCaseNamingHandler:
 
     def get_table_name(self, class_name: str) -> str:
         """Convert PascalCase to snake_case."""
-        return re.sub(r"(?<-n)(?=[A-Z])", "_", class_name).lower()
+
+        return snake_case(class_name)
 
 
 class PluralNamingHandler:
     """Handler for plural table naming strategy."""
 
     def get_table_name(self, class_name: str) -> str:
-        """Pluralise a class name."""
-        if class_name.endswith("y"):
-            table_name = class_name[:-1] + "ies"
-        elif class_name.endswith(("s", "sh", "ch", "x", "z")):
-            table_name = class_name + "es"
-        else:
-            table_name = class_name + "s"
-        return table_name.lower()
+        """Pluralise a singular class name via the contracts rule."""
+
+        return pluralize_identifier(class_name)
 
 
 class LowercaseNamingHandler:

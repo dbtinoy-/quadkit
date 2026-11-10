@@ -30,6 +30,11 @@ from typing import TYPE_CHECKING, Any
 from starlette.responses import JSONResponse
 
 from quadkit.auth.authz.service import AuthorizationService
+from quadkit.contracts.web.security_metadata import (
+    HTTP_BEARER_DOCUMENTATION_ATTRIBUTE,
+    HttpBearerDocumentation,
+    HttpErrorMessageDocumentation,
+)
 from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
@@ -46,6 +51,53 @@ def _find_request(args: tuple, kwargs: dict) -> Any:
         if hasattr(arg, "state") and hasattr(arg, "headers"):
             return arg
     return kwargs.get("request")
+
+
+async def _holds_permission(
+    service: AuthorizationService, user: User, perm: str
+) -> bool:
+    """Return ``True`` when *user* holds the permission string *perm*.
+
+    Permission strings are ``resource.action`` (the shape
+    :meth:`AuthorizationService.can` composes from its arguments), so a
+    dotted requirement is split at the last dot and evaluated through
+    ``can`` — which walks role inheritance, ABAC policies, and
+    delegations. A dot-less string is a bare scope (``"write"``,
+    ``"admin"``) matched directly against the user's permission
+    patterns.
+
+    Passing the whole string as both arguments (the previous shape)
+    composed ``perm.perm`` as the required grant, so an exact
+    ``orders.read`` grant never satisfied a ``orders.read``
+    requirement; only wildcard grants slipped through by prefix.
+    """
+    resource, dot, action = perm.rpartition(".")
+    if not dot:
+        return service.has_any_permission(user, [perm])
+    return await service.can(user, action, resource)
+
+
+async def _resolve_authorization_service(request: Any) -> AuthorizationService | None:
+    """The app's DI-registered :class:`AuthorizationService`, if reachable.
+
+    The decorators run outside the container, so without this lookup
+    every check evaluates against a fresh service whose role registry
+    is empty — role-derived permissions (and role inheritance) would
+    never resolve even when the app configured them in ``auth.roles``.
+    Resolution goes through the request's DI resolver, the same channel
+    ``quadkit.auth.web.guards`` uses; any failure falls back to ``None``
+    and the caller keeps today's default-service behavior.
+    """
+    try:
+        from quadkit.di.resolution.context import get_resolver
+
+        resolver = get_resolver(request)
+        if resolver is None:
+            return None
+        service = await resolver.resolve(AuthorizationService)
+    except Exception:  # noqa: BLE001 — resolution failure must not 500 the route
+        return None
+    return service if isinstance(service, AuthorizationService) else None
 
 
 class AuthorizationGuard:
@@ -81,7 +133,10 @@ class AuthorizationGuard:
         """
         if user is None:
             return False
-        if hasattr(user, "is_active") and not user.is_active:
+        if isinstance(user, dict):
+            if not user.get("is_active", True):
+                return False
+        elif hasattr(user, "is_active") and not user.is_active:
             return False
 
         service = (
@@ -96,7 +151,7 @@ class AuthorizationGuard:
 
         if self.permissions:
             for perm in self.permissions:
-                if not await service.can(user, perm, perm):
+                if not await _holds_permission(service, user, perm):
                     return False
 
         return True
@@ -145,6 +200,31 @@ class RouteGuard:
         )
 
 
+def authorization_documentation(
+    *,
+    roles: list[str] | tuple[str, ...] | None = None,
+    permissions: list[str] | tuple[str, ...] | None = None,
+    optional: bool = False,
+) -> HttpBearerDocumentation | None:
+    """Describe this native decorator without executing a guard or policy.
+
+    Only the direct authorization branch owns the 403 envelope. Outer
+    middleware can answer 401 first; optional and DI-replaced guards differ.
+    """
+    if optional:
+        return None
+    rejections = (
+        (
+            HttpErrorMessageDocumentation(
+                403, "forbidden", "Authorization requirements not met."
+            ),
+        )
+        if roles or permissions
+        else ()
+    )
+    return HttpBearerDocumentation(rejections=rejections)
+
+
 def require_auth(
     roles: list[str] | None = None,
     permissions: list[str] | None = None,
@@ -165,6 +245,24 @@ def require_auth(
         ValueError: If no request object can be found in the handler's arguments.
     """
     guard = AuthorizationGuard(roles=roles, permissions=permissions)
+    # The app's AuthorizationService, resolved lazily from the first
+    # request's DI resolver and memoized (it is registered as a
+    # singleton). Only successes are memoized: an early request that
+    # beats container boot must not pin the empty-registry fallback.
+    resolved_service: list[AuthorizationService] = []
+
+    async def _guard_for(request: Any) -> AuthorizationGuard:
+        if not resolved_service:
+            service = await _resolve_authorization_service(request)
+            if service is not None:
+                resolved_service.append(service)
+        if not resolved_service:
+            return guard
+        return AuthorizationGuard(
+            roles=guard.roles,
+            permissions=guard.permissions,
+            auth_service=resolved_service[0],
+        )
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
@@ -190,14 +288,23 @@ def require_auth(
             if not roles and not permissions:
                 return await func(*args, **kwargs)
 
-            if not await guard.check_authorization(user):
+            effective_guard = await _guard_for(request)
+            if not await effective_guard.check_authorization(user):
                 return JSONResponse(
-                    {"error": "forbidden", "message": guard.get_error_message()},
+                    {
+                        "error": "forbidden",
+                        "message": effective_guard.get_error_message(),
+                    },
                     status_code=403,
                 )
 
             return await func(*args, **kwargs)
 
+        documentation = authorization_documentation(
+            roles=roles, permissions=permissions, optional=optional
+        )
+        if documentation is not None:
+            setattr(wrapper, HTTP_BEARER_DOCUMENTATION_ATTRIBUTE, documentation)
         return wrapper
 
     return decorator
@@ -255,6 +362,7 @@ def optional_auth(func: Callable) -> Callable:
 __all__ = [
     "AuthorizationGuard",
     "RouteGuard",
+    "authorization_documentation",
     "optional_auth",
     "require_auth",
     "require_permissions",

@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-web"
-version = "0.0.46"
+version = "0.0.50"
 description = "Web layer for Quadkit Framework - ASGI, routing, middleware, and API tooling"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,8 +38,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quadkit>=0.0.2",
-    "quadkit-contracts>=0.0.2",
+    "quadkit>=0.0.50",
+    "quadkit-contracts>=0.0.50",
     "starlette>=0.28.0,<2",
     "orjson>=3.9.0,<4",
     "typing-extensions>=4.0.0,<5",
@@ -95,6 +95,11 @@ test = [
     "httpx>=0.26.0,<1",
     "httpx2>=2.0.0,<3",
     "python-multipart>=0.0.9,<1.0",
+    # Real backends for tests/integration/test_runner_live.py: mocked
+    # servers cannot reproduce signal/thread semantics (SERVER-1).
+    "granian>=2.8.2,<3",
+    "uvicorn[standard]>=0.52.4,<1",
+    "hypercorn>=0.16.0,<1",
 ]
 dev = [
     "black>=23.0.0,<27",

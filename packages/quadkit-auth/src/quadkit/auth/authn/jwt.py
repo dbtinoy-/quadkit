@@ -17,8 +17,12 @@ Example::
 from __future__ import annotations
 
 from collections import OrderedDict
+from collections.abc import Sequence
 import os
 from typing import TYPE_CHECKING, Any
+
+import jwt as _pyjwt
+from jwt.types import Options as _JwtOptions
 
 from quadkit.auth import constants as const
 from quadkit.auth.authn._binding import TokenBindingConfig
@@ -27,21 +31,22 @@ from quadkit.auth.authn._jwt_lifecycle import _JWTLifecycleMixin
 from quadkit.auth.authn._key_utils import normalize_jwt_keys
 from quadkit.auth.authn.blacklist import JWTBlacklist
 from quadkit.auth.authn.key_rotation import JWTKeyStore
+from quadkit.contracts.auth.exceptions import TokenError as ContractsTokenError
 from quadkit.contracts.exceptions import ConfigurationError
 from quadkit.logging import LoggerProtocol as Logger
 from quadkit.logging import get_logger
+from quadkit.primitives import clock as ambient_clock
+from quadkit.result import Err, Ok, Result
 from quadkit.validation import SecretStr
 
 _logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from quadkit.contracts.audit import AuditLoggerProtocol
-    from quadkit.contracts.auth.exceptions import TokenError as ContractsTokenError
     from quadkit.contracts.auth.token import VerifiedToken
     from quadkit.contracts.core import HookRegistryProtocol
     from quadkit.contracts.core.identity import IdGeneratorProtocol
     from quadkit.contracts.infra.cache import CacheBackendProtocol
-    from quadkit.result import Result
 
 
 class JWTTokenManager(_JWTCreationMixin, _JWTLifecycleMixin):
@@ -84,11 +89,11 @@ class JWTTokenManager(_JWTCreationMixin, _JWTLifecycleMixin):
         current_key_id: str,
         keys: dict[str, str | SecretStr | dict[str, str | SecretStr]] | None = None,
         algorithm: str = const.DEFAULT_TOKEN_ALGORITHM,
-        access_expiration_hours: int = 24,
-        refresh_expiration_days: int = 30,
+        access_expiration_hours: float = 24,
+        refresh_expiration_days: float = 30,
         cache_service: CacheBackendProtocol | None = None,
         rotation_interval_days: int = 90,
-        grace_period_seconds: int = const.DEFAULT_JWT_KEY_ROTATION_GRACE_PERIOD_SECONDS,
+        grace_period_seconds: float = const.DEFAULT_JWT_KEY_ROTATION_GRACE_PERIOD_SECONDS,
         logger: Logger | None = None,
         *,
         audit_logger: AuditLoggerProtocol | None = None,
@@ -326,4 +331,58 @@ class JWTTokenManager(_JWTCreationMixin, _JWTLifecycleMixin):
         return await self.verify_token(token, "access")
 
 
-__all__ = ["JWTTokenManager", "TokenBindingConfig"]
+def decode_external_jwt(
+    token: str,
+    *,
+    secret: str | SecretStr | None = None,
+    algorithms: Sequence[str] = ("HS256",),
+    verify_signature: bool = True,
+    verify_exp: bool = True,
+    verify_aud: bool = False,
+) -> Result[dict[str, Any], ContractsTokenError]:
+    """Decode and optionally verify an external RFC 7519 JWT (e.g. OAuth/NextAuth session token).
+
+    Uses QuadKit's ambient clock for ``exp`` / ``nbf`` validation so tests overriding
+    ``quadkit.primitives.clock.use(FixedClock(...))`` exercise deterministic expiry.
+    """
+    raw_secret: str = ""
+    if isinstance(secret, SecretStr):
+        raw_secret = secret.get_secret_value()
+    elif isinstance(secret, str):
+        raw_secret = secret
+
+    if verify_signature and not raw_secret:
+        return Err(ContractsTokenError("JWT verification secret is required"))
+
+    options: _JwtOptions = {
+        "verify_signature": verify_signature,
+        "verify_exp": False,
+        "verify_nbf": False,
+        "verify_aud": verify_aud,
+    }
+    try:
+        claims = _pyjwt.decode(
+            token,
+            key=raw_secret,
+            algorithms=list(algorithms),
+            options=options,
+        )
+    except _pyjwt.InvalidTokenError as exc:
+        return Err(ContractsTokenError(f"Invalid JWT token: {exc}"))
+
+    if not isinstance(claims, dict):
+        return Err(ContractsTokenError("Invalid JWT payload shape"))
+
+    if verify_signature and verify_exp:
+        now_ts = ambient_clock.timestamp()
+        exp = claims.get("exp")
+        if isinstance(exp, int | float) and now_ts >= float(exp):
+            return Err(ContractsTokenError("JWT token has expired"))
+        nbf = claims.get("nbf")
+        if isinstance(nbf, int | float) and now_ts < float(nbf):
+            return Err(ContractsTokenError("JWT token is not yet valid"))
+
+    return Ok(claims)
+
+
+__all__ = ["JWTTokenManager", "TokenBindingConfig", "decode_external_jwt"]

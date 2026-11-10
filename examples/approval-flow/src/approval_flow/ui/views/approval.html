@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Approval Flow · Quadkit</title><link rel="icon" href="/static/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav"><a href="/" class="nav-brand">Quadkit</a><span class="nav-demo">Approval Flow</span><div class="nav-links"><a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Docs</a><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div></nav>
+<header><div class="eyebrow">WORKFLOW · STANDARD MODULE</div><h1>Approval Flow</h1><p class="muted">Move a purchase request through manager and finance gates, then try retry or compensation.</p></header>
+<main>
+  <section class="panel request-panel"><div><h2>Purchase request</h2><p class="muted">Start a fresh request to reset the state machine.</p></div><form id="request-form"><label>Request title<input id="title" value="Purchase 24 laptops"></label><label>Amount<input id="amount" type="number" value="24000" min="1"></label><label>Owner<input id="owner" value="Maya Chen"></label><button type="submit" class="accent">Create request</button></form></section>
+  <div class="dashboard-grid">
+    <section class="panel"><div class="section-heading"><h2>Live state machine</h2><span id="state-pill" class="state-pill">loading</span></div><div id="steps" class="steps"></div><div id="events" class="actions" aria-live="polite"></div><p id="flow-result" class="result" role="status" aria-live="polite"></p></section>
+    <section class="panel"><div class="section-heading"><h2>ApprovalChain preview</h2><span class="pill">policy: all</span></div><p class="muted">Run the package's multi-step approval policy without changing the interactive request.</p><form id="policy-form"><label class="check"><input id="manager-ok" type="checkbox" checked> Manager approves</label><label class="check"><input id="finance-ok" type="checkbox" checked> Finance approves</label><button type="submit">Run policy preview</button></form><pre id="policy-result" class="code-result">No preview yet.</pre></section>
+  </div>
+  <section class="panel"><div class="section-heading"><h2>Transition history</h2><span id="version" class="pill">version 0</span></div><div id="history" class="history" aria-live="polite"></div></section>
+</main>
+<footer class="demo-footer">Powered by <a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Quadkit</a> · in-memory state resets on restart</footer>
+<script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

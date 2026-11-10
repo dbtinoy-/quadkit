@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from quadkit.web.transport.reactive import sse_from_stream
+    from quadkit.web.transport.requests import Request, UploadFile
     from quadkit.web.transport.responses import (
         FastJSONResponse,
         FileResponse,
@@ -35,6 +36,9 @@ if TYPE_CHECKING:
     from quadkit.web.transport.websockets import WebSocket
 
 _LAZY_IMPORTS = {
+    # Request & Upload
+    "Request": ("quadkit.web.transport.requests", "Request"),
+    "UploadFile": ("quadkit.web.transport.requests", "UploadFile"),
     # Response
     "Response": ("quadkit.web.transport.responses", "Response"),
     "JSONResponse": ("quadkit.web.transport.responses", "JSONResponse"),
@@ -93,9 +97,11 @@ __all__ = [
     "HTMXResponse",
     "JSONResponse",
     "RedirectResponse",
+    "Request",
     "Response",
     "ServerSentEvent",
     "StreamingResponse",
+    "UploadFile",
     "WebSocket",
     "execute_websocket_guards",
     "file_response",

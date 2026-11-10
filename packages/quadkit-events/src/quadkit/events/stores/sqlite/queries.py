@@ -19,6 +19,14 @@ class SqliteQueries:
         self.config = config
         self._events_table = Table(config.events_table)
         self._snapshots_table = Table(config.snapshots_table)
+        self._stream_state_table = Table(f"{config.events_table}_stream_state")
+        if (
+            config.snapshots_table.lower()
+            == f"{config.events_table}_stream_state".lower()
+        ):
+            raise ValueError(
+                "SQLite event stream-state and snapshot tables must differ"
+            )
 
     def get_create_events_table_sql(self) -> str:
         """Get SQL for creating events table."""
@@ -35,12 +43,17 @@ class SqliteQueries:
             UNIQUE(stream_id, stream_version)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_{self._events_table}_stream_id
+        CREATE INDEX IF NOT EXISTS {Table(f"idx_{self.config.events_table}_stream_id")}
             ON {self._events_table}(stream_id);
-        CREATE INDEX IF NOT EXISTS idx_{self._events_table}_event_type
+        CREATE INDEX IF NOT EXISTS {Table(f"idx_{self.config.events_table}_event_type")}
             ON {self._events_table}(event_type);
-        CREATE INDEX IF NOT EXISTS idx_{self._events_table}_timestamp
+        CREATE INDEX IF NOT EXISTS {Table(f"idx_{self.config.events_table}_timestamp")}
             ON {self._events_table}(timestamp);
+
+        CREATE TABLE IF NOT EXISTS {self._stream_state_table} (
+            stream_id TEXT PRIMARY KEY,
+            compacted_through INTEGER NOT NULL CHECK(compacted_through > 0)
+        );
         """
 
     def get_create_snapshots_table_sql(self) -> str:
@@ -56,7 +69,7 @@ class SqliteQueries:
             UNIQUE(aggregate_id, version)
         );
 
-        CREATE INDEX IF NOT EXISTS idx_{self._snapshots_table}_aggregate_id
+        CREATE INDEX IF NOT EXISTS {Table(f"idx_{self.config.snapshots_table}_aggregate_id")}
             ON {self._snapshots_table}(aggregate_id);
         """
 
@@ -89,7 +102,11 @@ class SqliteQueries:
     def get_stream_version_sql(self) -> str:
         """Get SQL for getting current stream version."""
         return f"""
-        SELECT COALESCE(MAX(stream_version), 0)
+        SELECT COALESCE((SELECT compacted_through FROM {self._stream_state_table}
+                         WHERE stream_id = ?), 0) AS compacted_through,
+               MIN(stream_version) AS min_version,
+               COALESCE(MAX(stream_version), 0) AS max_version,
+               COUNT(*) AS event_count
         FROM {self._events_table}
         WHERE stream_id = ?
         """  # noqa: S608 — table name from validated Table() identifier, never user input
@@ -106,7 +123,10 @@ class SqliteQueries:
         """  # noqa: S608 — table name from validated Table() identifier, never user input
 
     def get_stream_all_partitioned_sql(self) -> str:
-        """Get SQL for streaming all events with partitioning."""
+        """Legacy SQL requiring a custom STR_HASH UDF; the store does not use it.
+
+        Its hash contract may differ from the store's Python partitioning rule.
+        """
         return f"""
         SELECT global_sequence, event_id, event_type,
                event_data, metadata, stream_id, stream_version, timestamp
@@ -142,7 +162,7 @@ class SqliteQueries:
 
     def get_events_count_sql(self, stream_id: str | None = None) -> str:
         """Get SQL for counting events."""
-        if stream_id:
+        if stream_id is not None:
             return f"""
             SELECT COUNT(*)
             FROM {self._events_table}
@@ -158,12 +178,34 @@ class SqliteQueries:
         """  # noqa: S608 — table name from validated Table() identifier, never user input
 
     def get_all_stream_ids_sql(self) -> str:
-        """Get SQL for getting all stream IDs."""
+        """Get stream IDs, including fully compacted streams."""
         return f"""
-        SELECT DISTINCT stream_id
-        FROM {self._events_table}
+        SELECT stream_id FROM {self._events_table}
+        UNION
+        SELECT stream_id FROM {self._stream_state_table}
         ORDER BY stream_id
-        """  # noqa: S608 — table name from validated Table() identifier, never user input
+        """  # noqa: S608 — table names from validated Table() identifiers
+
+    def get_record_compaction_sql(self) -> str:
+        """Record a compacted prefix in the same transaction as deletion."""
+        return f"""
+        INSERT INTO {self._stream_state_table} (stream_id, compacted_through)
+        VALUES (?, ?)
+        ON CONFLICT(stream_id) DO UPDATE SET
+            compacted_through = MAX(compacted_through, excluded.compacted_through)
+        """  # noqa: S608 — table name from validated Table() identifier
+
+    def get_check_stream_state_sql(self) -> str:
+        """Verify the stream-state schema without creating it."""
+        return f"SELECT stream_id, compacted_through FROM {self._stream_state_table} LIMIT 0"  # noqa: S608 — table name from validated Table() identifier
+
+    def get_compaction_marker_sql(self) -> str:
+        """Read a compacted prefix marker."""
+        return f"SELECT compacted_through FROM {self._stream_state_table} WHERE stream_id = ?"  # noqa: S608 — table name from validated Table() identifier
+
+    def get_delete_stream_state_sql(self) -> str:
+        """Delete a compaction marker when explicitly deleting a stream."""
+        return f"DELETE FROM {self._stream_state_table} WHERE stream_id = ?"  # noqa: S608 — table name from validated Table() identifier
 
     def get_insert_snapshot_sql(self) -> str:
         """Get SQL for inserting/updating a snapshot."""

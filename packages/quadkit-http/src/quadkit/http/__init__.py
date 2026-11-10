@@ -36,61 +36,121 @@ from quadkit.http.constants import __version__ as __version__
 
 if TYPE_CHECKING:
     from quadkit.http.client import (
-        BaseURLHTTPClient,
-        HTTPClient,
-        StreamContext,
-        StreamResponse,
+        BaseURLHTTPClient as BaseURLHTTPClient,
+    )
+    from quadkit.http.client import (
+        HTTPClient as HTTPClient,
+    )
+    from quadkit.http.client import (
+        StreamContext as StreamContext,
+    )
+    from quadkit.http.client import (
+        StreamResponse as StreamResponse,
     )
     from quadkit.http.config import (
-        ConnectionPoolConfig,
-        HTTPClientConfig,
+        ConnectionPoolConfig as ConnectionPoolConfig,
+    )
+    from quadkit.http.config import (
+        HTTPClientConfig as HTTPClientConfig,
     )
     from quadkit.http.constants import (
-        CONTENT_TYPE_FORM,
-        CONTENT_TYPE_JSON,
-        CONTENT_TYPE_TEXT,
-        DEFAULT_ENCODING,
-        DEFAULT_MAX_CONNECTIONS,
-        DEFAULT_TIMEOUT,
-        DELETE,
-        GET,
-        HEAD,
-        OPTIONS,
-        PATCH,
-        POST,
-        PUT,
+        CONTENT_TYPE_FORM as CONTENT_TYPE_FORM,
+    )
+    from quadkit.http.constants import (
+        CONTENT_TYPE_JSON as CONTENT_TYPE_JSON,
+    )
+    from quadkit.http.constants import (
+        CONTENT_TYPE_TEXT as CONTENT_TYPE_TEXT,
+    )
+    from quadkit.http.constants import (
+        DEFAULT_ENCODING as DEFAULT_ENCODING,
+    )
+    from quadkit.http.constants import (
+        DEFAULT_MAX_CONNECTIONS as DEFAULT_MAX_CONNECTIONS,
+    )
+    from quadkit.http.constants import (
+        DEFAULT_TIMEOUT as DEFAULT_TIMEOUT,
+    )
+    from quadkit.http.constants import (
+        DELETE as DELETE,
+    )
+    from quadkit.http.constants import (
+        GET as GET,
+    )
+    from quadkit.http.constants import (
+        HEAD as HEAD,
+    )
+    from quadkit.http.constants import (
+        OPTIONS as OPTIONS,
+    )
+    from quadkit.http.constants import (
+        PATCH as PATCH,
+    )
+    from quadkit.http.constants import (
+        POST as POST,
+    )
+    from quadkit.http.constants import (
+        PUT as PUT,
     )
     from quadkit.http.di.provider import HTTPProvider
     from quadkit.http.exceptions import (
-        HTTPCircuitOpenError,
-        HTTPClientError,
-        HTTPConnectionError,
-        HTTPInterceptorError,
-        HTTPRetryExhaustedError,
-        HTTPTimeoutError,
+        HTTPCircuitOpenError as HTTPCircuitOpenError,
+    )
+    from quadkit.http.exceptions import (
+        HTTPClientError as HTTPClientError,
+    )
+    from quadkit.http.exceptions import (
+        HTTPConnectionError as HTTPConnectionError,
+    )
+    from quadkit.http.exceptions import (
+        HTTPInterceptorError as HTTPInterceptorError,
+    )
+    from quadkit.http.exceptions import (
+        HTTPRetryExhaustedError as HTTPRetryExhaustedError,
+    )
+    from quadkit.http.exceptions import (
+        HTTPTimeoutError as HTTPTimeoutError,
     )
     from quadkit.http.lib import (
-        build_url,
-        extract_json_type,
-        format_timeout,
-        merge_headers,
-        parse_headers,
-        parse_url_parts,
+        build_url as build_url,
     )
+    from quadkit.http.lib import (
+        extract_json_type as extract_json_type,
+    )
+    from quadkit.http.lib import (
+        format_timeout as format_timeout,
+    )
+    from quadkit.http.lib import (
+        merge_headers as merge_headers,
+    )
+    from quadkit.http.lib import (
+        parse_headers as parse_headers,
+    )
+    from quadkit.http.lib import (
+        parse_url_parts as parse_url_parts,
+    )
+    from quadkit.http.module import HTTPModule
     from quadkit.http.pool import ConnectionPool
     from quadkit.http.protocols import (
-        HTTPClientProtocol,
-        InterceptorChainProtocol,
-        InterceptorProtocol,
+        HTTPClientProtocol as HTTPClientProtocol,
+    )
+    from quadkit.http.protocols import (
+        InterceptorChainProtocol as InterceptorChainProtocol,
+    )
+    from quadkit.http.protocols import (
+        InterceptorProtocol as InterceptorProtocol,
     )
     from quadkit.http.types import (
-        RequestContext,
-        ResponseContext,
+        RequestContext as RequestContext,
+    )
+    from quadkit.http.types import (
+        ResponseContext as ResponseContext,
     )
     from quadkit.http.validation import (
         validate_host,
         validate_port,
         validate_positive_int,
+        validate_public_url,
         validate_timeout,
         validate_url,
     )
@@ -158,6 +218,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     "validate_host": ("quadkit.http.validation", "validate_host"),
     "validate_port": ("quadkit.http.validation", "validate_port"),
     "validate_positive_int": ("quadkit.http.validation", "validate_positive_int"),
+    "validate_public_url": ("quadkit.http.validation", "validate_public_url"),
     "validate_timeout": ("quadkit.http.validation", "validate_timeout"),
     "validate_url": ("quadkit.http.validation", "validate_url"),
     # Hooks

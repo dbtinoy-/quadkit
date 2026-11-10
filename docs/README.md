@@ -1,19 +1,17 @@
 # Quadkit documentation
 
 Async Python, contract-driven, container-assembled. These pages cover the
-thirteen distributions published from this repository — the core five
-(`quadkit-contracts`, `quadkit`, `quadkit-web`, `quadkit-cli`,
-`quadkit-testing`) plus the data, security, and integration families
-(`quadkit-sql`, `quadkit-auth`, `quadkit-cache`, `quadkit-storage`,
-`quadkit-events`, `quadkit-tasks`, `quadkit-http`, `quadkit-monitor`) — and
-only those. Every Python snippet in them is compiled in CI, and the getting-
-started examples run as real tests against the published wheels.
+18 public-use distributions listed in [installation](getting-started/installation.md).
+Packages version independently. Versioned examples describe source candidate
+manifests, not proof that those versions are available on the index. Confirm
+release availability and validate the exact installed artifacts before deployment.
+Snippet compilation and documentation gates are distinct from runtime acceptance.
 
 ## Getting started
 
 | Page | What you get |
 | --- | --- |
-| [Installation](getting-started/installation.md) | The thirteen packages, extras, and Python support |
+| [Installation](getting-started/installation.md) | The 18 packages, extras, and Python support |
 | [Your first app](getting-started/first-app.md) | A working endpoint in about five minutes |
 | [Configuration](getting-started/configuration.md) | `application.yaml` and `QK_*` environment overrides |
 | [Testing](getting-started/testing.md) | Test your routes without starting a server |
@@ -74,8 +72,8 @@ kept byte-identical with the page and executed in CI.
 - [Development setup](contributing/development.md) — DCO, checks, layout
   (authoritative: [CONTRIBUTING.md](https://github.com/dbtinoy-/quadkit/blob/main/CONTRIBUTING.md)).
 - [The public repository model](contributing/public-repository-model.md)
-  — why this tree contains exactly the thirteen distributions.
-- [Release process](contributing/release-process.md) — lockstep
+  — why this tree contains the 18 public-use distributions.
+- [Release process](contributing/release-process.md) — per-distribution
   versioning and what a release validates.
 
 ## Examples
@@ -83,7 +81,7 @@ kept byte-identical with the page and executed in CI.
 - [example-hub](https://github.com/dbtinoy-/quadkit/tree/main/examples/example-hub) — a full application with
   controllers, a DI provider, typed configuration, and tests.
 - [storefront](https://github.com/dbtinoy-/quadkit/tree/main/examples/storefront) — a second public example
-  application assembled from the same thirteen packages.
+  application assembled from the same 18 packages.
 - Capability demos — one runnable, tested app per module family — live under
   [`examples/`](https://github.com/dbtinoy-/quadkit/tree/main/examples):
   `sql-repository`, `auth-apikeys`, `auth-mfa`, `auth-rbac`, `auth-web`,

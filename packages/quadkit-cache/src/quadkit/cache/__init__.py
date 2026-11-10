@@ -38,7 +38,7 @@ if TYPE_CHECKING:
         MemoryBackendConfig,
         RedisBackendConfig,
     )
-    from quadkit.cache.decorators import cacheable
+    from quadkit.cache.decorators import cache_evict, cacheable
     from quadkit.cache.di.provider import CacheProvider
     from quadkit.cache.exceptions import (
         CacheBackendError,
@@ -51,6 +51,10 @@ if TYPE_CHECKING:
         CacheSerializationError,
         CacheStampedeError,
         CacheTimeoutError,
+    )
+    from quadkit.cache.repository.mixin import (
+        CachedRepositoryMixin,
+        InvalidatingCacheMixin,
     )
     from quadkit.cache.serialization.compression import CompressingSerializer
     from quadkit.cache.serialization.json import JSONSerializer
@@ -99,6 +103,7 @@ if TYPE_CHECKING:
 _LAZY_IMPORTS = {
     "AutoRenewingLock": "quadkit.cache.locks.auto_renewing",
     "BackendType": "quadkit.cache.types",
+    "cache_evict": "quadkit.cache.decorators",
     "cacheable": "quadkit.cache.decorators",
     "cache_in_request": "quadkit.cache.service.request_cache",
     "clear_request_cache": "quadkit.cache.service.request_cache",
@@ -125,6 +130,8 @@ _LAZY_IMPORTS = {
     "CacheOperationConfig": "quadkit.cache.config",
     "CacheProtectionStrategyProtocol": "quadkit.contracts.infra.cache",
     "CacheProvider": "quadkit.cache.di.provider",
+    "CachedRepositoryMixin": "quadkit.cache.repository.mixin",
+    "InvalidatingCacheMixin": "quadkit.cache.repository.mixin",
     "CacheResult": "quadkit.cache.types",
     "CacheSerializationError": "quadkit.cache.exceptions",
     "CacheService": "quadkit.cache.service.core",

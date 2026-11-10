@@ -69,8 +69,12 @@ class TokenExtractor:
 
     def _token_from_header(self, auth_header: str) -> str | None:
         """Parse a Bearer, ApiKey, or bare token out of one header value."""
-        if auth_header.startswith(f"{self.config.scheme} "):
-            return auth_header[len(f"{self.config.scheme} ") :]
+        scheme, separator, credential = auth_header.partition(" ")
+        if separator and scheme.casefold() == self.config.scheme.casefold():
+            # HTTP authentication schemes are case-insensitive and may be
+            # followed by multiple ASCII spaces. Do not trim the credential's
+            # trailing characters or alter the existing bare-token fallback.
+            return credential.lstrip(" ")
         if auth_header.startswith("ApiKey "):
             return auth_header[7:]
         if (

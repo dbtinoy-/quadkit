@@ -334,12 +334,27 @@ class HealthCheckRegistryProtocol(Protocol):
         ...
 
 
+@runtime_checkable
+class MetricsExpositionProtocol(Protocol):
+    """Protocol for exporting text/binary metrics expositions (e.g. Prometheus)."""
+
+    @property
+    def content_type(self) -> str:
+        """MIME content type for the rendered exposition."""
+        ...
+
+    def export(self) -> str | bytes:
+        """Render the current metrics exposition payload."""
+        ...
+
+
 __all__ = [
     "AlertDispatcherProtocol",
     "HealthCheckRegistryProtocol",
     "MetricProtocol",
     "MetricsBackendProtocol",
     "MetricsCollectorProtocol",
+    "MetricsExpositionProtocol",
     "MetricsFactoryProtocol",
     "MetricsRecorderProtocol",
 ]

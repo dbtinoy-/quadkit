@@ -35,6 +35,9 @@ class RouteRegistry(Registry[str, dict[str, Any]]):
     Use ControllerRegistry for controller-level operations (class registration).
     """
 
+    # Registry route discovery retains the authored deprecation flag.
+    supports_route_deprecated_v1 = True
+
     def __init__(self, debug: bool = False):
         super().__init__(name="routes")
         self._controllers: list[type[Controller]] = []
@@ -135,6 +138,7 @@ class RouteRegistry(Registry[str, dict[str, Any]]):
             "summary": route_meta.get("summary"),
             "description": route_meta.get("description"),
             "tags": route_meta.get("tags", []),
+            "deprecated": route_meta.get("deprecated", False),
             "registered_file": registered_file,
             "registered_line": registered_line,
             "registered_stack": registered_stack,

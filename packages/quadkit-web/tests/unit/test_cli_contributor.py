@@ -131,12 +131,37 @@ def test_resource_forwards_the_op_selection_to_the_controller(tmp_path) -> None:
     controller = (tmp_path / "controllers" / "order_controller.py").read_text()
 
     assert "async def create" in controller
-    for absent in ("async def get", "async def list", "async def update",
-                   "async def delete"):
+    for absent in (
+        "async def get",
+        "async def list",
+        "async def update",
+        "async def delete",
+    ):
         assert absent not in controller, f"{absent} rendered despite ops=['create']"
+
+
+def test_resource_forwards_the_path_to_the_controller(tmp_path) -> None:
+    """A caller-chosen base path must reach the delegated controller.
+
+    The builder resolves group + route prefixes into one served path and
+    its generated tests/OpenAPI use that path; a resource that dropped it
+    would serve the default pluralized route while every other artifact
+    pointed at the authored one.
+    """
+    ResourceGenerator(output_dir=tmp_path).generate(
+        "order", fields_str="title:str", path="/api/orders", ops=["list"], force=True
+    )
+
+    controller = (tmp_path / "controllers" / "order_controller.py").read_text()
+
+    assert '@get("/api/orders"' in controller
+    assert '@get("/orders"' not in controller
+
 
 @pytest.mark.parametrize("ops", [1, ["create", object()], {"create": True}])
 def test_resource_rejects_malformed_op_selection(tmp_path, ops: object) -> None:
     """The CLI-facing ``**kwargs`` boundary must not forward untyped values."""
-    with pytest.raises(TypeError, match="ops must be a string or a collection of strings"):
+    with pytest.raises(
+        TypeError, match="ops must be a string or a collection of strings"
+    ):
         ResourceGenerator(output_dir=tmp_path).generate("order", ops=ops)

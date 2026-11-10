@@ -20,6 +20,27 @@ from quadkit.web.transport.responses import JSONResponse
 class ValidationErrorFilter:
     """Filter for handling Pydantic and Quadkit validation errors."""
 
+    supports_default_validation_docs_v1 = True
+
+    @staticmethod
+    def default_documented_responses() -> dict[int, dict[str, Any]]:
+        """Explicit docs for this default filter, not custom filter inference.
+
+        Opt in only where the default validation filter owns the outcome.
+        Local/global replacements must declare their own status/body contract.
+        Returns fresh metadata so callers cannot mutate another route's docs.
+        """
+        from quadkit.web.errors.problem_detail import ProblemDetail
+
+        return {
+            422: {
+                "description": "Request validation failed.",
+                "content": {
+                    "application/problem+json": {"schema": ProblemDetail.json_schema()}
+                },
+            }
+        }
+
     def can_handle(self, exc: Exception) -> bool:
         """Check if exception is a validation error."""
         name = exc.__class__.__name__

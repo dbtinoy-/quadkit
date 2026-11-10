@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-sql"
-version = "0.0.46"
+version = "0.0.50"
 description = "SQL database abstractions for Quadkit Framework — Postgres, MySQL, SQLite with migrations, repositories, and query building"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,8 +38,8 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quadkit>=0.0.2",
-    "quadkit-contracts>=0.0.2",
+    "quadkit>=0.0.50",
+    "quadkit-contracts>=0.0.50",
     "typing-extensions>=4.0.0",
     "sqlalchemy[asyncio]>=2.0.0",
     "alembic>=1.17.2",

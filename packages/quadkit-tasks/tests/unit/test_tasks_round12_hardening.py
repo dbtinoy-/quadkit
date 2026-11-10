@@ -160,7 +160,8 @@ class TestWorkflowStepBoundary:
         assert workflow.status == WorkflowStatus.FAILED
         assert [s.step_name for s in workflow.steps] == ["ok", "broken"]
         assert workflow.steps[1].success is False
-        assert "nope" in (workflow.steps[1].error or "")
+        assert workflow.steps[1].error == "Step failed (AttributeError)"
+        assert "nope" not in (workflow.steps[1].error or "")
 
     @pytest.mark.asyncio
     async def test_or_operator_preserves_resume_wiring(self) -> None:
@@ -342,7 +343,8 @@ class TestMiddlewareFailureBoundary:
         )
 
         assert result.success is False
-        assert "boom" in (result.error or "")
+        assert result.error == "Task failed (AttributeError)"
+        assert "boom" not in (result.error or "")
         # after-hook observed the failure (previously it never ran).
         assert observed == ["fail"]
 
@@ -361,4 +363,5 @@ class TestMiddlewareFailureBoundary:
         result = await middleware.execute_with_timeout(broken, ctx.job, ctx)
 
         assert result.success is False
-        assert "missing" in (result.error or "")
+        assert result.error == "Task failed (KeyError)"
+        assert "missing" not in (result.error or "")

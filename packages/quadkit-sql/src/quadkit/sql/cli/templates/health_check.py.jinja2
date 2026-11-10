@@ -1,35 +1,29 @@
-"""Health check for {{ snake_name }}.
+"""Application-owned health probe for {{ snake_name }}.
 
-Reports HEALTHY/UNHEALTHY through the result object — failures are
-captured, never raised, so one sick component cannot take down the
-readiness endpoint.
+The scaffold reports UNHEALTHY until a real probe is implemented. Register
+its check method with the application's health checker after implementation;
+generating or importing this class does not register a dependency probe.
 """
+
+from __future__ import annotations
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
 from quadkit.monitor.health import HealthCheck
 
 
 class {{ class_name }}(HealthCheck):
-    """Health check for {{ snake_name }}."""
+    """Health check for {{ snake_name }}; implementation required."""
 
     def __init__(self) -> None:
         super().__init__(name="{{ snake_name }}", critical={{ critical }})
 
     async def check(self) -> HealthCheckResult:
-        try:
-            return HealthCheckResult(
-                component=self.name,
-                status=HealthStatus.HEALTHY,
-                message="{{ snake_name }} is healthy",
-                details={},
-            )
-        # The scaffold swallows the failure and reports it through the result
-        # object, which is what this handler exists to do; BLE001 is in ruff's
-        # default rule set, so the directive is used, not decorative.
-        except Exception as error:  # noqa: BLE001
-            return HealthCheckResult(
-                component=self.name,
-                status=HealthStatus.UNHEALTHY,
-                error=f"{{ snake_name }} check failed: {error}",
-                details={},
-            )
+        """Report an unfinished probe without claiming dependency health."""
+        # @INTENT: Check the actual {{ snake_name }} dependency before declaring it healthy.
+        # @TODO: Implement the dependency probe and register this check with the application health checker.
+        return HealthCheckResult(
+            component=self.name,
+            status=HealthStatus.UNHEALTHY,
+            error="{{ snake_name }} health probe is not implemented",
+            details={"implementation_required": True},
+        )

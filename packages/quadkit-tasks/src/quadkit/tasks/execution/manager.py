@@ -111,9 +111,7 @@ class IdempotencyManager(IdempotencyManagerProtocol):
         existing_result: Any = await self._storage.get(idempotency_key)
         if isinstance(existing_result, Result):
             if existing_result.is_err():
-                raise IdempotencyStoreError(
-                    f"Idempotency store lookup failed for key {idempotency_key!r}"
-                ) from existing_result.unwrap_err()
+                raise IdempotencyStoreError("Idempotency store lookup failed") from None
             return existing_result.unwrap()
         return existing_result
 
@@ -136,10 +134,7 @@ class IdempotencyManager(IdempotencyManagerProtocol):
         existing = await self._get_existing(idempotency_key)
 
         if existing:
-            logger.info(
-                "Duplicate task detected: %s. Returning previous result.",
-                idempotency_key,
-            )
+            logger.info("task.duplicate_detected")
             return IdempotencyResult(
                 task_id=existing["task_id"],
                 idempotency_key=existing["idempotency_key"],
@@ -182,7 +177,7 @@ class IdempotencyManager(IdempotencyManagerProtocol):
             ttl=float(self._ttl),
         )
 
-        logger.debug("Recorded task submission: %s", idempotency_key)
+        logger.debug("task.submission_recorded")
 
     async def record_completion(
         self,
@@ -212,7 +207,7 @@ class IdempotencyManager(IdempotencyManagerProtocol):
                 ttl=float(self._ttl),
             )
 
-            logger.debug("Recorded task completion: %s", idempotency_key)
+            logger.debug("task.completion_recorded")
 
 
 @inject
@@ -284,11 +279,7 @@ class IdempotentTaskManager(IdempotentTaskManagerProtocol):
             existing = await self._idempotency.check_duplicate(key)
 
             if existing:
-                logger.info(
-                    "Duplicate task '%s' detected, returning existing task %s",
-                    task_name,
-                    existing.task_id,
-                )
+                logger.info("task.duplicate_submission")
                 return existing
 
             # New task - generate ID and enqueue
@@ -313,12 +304,7 @@ class IdempotentTaskManager(IdempotentTaskManagerProtocol):
                 params=params,
             )
 
-            logger.info(
-                "Submitted task '%s' with ID %s (idempotency_key=%s)",
-                task_name,
-                task_id,
-                key,
-            )
+            logger.info("task.submitted")
 
             return IdempotencyResult(
                 task_id=task_id,
@@ -345,7 +331,7 @@ class IdempotentTaskManager(IdempotentTaskManagerProtocol):
             result=result,
         )
 
-        logger.info("Task %s completed", task_id)
+        logger.info("task.completed")
 
 
 __all__ = ["IdempotencyManager", "IdempotencyResult", "IdempotentTaskManager"]

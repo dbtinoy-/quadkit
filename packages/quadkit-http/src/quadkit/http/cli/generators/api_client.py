@@ -48,12 +48,15 @@ class APIClientGenerator(GeneratorBase):
             ]
         )
         auth_type = str(options.get("auth", "apikey"))
+        base_url = str(options.get("base_url", "")).strip()
         client_name = self._to_pascal_case(name)
         context: dict[str, Any] = {
             "client_name": client_name,
             "client_name_snake": self._to_snake_case(name),
             "fields": fields,
             "auth_type": auth_type,
+            "base_url": base_url,
+            "base_url_literal": repr(base_url),
         }
         content = self.render_template("api_client.py.jinja2", context)
         file_path = self.output_dir / f"{self._to_snake_case(name)}_client.py"

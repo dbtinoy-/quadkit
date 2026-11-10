@@ -21,7 +21,7 @@ from typing import TYPE_CHECKING, cast
 
 from quadkit.contracts.core import HealthStatus
 from quadkit.domain import DomainModel
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.primitives import clock as ambient_clock
 
 if TYPE_CHECKING:
@@ -75,18 +75,26 @@ class WebHealthChecker:
         )
 
         if isinstance(db_health, Exception):
+            logger.error(
+                "database_health_check_failed",
+                error_type=safe_error_type(db_health),
+            )
             db_health = ComponentHealth(
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=0,
-                message=f"Error: {db_health!s}",
+                message="Database health check failed",
                 checked_at=ambient_clock.now(),
             )
 
         if isinstance(redis_health, Exception):
+            logger.error(
+                "cache_health_check_failed",
+                error_type=safe_error_type(redis_health),
+            )
             redis_health = ComponentHealth(
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=0,
-                message=f"Error: {redis_health!s}",
+                message="Cache health check failed",
                 checked_at=ambient_clock.now(),
             )
 
@@ -125,13 +133,13 @@ class WebHealthChecker:
             # Map HealthCheckResult to ComponentHealth
             if result.status == HealthStatus.HEALTHY:
                 status = HealthStatus.HEALTHY
-                message = result.message or "Database connection OK"
+                message = "Database connection OK"
             elif result.status == HealthStatus.DEGRADED:
                 status = HealthStatus.DEGRADED
-                message = result.message or "Database degraded"
+                message = "Database degraded"
             else:
                 status = HealthStatus.UNHEALTHY
-                message = result.message or "Database unhealthy"
+                message = "Database unhealthy"
 
             return ComponentHealth(
                 status=status,
@@ -142,11 +150,14 @@ class WebHealthChecker:
 
         except Exception as exc:  # noqa: BLE001 — health checks must not propagate; any error becomes an UNHEALTHY status
             latency = (ambient_clock.now() - start).total_seconds() * 1000
-            logger.exception("Database health check failed")
+            logger.error(
+                "database_health_check_failed",
+                error_type=safe_error_type(exc),
+            )
             return ComponentHealth(
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=latency,
-                message=str(exc),
+                message="Database health check failed",
                 checked_at=ambient_clock.now(),
             )
 
@@ -170,13 +181,13 @@ class WebHealthChecker:
             # Map HealthCheckResult to ComponentHealth
             if result.status == HealthStatus.HEALTHY:
                 status = HealthStatus.HEALTHY
-                message = result.message or "Cache connection OK"
+                message = "Cache connection OK"
             elif result.status == HealthStatus.DEGRADED:
                 status = HealthStatus.DEGRADED
-                message = result.message or "Cache degraded"
+                message = "Cache degraded"
             else:
                 status = HealthStatus.UNHEALTHY
-                message = result.message or "Cache unhealthy"
+                message = "Cache unhealthy"
 
             return ComponentHealth(
                 status=status,
@@ -187,11 +198,14 @@ class WebHealthChecker:
 
         except Exception as exc:  # noqa: BLE001 — health checks must not propagate; any error becomes an UNHEALTHY status
             latency = (ambient_clock.now() - start).total_seconds() * 1000
-            logger.exception("Cache health check failed")
+            logger.error(
+                "cache_health_check_failed",
+                error_type=safe_error_type(exc),
+            )
             return ComponentHealth(
                 status=HealthStatus.UNHEALTHY,
                 latency_ms=latency,
-                message=str(exc),
+                message="Cache health check failed",
                 checked_at=ambient_clock.now(),
             )
 

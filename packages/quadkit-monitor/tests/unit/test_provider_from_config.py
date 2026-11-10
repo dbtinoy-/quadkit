@@ -25,8 +25,9 @@ def test_create_prometheus_provider_from_config(monkeypatch):
                 def __init__(self):
                     self.mapping = {}
 
-                def singleton(self, key, factory):
-                    value = factory() if callable(factory) else factory
+                def singleton(self, key, factory=None, *, instance=None):
+                    value = instance if instance is not None else factory
+                    value = value() if callable(value) else value
                     self.mapping[key] = value
 
             dummy = DummyCont()

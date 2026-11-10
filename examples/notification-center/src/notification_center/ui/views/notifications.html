@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Notification Center · Quadkit</title>
+  <link rel="icon" href="/static/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Notification Center</span>
+  <div class="nav-links"><a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Docs</a><a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a><button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+<header>
+  <div class="eyebrow">NOTIFICATION · STANDARD MODULE</div>
+  <h1>Notification Center</h1>
+  <p class="muted">Send email through the real <span class="mono">MailerProtocol</span> (console backend) and manage a per-user inbox through the real <span class="mono">InboxService</span> — no external mail provider required.</p>
+</header>
+<main>
+  <section class="panel intro-panel">
+    <div class="section-heading"><h2>Send an email</h2><span class="pill">MailerProtocol.send</span></div>
+    <p class="muted">Delivered by <span class="mono">ConsoleMailer</span> — the message is logged to the server console instead of leaving the box.</p>
+    <form id="email-form" class="create-form">
+      <label>To <input id="email-to" placeholder="user@example.com" autocomplete="off"></label>
+      <label>Subject <input id="email-subject" placeholder="Welcome!" autocomplete="off"></label>
+      <label>Body <input id="email-body" placeholder="Message body..." autocomplete="off"></label>
+      <button class="accent" type="submit">Send email</button>
+    </form>
+    <p id="email-result" class="result" role="status" aria-live="polite"></p>
+  </section>
+
+  <div class="dashboard-grid">
+    <section class="panel">
+      <div class="section-heading"><h2>Health</h2><button type="button" id="refresh-health">Refresh</button></div>
+      <div id="health" aria-live="polite"></div>
+    </section>
+    <section class="panel">
+      <div class="section-heading"><h2>Sent log</h2><button type="button" id="refresh-sent">Refresh</button></div>
+      <p class="muted">Every email the demo has sent this run (client-tracked — the protocol has no "list sent" endpoint).</p>
+      <div id="sent-log" aria-live="polite"></div>
+    </section>
+  </div>
+
+  <section class="panel">
+    <div class="section-heading"><h2>Inbox</h2><span class="pill">InboxService</span></div>
+    <form id="user-form" class="create-form">
+      <label>User ID <input id="inbox-user" value="demo-user" autocomplete="off"></label>
+      <button type="submit">Switch user</button>
+    </form>
+    <form id="inbox-form" class="create-form">
+      <label>Title <input id="inbox-title" placeholder="New message" autocomplete="off"></label>
+      <label>Body <input id="inbox-body" placeholder="Message body..." autocomplete="off"></label>
+      <button class="accent" type="submit">Send to inbox</button>
+    </form>
+    <div class="actions">
+      <button type="button" id="mark-all-read">Mark all read</button>
+      <button type="button" id="clear-inbox">Clear inbox</button>
+      <button type="button" id="refresh-inbox">Refresh</button>
+    </div>
+    <p id="inbox-summary" class="result" role="status" aria-live="polite"></p>
+    <div id="inbox-list" aria-live="polite"></div>
+  </section>
+</main>
+<footer class="demo-footer">Powered by <a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Quadkit</a> · in-memory inbox state resets on restart</footer>
+<script src="/static/app.js"></script>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

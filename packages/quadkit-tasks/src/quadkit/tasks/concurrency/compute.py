@@ -12,7 +12,7 @@ import threading
 import time
 from typing import Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.types import PoolStrategy
 
 logger = get_logger(__name__)
@@ -208,8 +208,11 @@ class ComputePool:
                 self._check_worker_health()
                 self._adjust_pool_size()
                 self._update_metrics()
-            except Exception:  # noqa: BLE001 — resilience boundary
-                logger.exception("Pool monitoring error")
+            except Exception as exc:  # noqa: BLE001 — resilience boundary
+                logger.error(
+                    "Pool monitoring error",
+                    error_type=safe_error_type(exc),
+                )
 
             self._shutdown_event.wait(self.health_check_interval)
 
@@ -262,8 +265,11 @@ class ComputePool:
                                     self._workers[pid].last_active = time.time()
                             except (psutil.NoSuchProcess, psutil.AccessDenied):
                                 continue
-                except Exception:  # noqa: BLE001 — best-effort
-                    logger.exception("Error iterating worker processes")
+                except Exception as exc:  # noqa: BLE001 — best-effort
+                    logger.error(
+                        "Error iterating worker processes",
+                        error_type=safe_error_type(exc),
+                    )
 
             # Mark missing workers as unhealthy
             for pid in list(self._workers.keys()):
@@ -344,10 +350,13 @@ class ComputePool:
             )
 
             result = await future
-        except Exception:  # noqa: BLE001 — resilience boundary
+        except Exception as exc:  # noqa: BLE001 — resilience boundary
             with self._lock:
                 self._metrics.failed_tasks += 1
-            logger.exception("Compute submit task failed")
+            logger.error(
+                "Compute submit task failed",
+                error_type=safe_error_type(exc),
+            )
             raise
         else:
             duration = time.time() - start_time

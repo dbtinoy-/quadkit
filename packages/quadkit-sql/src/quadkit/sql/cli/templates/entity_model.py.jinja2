@@ -21,11 +21,11 @@ class {{ entity_name }}(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-    id: str = Field(default_factory=lambda: uuid.uuid4().hex)
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
     created_at: datetime = Field(default_factory=clock.now)
     updated_at: datetime = Field(default_factory=clock.now)
 {%- for field in fields %}
-    {{ field.name }}: {{ field.py_type }}{% if not field.required %} | None = None{% endif %}
+    {{ field.name }}: {{ field.py_type }}{% if field.write_only %}{% if field.required %} = Field(exclude=True){% else %} | None = Field(default=None, exclude=True){% endif %}{% elif not field.required %} | None = None{% endif %}
 {%- endfor %}
 
 

@@ -14,7 +14,12 @@ from quadkit.contracts import DatabaseProviderProtocol
 from quadkit.sql import SimpleUnitOfWork
 
 
-SEED_DATA: list[dict[str, Any]] = [
+{% if required_foreign_keys %}# No sample row: {{ required_foreign_keys | join(", ") }} reference rows in
+# other tables, and a seed must never invent foreign-key values — with
+# enforcement on, a fabricated id fails at insert. Author rows here
+# using the explicit ids of seeded parent rows.
+SEED_DATA: list[dict[str, Any]] = []
+{% else %}SEED_DATA: list[dict[str, Any]] = [
     {
         {%- for field in fields %}
         "{{ field.name }}": {{ field.sample_value }},
@@ -23,6 +28,7 @@ SEED_DATA: list[dict[str, Any]] = [
         "updated_at": clock.now(),
     },
 ]
+{% endif %}
 
 
 class {{ model_name }}Entity:

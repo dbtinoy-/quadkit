@@ -98,61 +98,86 @@ class SecurityHeadersMiddleware:
         async def send_wrapper(message: Any) -> None:
             if message["type"] == "http.response.start":
                 headers = list(message.get("headers", []))
+                existing = {bytes(h[0]).lower() for h in headers}
 
-                # Content-Security-Policy
-                if self.config.csp.enabled and self.config.csp.directives:
+                # Content-Security-Policy (preserve sub-app/route CSP if already set)
+                if (
+                    self.config.csp.enabled
+                    and self.config.csp.directives
+                    and b"content-security-policy" not in existing
+                ):
                     csp = self._build_csp_header()
                     if csp:
                         headers.append((b"content-security-policy", csp.encode()))
+                        existing.add(b"content-security-policy")
 
                 # Custom headers from config dict — sanitize values before encoding
-                # to prevent CRLF injection / response-splitting attacks.
+                # to prevent CRLF injection / response-splitting attacks. Empty
+                # string values intentionally omit the header (e.g. setting
+                # ``x-frame-options: ""`` lets CSP ``frame-ancestors`` govern framing).
                 for header_name, header_value in self.config.custom_headers.items():
-                    name = header_name.lower().encode()
                     safe_value = self._header_sanitizer.sanitize_header_value(
                         str(header_value)
                     )
-                    headers.append((name, safe_value.encode()))
+                    if not safe_value:
+                        continue
+                    name = header_name.lower().encode()
+                    if name not in existing:
+                        headers.append((name, safe_value.encode()))
+                        existing.add(name)
 
                 # Strict-Transport-Security (only in production with HTTPS)
-                if self.config.hsts.enabled:
+                if (
+                    self.config.hsts.enabled
+                    and b"strict-transport-security" not in existing
+                ):
                     hsts = self._build_hsts_header()
                     headers.append((b"strict-transport-security", hsts.encode()))
+                    existing.add(b"strict-transport-security")
 
                 # Referrer-Policy (use referrer_policy field if not already in custom_headers)
                 if (
                     self.config.referrer_policy
                     and "referrer-policy" not in self.config.custom_headers
+                    and b"referrer-policy" not in existing
                 ):
                     headers.append(
                         (b"referrer-policy", self.config.referrer_policy.encode()),
                     )
+                    existing.add(b"referrer-policy")
 
                 # Permissions-Policy
-                if self.config.permissions_policy:
+                if (
+                    self.config.permissions_policy
+                    and b"permissions-policy" not in existing
+                ):
                     policy = self._build_permissions_policy_header()
                     headers.append((b"permissions-policy", policy.encode()))
+                    existing.add(b"permissions-policy")
 
                 # Cross-Origin policies
                 if self.config.cross_origin.enabled:
-                    headers.append(
-                        (
-                            b"cross-origin-embedder-policy",
-                            self.config.cross_origin.embedder_policy.encode(),
-                        ),
-                    )
-                    headers.append(
-                        (
-                            b"cross-origin-opener-policy",
-                            self.config.cross_origin.opener_policy.encode(),
-                        ),
-                    )
-                    headers.append(
-                        (
-                            b"cross-origin-resource-policy",
-                            self.config.cross_origin.resource_policy.encode(),
-                        ),
-                    )
+                    if b"cross-origin-embedder-policy" not in existing:
+                        headers.append(
+                            (
+                                b"cross-origin-embedder-policy",
+                                self.config.cross_origin.embedder_policy.encode(),
+                            ),
+                        )
+                    if b"cross-origin-opener-policy" not in existing:
+                        headers.append(
+                            (
+                                b"cross-origin-opener-policy",
+                                self.config.cross_origin.opener_policy.encode(),
+                            ),
+                        )
+                    if b"cross-origin-resource-policy" not in existing:
+                        headers.append(
+                            (
+                                b"cross-origin-resource-policy",
+                                self.config.cross_origin.resource_policy.encode(),
+                            ),
+                        )
 
                 message["headers"] = headers
 
@@ -203,8 +228,12 @@ class DocsCSPMiddleware:
 
         async def send_with_csp(message: Any) -> None:
             if message["type"] == "http.response.start":
-                headers = list(message.get("headers", []))
-                headers.append([b"content-security-policy", self._policy.encode()])
+                headers = [
+                    h
+                    for h in message.get("headers", [])
+                    if bytes(h[0]).lower() != b"content-security-policy"
+                ]
+                headers.append((b"content-security-policy", self._policy.encode()))
                 message["headers"] = headers
             await send(message)
 

@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <script>(function(){try{var t=localStorage.getItem("quadkit-theme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light");document.documentElement.setAttribute("data-theme",t);}catch(e){}})();</script>
+  
+  <link rel="stylesheet" href="/static/tokens.css">
+  <link rel="icon" href="/static/icon.png" type="image/png" />
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta charset="utf-8">
+  <title>Support Agent Console · Quadkit</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<nav class="demo-nav">
+  <a href="/" class="nav-brand">Quadkit</a>
+  <span class="nav-demo">Support Agent</span>
+  <div class="nav-links">
+    <a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Docs</a>
+    <a href="https://github.com/dbtinoy-/quadkit" target="_blank" rel="noopener">GitHub</a>
+  <button type="button" data-theme-toggle class="theme-toggle" aria-label="Toggle dark mode" aria-pressed="false">🌙</button></div>
+</nav>
+
+  <header>
+    <h1>Support Agent Console</h1>
+    <p class="muted">Scripted LLM — pre-written completions drive a real ReAct agent loop with tool calls.</p>
+  </header>
+  <main>
+    <aside id="tools-panel">
+      <h2>Tools</h2>
+      <ul id="tools"></ul>
+    </aside>
+    <section id="console">
+      <div id="scenarios">
+        <button type="button" data-scenario="happy">Happy path</button>
+        <button type="button" data-scenario="multi_tool">Multi-tool</button>
+        <button type="button" data-scenario="failure">Failure</button>
+      </div>
+      <form id="ask-form">
+        <label class="sr-only" for="question">Support question</label>
+        <input id="question" type="text" autocomplete="off" required
+               placeholder="Ask about order A-100, refunds, shipping&hellip;">
+        <button type="submit">Ask</button>
+      </form>
+      <p id="answer" class="hidden"></p>
+      <table id="trace" class="hidden">
+        <thead><tr><th>#</th><th>Thought</th><th>Action</th><th>Tool result</th></tr></thead>
+        <tbody></tbody>
+      </table>
+      <p id="meta" class="muted"></p>
+      <p id="error" class="hidden" role="alert"></p>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+  <footer class="demo-footer">
+    <span>Powered by <a href="https://oridecon.dev/quadkit" target="_blank" rel="noopener">Quadkit</a></span>
+  </footer>
+  <script src="/static/theme-toggle.js"></script>
+</body>
+</html>

@@ -237,7 +237,14 @@ class EventsProvider(Provider):
         from quadkit.contracts.core import HookRegistryProtocol
         from quadkit.contracts.observability.tracing import TracerProtocol
 
-        _, buses, _ = self._ensure_composed()
+        stores, buses, _ = self._ensure_composed()
+        await stores.ensure_store(container)
+        if (
+            self._managers
+            and self._managers.projection_manager is not None
+            and stores.event_store is not None
+        ):
+            self._managers.projection_manager._event_store = stores.event_store  # noqa: SLF001
 
         tracer = await _resolve_optional_framework_service(container, TracerProtocol)
         hooks = await _resolve_optional_framework_service(
@@ -249,7 +256,6 @@ class EventsProvider(Provider):
         await buses.boot()
         if self._managers:
             await self._managers.boot()
-        stores, _, _ = self._ensure_composed()
         if stores.snapshot_manager and hasattr(stores.snapshot_manager, "start"):
             await stores.snapshot_manager.start()
 

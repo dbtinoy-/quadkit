@@ -53,8 +53,11 @@ class SecurityConfig(BaseConfig):
     # Host validation (fail-closed; production requires a non-empty list)
     allowed_hosts: list[str] = Field(
         default_factory=list,
-        description="Hostnames permitted to reach the application. Empty by "
-        "default; must be configured before production deployment.",
+        description="Hostnames permitted to reach the application. Entries "
+        "are exact hosts, or a domain and its subdomains when prefixed "
+        "('.example.com' for the apex plus subdomains, '*.example.com' for "
+        "subdomains only). A bare '*' is refused. Empty by default; must be "
+        "configured before production deployment.",
     )
 
     # HTTP security-policy sub-configs

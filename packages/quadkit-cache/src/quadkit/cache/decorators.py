@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 import functools
 from typing import TYPE_CHECKING, Any, TypeVar
 
@@ -25,6 +25,7 @@ _KEY_CLASS = "__lx_class__"
 _KEY_DATA = "__lx_data__"
 _KEY_RESULT = "__lx_result__"
 _KEY_VALUE = "__lx_value__"
+_KEY_NONE = "__lx_none__"
 
 
 def _is_domain_model(obj: Any) -> bool:
@@ -71,8 +72,10 @@ def _serialize(value: Any) -> Any:
             _KEY_CLASS: cls.__qualname__,
             _KEY_DATA: value.model_dump(),
         }
-    if isinstance(value, list):
+    if isinstance(value, (list, tuple)):
         return [_serialize(item) for item in value]
+    if isinstance(value, dict):
+        return {str(k): _serialize(v) for k, v in value.items()}
     return value
 
 
@@ -90,28 +93,30 @@ def _deserialize(value: Any) -> Any:
         The original value, with registered domain models reconstructed
         where possible; unregistered envelopes degrade to their raw data.
     """
-    if isinstance(value, dict) and _KEY_MODULE in value and _KEY_CLASS in value:
-        from quadkit.cache.serialization.type_registry import DEFAULT_REGISTRY
+    if isinstance(value, dict):
+        if _KEY_MODULE in value and _KEY_CLASS in value:
+            from quadkit.cache.serialization.type_registry import DEFAULT_REGISTRY
 
-        model_cls = DEFAULT_REGISTRY.get(value[_KEY_MODULE], value[_KEY_CLASS])
-        if model_cls is None:
-            logger.warning(
-                "cache_deserialize_unregistered_type",
-                module=value.get(_KEY_MODULE),
-                cls=value.get(_KEY_CLASS),
-                hint="register the model class in the type registry to enable reconstruction",
-            )
-            return value.get(_KEY_DATA, value)
-        try:
-            return model_cls.model_validate(value[_KEY_DATA])
-        except (KeyError, TypeError, ValueError) as exc:
-            logger.warning(
-                "cache_deserialize_failed",
-                module=value.get(_KEY_MODULE),
-                cls=value.get(_KEY_CLASS),
-                error=str(exc),
-            )
-            return value.get(_KEY_DATA, value)
+            model_cls = DEFAULT_REGISTRY.get(value[_KEY_MODULE], value[_KEY_CLASS])
+            if model_cls is None:
+                logger.warning(
+                    "cache_deserialize_unregistered_type",
+                    module=value.get(_KEY_MODULE),
+                    cls=value.get(_KEY_CLASS),
+                    hint="register the model class in the type registry to enable reconstruction",
+                )
+                return value.get(_KEY_DATA, value)
+            try:
+                return model_cls.model_validate(value[_KEY_DATA])
+            except (AttributeError, KeyError, TypeError, ValueError) as exc:
+                logger.warning(
+                    "cache_deserialize_failed",
+                    module=value.get(_KEY_MODULE),
+                    cls=value.get(_KEY_CLASS),
+                    error=str(exc),
+                )
+                return value.get(_KEY_DATA, value)
+        return {k: _deserialize(v) for k, v in value.items()}
     if isinstance(value, list):
         return [_deserialize(item) for item in value]
     return value
@@ -121,6 +126,8 @@ def cacheable(
     ttl: int | None = 300,
     key_prefix: str = "",
     skip_on_error: bool = True,
+    *,
+    models: Sequence[type[Any]] = (),
 ) -> Callable[[F], F]:
     """Cache the return value of an async method using the injected CacheBackend.
 
@@ -141,30 +148,35 @@ def cacheable(
       against the registered type registry
       (:data:`~quadkit.cache.serialization.type_registry.DEFAULT_REGISTRY`);
       a payload naming an unregistered type degrades to its raw data.
+    - Passing ``models=(ModelCls, ...)`` statically registers those domain
+      model classes in ``DEFAULT_REGISTRY`` at decoration time.
 
     Args:
         ttl: Time-to-live in seconds. ``None`` disables expiry.
         key_prefix: Optional prefix prepended to the generated cache key.
         skip_on_error: When ``True``, cache misses on backend errors gracefully
             fall through to the original method. When ``False``, errors propagate.
+        models: Optional sequence of domain model classes to register in
+            ``DEFAULT_REGISTRY`` for safe reconstruction on cache hits.
 
     Returns:
         Decorator that wraps an async method with cache-aside logic.
 
     Example::
 
-        from quadkit.cache.serialization.type_registry import DEFAULT_REGISTRY
-
-        DEFAULT_REGISTRY.register(User)
-
         class UserService:
             def __init__(self, cache: CacheBackendProtocol) -> None:
                 self._cache = cache
 
-            @cacheable(ttl=60, key_prefix="users")
+            @cacheable(ttl=60, key_prefix="users", models=(User,))
             async def get_user(self, user_id: str) -> Result[User, DomainError]:
                 return await self._repo.find(user_id)
     """
+    if models:
+        from quadkit.cache.serialization.type_registry import DEFAULT_REGISTRY
+
+        for model_cls in models:
+            DEFAULT_REGISTRY.register(model_cls)
 
     def decorator(fn: F) -> F:
         @functools.wraps(fn)
@@ -195,6 +207,8 @@ def cacheable(
                     cached = cached.unwrap() if cached.is_ok() else None  # type: ignore[assignment]
 
                 if cached is not None:
+                    if isinstance(cached, dict) and cached.get(_KEY_NONE) is True:
+                        return None
                     if isinstance(cached, dict) and cached.get(_KEY_RESULT):
                         # Re-wrap a previously cached Result Ok value and
                         # reconstruct any domain model stored inside.
@@ -221,6 +235,10 @@ def cacheable(
                         _KEY_RESULT: True,
                         _KEY_VALUE: _serialize(result.unwrap()),
                     }
+                elif result is None:
+                    # Wrap bare None in a sentinel envelope so cache.get()
+                    # distinguishes a negative-cache hit from a cache miss.
+                    cache_value = {_KEY_NONE: True}
                 else:
                     cache_value = _serialize(result)
                 await cache.set(cache_key, cache_value, ttl=ttl)
@@ -236,4 +254,52 @@ def cacheable(
     return decorator
 
 
-__all__ = ["cacheable"]
+def cache_evict(
+    *patterns: str,
+    skip_on_error: bool = True,
+) -> Callable[[F], F]:
+    """Invalidate matching cache keys after a successful write method call.
+
+    Resolves ``self._cache`` (:class:`~quadkit.contracts.infra.cache.CacheBackendProtocol`)
+    on the target service instance and calls ``delete_pattern(pattern)`` for each
+    glob pattern in *patterns*. When the wrapped method returns a ``Result`` in
+    the ``Err`` state, eviction is skipped so failed writes do not thrash warm
+    cache entries.
+
+    Args:
+        *patterns: One or more glob patterns (e.g. ``"users:*"``, ``"breed:*"``).
+        skip_on_error: When ``True``, backend eviction errors are logged and
+            suppressed instead of failing the caller's successful write.
+    """
+
+    def decorator(fn: F) -> F:
+        @functools.wraps(fn)
+        async def wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+            result = await fn(self, *args, **kwargs)
+            if hasattr(result, "is_err") and result.is_err():
+                return result
+
+            cache: CacheBackendProtocol | None = getattr(self, "_cache", None)
+            if cache is None or not patterns:
+                return result
+
+            for pattern in patterns:
+                try:
+                    await cache.delete_pattern(pattern)
+                except Exception as exc:
+                    if not skip_on_error:
+                        raise
+                    logger.warning(
+                        "cache_evict_failed",
+                        pattern=pattern,
+                        method=fn.__qualname__,
+                        error=str(exc),
+                    )
+            return result
+
+        return wrapper  # type: ignore[return-value]
+
+    return decorator
+
+
+__all__ = ["cache_evict", "cacheable"]

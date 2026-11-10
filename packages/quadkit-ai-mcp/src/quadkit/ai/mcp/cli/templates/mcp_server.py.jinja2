@@ -1,0 +1,100 @@
+"""{{ module_name }}_tools.py — standalone MCP server (Gear 1).
+
+Run directly::
+
+    quadkit mcp serve {{ module_name }}_tools.py
+
+Or via Python::
+
+    python {{ module_name }}_tools.py
+
+Customize ``__mcp_name__`` and ``__mcp_version__`` to brand the server.
+"""
+
+from quadkit.ai.mcp import prompt, resource, tool
+
+__mcp_name__ = "{{ module_name }}-tools"
+__mcp_version__ = "1.0.0"
+
+
+@tool("{{ tool_prefix }}_search", description="Search {{ resource_name }}")
+async def search(query: str = "", limit: int = 20) -> list[dict]:
+    """Search {{ resource_name }} matching *query*.
+
+    Args:
+        query: Search string.
+        limit: Maximum results to return.
+
+    Returns:
+        List of matching {{ resource_name }} as dicts.
+    """
+    # @INTENT: Search the {{ resource_name }} store for rows matching *query*, capped at *limit*.
+    # @TODO: implement search logic
+    return []
+
+
+@resource(
+    "{{ resource_uri }}/{id}",
+    description="Retrieve a {{ module_name }} by ID",
+)
+async def get_{{ module_name }}(id: str) -> dict:
+    """Return the {{ module_name }} identified by *id*.
+
+    Args:
+        id: Unique identifier.
+
+    Returns:
+        {{ module_name }} data dict.
+    """
+    # @INTENT: Load the {{ module_name }} identified by *id* from your data store.
+    # @TODO: implement lookup logic
+    return {"id": id}
+
+
+@prompt(
+    "{{ tool_prefix }}_analyze",
+    description="Prompt to analyze {{ resource_name }}",
+)
+async def analyze_prompt() -> str:
+    """Return analysis instructions for {{ resource_name }}."""
+    return (
+        "Analyze the following {{ resource_name }} and summarize key insights, "
+        "trends, and any anomalies you observe."
+    )
+
+
+if __name__ == "__main__":
+    import asyncio
+    import sys
+    import types
+
+    from quadkit.ai.mcp.controller import (
+        ModulePromptProvider,
+        ModuleResourceProvider,
+        ModuleToolProvider,
+    )
+    from quadkit.ai.mcp.server import MCPServer
+    from quadkit.ai.mcp.server.handlers import (
+        PromptHandler,
+        ResourceHandler,
+        ToolHandler,
+    )
+    from quadkit.ai.mcp.transport import StdioTransport
+
+    mod = types.ModuleType(__name__)
+    mod.__dict__.update({k: v for k, v in globals().items() if not k.startswith("__")})
+
+    server = MCPServer(
+        name=__mcp_name__,
+        version=__mcp_version__,
+        tool_handler=ToolHandler(ModuleToolProvider.from_module(mod)),
+        resource_handler=ResourceHandler(ModuleResourceProvider.from_module(mod)),
+        prompt_handler=PromptHandler(ModulePromptProvider.from_module(mod)),
+    )
+
+    transport = StdioTransport()
+
+    async def _main():
+        await transport.connect(server)
+
+    asyncio.run(_main())

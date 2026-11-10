@@ -7,11 +7,12 @@ Handles raw query execution, result processing, and query logging.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
+import re
 from typing import Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.primitives import clock as ambient_clock
-from quadkit.primitives.context import Context, get_request_context
+from quadkit.primitives.context import Context
 from quadkit.sql import QueryLogEntry, QueryLoggerProtocol, QueryResult
 from quadkit.sql.exceptions import (
     DatabaseConnectionError,
@@ -21,6 +22,22 @@ from quadkit.sql.exceptions import (
 )
 
 logger = get_logger(__name__)
+
+_SQL_LOG_REDACTION = re.compile(
+    r"(?P<comment>--[^\r\n]*|/\*.*?\*/)"
+    r"|(?P<dollar_string>(?P<delimiter>\$(?:[A-Za-z_][A-Za-z0-9_]*)?\$).*?(?P=delimiter))"
+    r"|(?P<string>'(?:''|\\.|[^'])*')"
+    r"|(?P<number>(?<![A-Za-z0-9_$?])[-+]?(?:0[xX][0-9A-Fa-f]+|\d+(?:\.\d+)?(?:[eE][-+]?\d+)?)(?![A-Za-z0-9_$?]))",
+    re.DOTALL,
+)
+
+
+def _sanitize_sql_for_logging(sql: str) -> str:
+    """Preserve SQL shape while removing inline literals and comments."""
+    return _SQL_LOG_REDACTION.sub(
+        lambda match: " " if match.lastgroup == "comment" else "?",
+        sql,
+    )
 
 
 class QueryExecutor(ABC):
@@ -71,23 +88,20 @@ class QueryExecutor(ABC):
         if self.query_logger is None:
             return
 
-        current = (
-            get_request_context(self._context.registry)
-            if self._context is not None
-            else None
-        )
         entry = QueryLogEntry(
-            sql=sql,
-            params=tuple(params) if params is not None else None,
+            sql=_sanitize_sql_for_logging(sql),
+            # Bind values and request-scoped identifiers can contain sensitive
+            # user data. Preserve only the SQL structure for diagnostics.
+            params=None,
             execution_time=execution_time,
             timestamp=ambient_clock.now(),
             success=success,
             error_message=error_message,
-            connection_id=connection_id,
-            transaction_id=transaction_id,
-            user_id=current.user_id if current is not None else None,
-            request_id=current.request_id if current is not None else None,
-            trace_id=current.trace_id if current is not None else None,
+            connection_id=None,
+            transaction_id=None,
+            user_id=None,
+            request_id=None,
+            trace_id=None,
         )
         await self.query_logger.log_query(entry)
 
@@ -116,8 +130,8 @@ class QueryExecutor(ABC):
             ConnectionError,
             TimeoutError,
         ) as e:
-            error_message = str(e)
-            logger.exception("Query execution failed: %s", error_message)
+            error_message = safe_error_type(e)
+            logger.error("Query execution failed", error_type=error_message)
             raise
         finally:
             execution_time = (ambient_clock.timestamp()) - start_time
@@ -157,8 +171,8 @@ class QueryExecutor(ABC):
             ConnectionError,
             TimeoutError,
         ) as e:
-            error_message = str(e)
-            logger.exception("Modify execution failed: %s", error_message)
+            error_message = safe_error_type(e)
+            logger.error("Modify execution failed", error_type=error_message)
             raise
         finally:
             execution_time = (ambient_clock.timestamp()) - start_time

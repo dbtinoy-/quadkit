@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Self, cast
 
 from quadkit.contracts import (
@@ -444,7 +445,10 @@ class StorageProvider(Provider):
         if hasattr(self, "_driver") and hasattr(self._driver, "health_check"):
             res = await self._driver.health_check()
             if res.duration_ms == 0.0:
-                res.duration_ms = (time.time() - start_time) * 1000  # type: ignore[misc]
+                res = replace(
+                    res,
+                    duration_ms=(time.time() - start_time) * 1000,
+                )
             return res
 
         duration_ms = (time.time() - start_time) * 1000

@@ -146,7 +146,7 @@ class _S3UploadMixin:
         create_params.update(self._build_sse_params())
 
         try:
-            upload_response = (await self._get_client()).create_multipart_upload(
+            upload_response = await (await self._get_client()).create_multipart_upload(
                 **create_params,
             )
             upload_id = upload_response["UploadId"]
@@ -176,7 +176,7 @@ class _S3UploadMixin:
                     ).decode()
 
                     # Upload part
-                    part_response = (await self._get_client()).upload_part(
+                    part_response = await (await self._get_client()).upload_part(
                         Bucket=self.bucket,
                         Key=key,
                         UploadId=upload_id,
@@ -216,7 +216,7 @@ class _S3UploadMixin:
                     ).decode()
 
                     # Upload part
-                    part_response = (await self._get_client()).upload_part(
+                    part_response = await (await self._get_client()).upload_part(
                         Bucket=self.bucket,
                         Key=key,
                         UploadId=upload_id,
@@ -253,7 +253,7 @@ class _S3UploadMixin:
                     ).decode()
 
                     # Upload part
-                    part_response = (await self._get_client()).upload_part(
+                    part_response = await (await self._get_client()).upload_part(
                         Bucket=self.bucket,
                         Key=key,
                         UploadId=upload_id,
@@ -274,7 +274,9 @@ class _S3UploadMixin:
                 raise ValueError(f"Unsupported data type: {type(data)}")
 
             # Complete multipart upload
-            complete_response = (await self._get_client()).complete_multipart_upload(
+            complete_response = await (
+                await self._get_client()
+            ).complete_multipart_upload(
                 Bucket=self.bucket,
                 Key=key,
                 UploadId=upload_id,
@@ -304,7 +306,7 @@ class _S3UploadMixin:
             # Abort multipart upload on any error
             try:
                 if "upload_id" in locals():
-                    (await self._get_client()).abort_multipart_upload(
+                    await (await self._get_client()).abort_multipart_upload(
                         Bucket=self.bucket,
                         Key=key,
                         UploadId=upload_id,

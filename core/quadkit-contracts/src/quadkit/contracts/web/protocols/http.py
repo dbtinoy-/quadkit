@@ -208,7 +208,7 @@ class ResponseFactoryProtocol(Protocol):
     """Protocol for creating HTTP responses.
 
     Abstracts response creation to avoid hard dependencies on specific
-    web frameworks (e.g., Starlette/FastAPI) in business logic or middleware.
+    web frameworks (e.g., Starlette) in business logic or middleware.
     """
 
     def json(

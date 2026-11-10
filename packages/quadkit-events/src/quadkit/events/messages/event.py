@@ -7,12 +7,10 @@ They are immutable and stored in the Event Store for rebuilding state.
 from __future__ import annotations
 
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any
+from typing import Any
+from uuid import UUID  # noqa: TC003 — runtime type resolution for event dataclasses
 
 from quadkit.contracts.domain import DomainEvent as _DomainEvent
-
-if TYPE_CHECKING:
-    from uuid import UUID
 
 # ``Event`` subclasses the canonical DomainEvent from contracts; we no
 # longer export a separate alias here.  Consumers should import

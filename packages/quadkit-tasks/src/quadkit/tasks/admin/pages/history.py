@@ -10,7 +10,7 @@ from quadkit.contracts.admin.widget_content import (
     TableCell,
     TableContent,
 )
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks import ResultStore
 
 logger = get_logger(__name__)
@@ -55,7 +55,10 @@ class TasksHistoryPage:
             fetch_completed = getattr(self._result_store, "get_completed", None)
             tasks = await fetch_completed() if fetch_completed is not None else []
         except Exception as exc:
-            logger.warning("tasks_history.store_unavailable", error=str(exc))
+            logger.warning(
+                "tasks_history.store_unavailable",
+                error_type=safe_error_type(exc),
+            )
             return PageContent(
                 title="Task History",
                 body=EmptyContent(

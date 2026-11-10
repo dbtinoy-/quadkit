@@ -162,14 +162,14 @@ runtime dependencies. Report vulnerabilities privately per
 
 ## Stability
 
-Version `0.0.46` in the `0.x` series, released in lockstep with the
-other twelve distributions. **These protocols carry no compatibility
+Version `0.0.50` in the `0.x` series, versioned independently of the
+other distributions. **These protocols carry no compatibility
 guarantee yet**: minor releases may add, rename, or remove members
 while the framework is pre-1.0. Because this package is published
 whole, protocols for not-yet-released areas are the most likely to
 change; the settled ones are those exercised by `quadkit`,
 `quadkit-web`, `quadkit-testing`, and `quadkit-cli`. Pin an exact
-version (`quadkit-contracts==0.0.46`) when you depend on these types
+version (`quadkit-contracts==0.0.50`) when you depend on these types
 directly. Full policy:
 [stability and compatibility](https://oridecon.dev/quadkit/ecosystem/compatibility/).
 
@@ -185,3 +185,13 @@ directly. Full policy:
 Apache-2.0 — see [LICENSE](https://github.com/dbtinoy-/quadkit/blob/main/LICENSE). "Quadkit" and the
 Quadkit logo are trademarks of the project — see
 [TRADEMARK.md](https://github.com/dbtinoy-/quadkit/blob/main/TRADEMARK.md).
+
+### HTTP guard documentation values
+
+`quadkit.contracts.web.security_metadata` provides `HttpBearerDocumentation` and
+optional tuples of frozen primitive `HttpErrorMessageDocumentation` declarations.
+The latter commits to one status and a JSON error/message envelope with a literal
+error discriminator. Producers own those wire claims; consumers validate/render
+them. Defaults preserve bearer-only metadata without rejection inference. These
+values have no runtime framework dependencies, execute no authentication, and grant
+no permissions. Other bodies/media types require explicit operation documentation.

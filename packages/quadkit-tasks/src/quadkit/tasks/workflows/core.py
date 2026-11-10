@@ -1,16 +1,16 @@
 """Task-queue workflow composition for job chaining.
 
 .. note::
-    **Boundary with the optional provider:**
+    **Boundary with quadkit-workflow:**
 
     This module provides *task-queue* oriented workflow composition —
     chaining background jobs with dependencies, branching, and retries.
     It is the Celery-style model: each step is a discrete task dispatched
     to a queue.
 
-    ``the optional provider`` provides *business process* orchestration —
+    ``quadkit-workflow`` provides *business process* orchestration —
     multi-step pipelines, sagas, and bulk operations for in-process
-    coordination. Use ``the optional provider module`` when you need
+    coordination. Use ``quadkit.workflow.pipeline`` when you need
     synchronous in-process step pipelines; use this module when you need
     async, queue-backed job graphs.
 """
@@ -25,7 +25,7 @@ import time
 from typing import TYPE_CHECKING, Any
 import uuid
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.result import Err, Ok, Result
 
 if TYPE_CHECKING:
@@ -158,8 +158,7 @@ class TaskChain(Workflow):
                     current_data = successful[-1].data
                 logger.info(
                     "workflow.resuming",
-                    workflow_id=workflow_id,
-                    skipping=list(completed_step_names),
+                    skipped_step_count=len(completed_step_names),
                 )
 
         try:
@@ -189,7 +188,7 @@ class TaskChain(Workflow):
                     # ANY handler error (incl. timeouts via wait_for and
                     # non-stdlib exceptions) fails this step, not the whole
                     # workflow.
-                    error_msg = str(exc)
+                    error_msg = f"Step failed ({safe_error_type(exc)})"
                     step_result = StepResult(
                         step_name=step.name,
                         success=False,
@@ -198,23 +197,22 @@ class TaskChain(Workflow):
                     )
                     result.steps.append(step_result)
                     logger.warning(
-                        "Chain step '%s' failed: %s",
-                        step.name,
-                        error_msg,
+                        "workflow_chain_step_failed",
+                        error_type=safe_error_type(exc),
                     )
 
                     if step.on_error:
                         try:
                             current_data = await step.on_error(exc)
-                        except Exception:  # noqa: BLE001 — handler isolation
-                            logger.exception(
-                                "Error handler for '%s' also failed",
-                                step.name,
+                        except Exception as handler_error:  # noqa: BLE001 — handler isolation
+                            logger.error(
+                                "workflow_on_error_handler_failed",
+                                error_type=safe_error_type(handler_error),
                             )
 
                     if self.stop_on_error:
                         result.status = WorkflowStatus.FAILED
-                        result.error = f"Step '{step.name}' failed: {error_msg}"
+                        result.error = error_msg
                         if self._state_store:
                             await self._state_store.save_state(workflow_id, result)
                         break
@@ -228,8 +226,11 @@ class TaskChain(Workflow):
                 await self._state_store.save_state(workflow_id, result)
             return Ok(result)
         except Exception as exc:
-            logger.exception("Unexpected error in TaskChain execution")
-            return Err(WorkflowError(str(exc)))
+            logger.error(
+                "workflow_task_chain_failed",
+                error_type=safe_error_type(exc),
+            )
+            return Err(WorkflowError(f"Workflow failed ({safe_error_type(exc)})"))
 
     def __or__(self, other: TaskStep) -> TaskChain:
         """PipeProtocol operator: chain | step.
@@ -300,7 +301,7 @@ class TaskGroup(Workflow):
                     return StepResult(
                         step_name=step.name,
                         success=False,
-                        error=str(exc),
+                        error=f"Step failed ({safe_error_type(exc)})",
                         duration_ms=(time.monotonic() - step_start) * 1000,
                     )
 
@@ -332,8 +333,11 @@ class TaskGroup(Workflow):
                 await self._state_store.save_state(workflow_id, result)
             return Ok(result)
         except Exception as exc:
-            logger.exception("Unexpected error in TaskGroup execution")
-            return Err(WorkflowError(str(exc)))
+            logger.error(
+                "workflow_task_group_failed",
+                error_type=safe_error_type(exc),
+            )
+            return Err(WorkflowError(f"Workflow failed ({safe_error_type(exc)})"))
 
 
 class TaskChord(Workflow):
@@ -390,17 +394,20 @@ class TaskChord(Workflow):
                     StepResult(
                         step_name=self.callback.name,
                         success=False,
-                        error=str(exc),
+                        error=f"Callback step failed ({safe_error_type(exc)})",
                         duration_ms=(time.monotonic() - step_start) * 1000,
                     ),
                 )
                 group_result.status = WorkflowStatus.FAILED
-                group_result.error = f"Callback '{self.callback.name}' failed"
+                group_result.error = f"Callback step failed ({safe_error_type(exc)})"
 
             return Ok(group_result)
         except Exception as exc:
-            logger.exception("Unexpected error in TaskChord execution")
-            return Err(WorkflowError(str(exc)))
+            logger.error(
+                "workflow_task_chord_failed",
+                error_type=safe_error_type(exc),
+            )
+            return Err(WorkflowError(f"Workflow failed ({safe_error_type(exc)})"))
 
 
 class BranchStep(Workflow):
@@ -457,7 +464,7 @@ class BranchStep(Workflow):
                 step_result = StepResult(
                     step_name=step.name,
                     success=False,
-                    error=str(exc),
+                    error=f"Branch step failed ({safe_error_type(exc)})",
                     duration_ms=(time.monotonic() - step_start) * 1000,
                 )
                 return Ok(
@@ -465,13 +472,16 @@ class BranchStep(Workflow):
                         workflow_id=workflow_id,
                         status=WorkflowStatus.FAILED,
                         steps=[step_result],
-                        error=str(exc),
+                        error=f"Branch step failed ({safe_error_type(exc)})",
                         total_duration_ms=(time.monotonic() - start) * 1000,
                     )
                 )
         except Exception as exc:
-            logger.exception("Unexpected error in BranchStep execution")
-            return Err(WorkflowError(str(exc)))
+            logger.error(
+                "workflow_branch_step_failed",
+                error_type=safe_error_type(exc),
+            )
+            return Err(WorkflowError(f"Workflow failed ({safe_error_type(exc)})"))
 
 
 from quadkit.tasks.workflows.factories import chain as chain  # noqa: E402

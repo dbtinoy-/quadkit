@@ -9,6 +9,7 @@ import asyncio
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from enum import StrEnum
+import inspect
 from typing import TYPE_CHECKING, Any
 from uuid import UUID, uuid4
 
@@ -70,6 +71,8 @@ class EventSubscriber:
         total_partitions: int = 4,  # Default partitions for groups
     ):
         """Initialize the subscriber."""
+        if type(checkpoint_interval) is not int or checkpoint_interval <= 0:
+            raise ValueError("checkpoint_interval must be a positive integer")
         self._event_store = event_store
         self._checkpoint_store = checkpoint_store
         self._checkpoint_interval = checkpoint_interval
@@ -177,6 +180,10 @@ class EventSubscriber:
             return True
         return False
 
+    def _can_consume(self, subscription: Subscription) -> bool:
+        """Read live state anew across asynchronous suspension points."""
+        return self._running and subscription.state == SubscriptionState.ACTIVE
+
     async def _consume(self, subscription: Subscription) -> None:
         """Consume events for a subscription."""
         if not self._event_store:
@@ -191,7 +198,7 @@ class EventSubscriber:
                 checkpoint_name = f"sub:{subscription.group_id}:{subscription.name}"
 
         try:
-            while self._running and subscription.state == SubscriptionState.ACTIVE:
+            while self._can_consume(subscription):
                 # MF-03: Acquire lock if using group_id
                 locked = True
                 if subscription.group_id and self._checkpoint_store:
@@ -206,6 +213,7 @@ class EventSubscriber:
                     continue
 
                 try:
+                    last_seen_position = subscription.position
                     async for event in self._event_store.stream_all(  # type: ignore[attr-defined]
                         from_position=subscription.position,
                         partition=subscription.partition,
@@ -213,11 +221,17 @@ class EventSubscriber:
                     ):
                         # Subscription state may change while the
                         # generator is suspended on each yield.
-                        if (
-                            not self._running
-                            or subscription.state != SubscriptionState.ACTIVE
-                        ):
-                            break  # type: ignore[unreachable]
+                        if not self._can_consume(subscription):
+                            break
+
+                        # Without an advancing cursor, neither retry nor a
+                        # checkpoint can safely describe this event.
+                        position = getattr(event, "sequence_number", None)
+                        if type(position) is not int or position <= last_seen_position:
+                            raise ValueError(
+                                "Event store returned an invalid stream position"
+                            )
+                        last_seen_position = position
 
                         # Filter by event type if specified
                         if (
@@ -226,39 +240,35 @@ class EventSubscriber:
                         ):
                             continue
 
-                        # Process event
                         try:
                             if subscription.handler:
                                 result = subscription.handler(event)
-                                if asyncio.iscoroutine(result):
+                                if inspect.isawaitable(result):
                                     await result
-
-                            subscription.events_processed += 1
-                            subscription.last_event_at = datetime.now(UTC)
-
-                            # Update position
-                            position = getattr(event, "sequence_number", None)
-                            if position:
-                                subscription.position = position
-
-                                # Periodic checkpointing
-                                if (
-                                    subscription.events_processed
-                                    % self._checkpoint_interval
-                                    == 0
-                                ):
-                                    if self._checkpoint_store:
-                                        await self._checkpoint_store.save_checkpoint(
-                                            checkpoint_name,
-                                            position,
-                                        )
-
-                        except Exception as e:  # noqa: BLE001 — per-message isolation; one bad message must not kill the subscription
+                        except Exception as e:  # noqa: BLE001 — stop at this event and retry it on the next pass
                             subscription.errors += 1
                             logger.exception(
                                 "Error processing subscription %s message",
                                 subscription.id,
                                 error=str(e),
+                            )
+                            break
+
+                        subscription.events_processed += 1
+                        subscription.last_event_at = datetime.now(UTC)
+                        subscription.position = position
+
+                        # Checkpoint failures are not handler failures: stop the
+                        # consumer instead of proceeding to later events.
+                        if (
+                            self._checkpoint_store
+                            and subscription.events_processed
+                            % self._checkpoint_interval
+                            == 0
+                        ):
+                            await self._checkpoint_store.save_checkpoint(
+                                checkpoint_name,
+                                position,
                             )
 
                     # Final checkpoint for this batch
@@ -278,9 +288,11 @@ class EventSubscriber:
                 if self._running:
                     await asyncio.sleep(1.0)  # Small gap before re-acquiring
 
-        except Exception as e:  # noqa: BLE001 — subscription consumer background task; log and mark ERROR state
-            logger.exception()
+        except Exception:  # noqa: BLE001 — subscription consumer background task; log and mark ERROR state
             subscription.state = SubscriptionState.ERROR
+            logger.exception(
+                "Subscription %s stopped after a consumer error", subscription.id
+            )
 
     async def events(self, subscription_id: UUID, batch_size: int = 100) -> Any:
         """Async generator for subscription events.

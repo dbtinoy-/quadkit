@@ -44,6 +44,22 @@ class ProblemDetail:
         return result
 
     @classmethod
+    def json_schema(cls) -> dict[str, Any]:
+        """Default wire shape from to_dict; extension members remain allowed."""
+        return {
+            "type": "object",
+            "properties": {
+                "type": {"type": "string"},
+                "title": {"type": "string"},
+                "status": {"type": "integer"},
+                "detail": {"type": "string"},
+                "instance": {"type": "string"},
+                "errors": {"type": "array", "items": {"type": "object"}},
+            },
+            "required": ["type", "title", "status", "detail"],
+        }
+
+    @classmethod
     def from_exception(
         cls,
         exc: Exception,

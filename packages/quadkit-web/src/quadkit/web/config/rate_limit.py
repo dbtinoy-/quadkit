@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import ClassVar
+from typing import ClassVar, Literal
 
 from quadkit.config import BaseConfig
 from quadkit.validation import ConfigDict, Field, model_validator
@@ -53,7 +53,7 @@ class RateLimitConfig(BaseConfig):
         default_factory=list,
         description="Exempt IP addresses",
     )
-    storage_backend: str = Field(
+    storage_backend: Literal["redis", "memory"] = Field(
         default="memory",
         description="Storage backend (memory/redis)",
     )
@@ -74,8 +74,11 @@ class RateLimitConfig(BaseConfig):
                 raise ValueError("Rate limit 'default_window' must be greater than 0.")
         return self
 
-    def get_rule(self, path: str) -> RateLimitRuleConfig | None:
-        """Get rate limit rule for a path (longest prefix match).
+    def get_matched_rule(
+        self,
+        path: str,
+    ) -> tuple[str, RateLimitRuleConfig] | None:
+        """Get matched ``(pattern, rule)`` pair for a path (longest prefix match).
 
         Prefix matching honours path-segment boundaries: a rule for
         ``/api`` matches ``/api`` and ``/api/users`` but **not**
@@ -83,10 +86,10 @@ class RateLimitConfig(BaseConfig):
         """
         # Exact match first
         if path in self.rules:
-            return self.rules[path]
+            return path, self.rules[path]
 
         # Longest prefix match
-        best_match = None
+        best_match: tuple[str, RateLimitRuleConfig] | None = None
         best_length = 0
         for pattern, rule in self.rules.items():
             if not path.startswith(pattern) or len(pattern) <= best_length:
@@ -100,10 +103,15 @@ class RateLimitConfig(BaseConfig):
                 and path[len(pattern)] != "/"
             ):
                 continue
-            best_match = rule
+            best_match = (pattern, rule)
             best_length = len(pattern)
 
         return best_match
+
+    def get_rule(self, path: str) -> RateLimitRuleConfig | None:
+        """Get rate limit rule for a path (longest prefix match)."""
+        matched = self.get_matched_rule(path)
+        return matched[1] if matched is not None else None
 
 
 @dataclass(init=False)

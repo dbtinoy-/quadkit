@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -174,6 +173,7 @@ class TestHTTPProviderHealthCheck:
 
         await provider.boot(FakeResolver())  # type: ignore[arg-type]
         result = await provider.health_check(timeout=1.0)
+        assert result.details is not None
         assert result.details.get("started") is True
         await provider.shutdown()
 
@@ -188,8 +188,15 @@ class TestHTTPProviderRegister:
         registered: dict[type, object] = {}
 
         class FakeRegistrar:
-            def singleton(self, key: type, factory: object) -> None:
-                registered[key] = factory
+            def singleton(
+                self,
+                key: type,
+                instance: object = None,
+                *,
+                factory: object = None,
+                **_kw: object,
+            ) -> None:
+                registered[key] = factory if factory is not None else instance
 
         await provider.register(FakeRegistrar())  # type: ignore[arg-type]
 

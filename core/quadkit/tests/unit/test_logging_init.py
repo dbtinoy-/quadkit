@@ -56,6 +56,16 @@ class TestLoggingLazyImports:
         from quadkit.logging import LoggingProvider
         assert LoggingProvider is not None
 
+    def test_import_safe_error_type(self) -> None:
+        """Test the safe diagnostic helper is available through the facade."""
+        from quadkit.logging import safe_error_type
+
+        class SensitiveError(Exception):
+            def __str__(self) -> str:
+                raise AssertionError("safe_error_type must not inspect the message")
+
+        assert safe_error_type(SensitiveError()) == "SensitiveError"
+
     def test_import_log_level(self) -> None:
         """Test lazy import of LogLevel."""
         from quadkit.logging import LogLevel
@@ -109,6 +119,7 @@ class TestLoggingDir:
         assert "LoggerFactoryProtocol" in attrs
         assert "RedactorProtocol" in attrs
         assert "LoggingConfig" in attrs
+        assert "safe_error_type" in attrs
 
 
 class TestLoggingAll:
@@ -121,6 +132,7 @@ class TestLoggingAll:
         assert "Logger" in logging.__all__
         assert "LoggerFactoryProtocol" in logging.__all__
         assert "RedactorProtocol" in logging.__all__
+        assert "safe_error_type" in logging.__all__
 
 
 class TestLoggingModuleVisibility:

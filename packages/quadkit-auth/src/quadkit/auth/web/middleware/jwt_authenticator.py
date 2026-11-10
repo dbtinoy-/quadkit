@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from quadkit.auth.web.middleware._active_user import is_active_user
 from quadkit.contracts import AuthProviderProtocol
 from quadkit.logging import LoggerProtocol as Logger
 from quadkit.logging import get_logger
@@ -69,7 +70,7 @@ class JwtAuthenticator:
 
         # Fetch fresh user data from store
         user = await self.auth_provider.get_user(user_id)
-        if not user:
+        if user is None or not is_active_user(user):
             return None
 
         # Pre-fetch delegations for sync check_access

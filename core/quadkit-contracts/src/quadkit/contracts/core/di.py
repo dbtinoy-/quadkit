@@ -105,6 +105,14 @@ class ContainerRegistrarProtocol(Protocol):
         """Check if a service is registered."""
         ...
 
+    def resolve_sync(self, service_type: type[T]) -> T:
+        """Synchronously resolve an already-instantiated singleton.
+
+        Intended for register-phase configuration reads where pre-seeded
+        singletons (such as ``QuadkitConfig``) are already instantiated.
+        """
+        ...
+
     def bind(
         self,
         service_type: type[T],

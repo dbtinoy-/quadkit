@@ -2,6 +2,7 @@
 
 import asyncio
 import contextlib
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -204,3 +205,40 @@ class TestTaskManager:
 
         await asyncio.sleep(0.2)
         assert not self.tm.has_active_tasks
+
+    @pytest.mark.asyncio
+    async def test_periodic_failure_logs_only_type_without_task_name(self):
+        """Periodic exceptions must not expose messages or task names."""
+        self.tm._logger = MagicMock()
+        private_task_name = "private-user-task-42"
+        private_error = "private /srv/app/user-42 request=secret"
+        waiting_after_failure = asyncio.Event()
+        calls = 0
+
+        async def fail_then_wait():
+            nonlocal calls
+            calls += 1
+            if calls == 1:
+                raise ValueError(private_error)
+            waiting_after_failure.set()
+            await asyncio.Future()
+
+        task = self.tm.run_periodic(
+            fail_then_wait,
+            interval=60,
+            name=private_task_name,
+        )
+        await asyncio.wait_for(waiting_after_failure.wait(), timeout=1)
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
+
+        self.tm._logger.error.assert_called_once_with(
+            "task_manager.periodic_task_error",
+            error_type="ValueError",
+        )
+        logged = repr(self.tm._logger.error.call_args)
+        assert private_task_name not in logged
+        assert private_error not in logged
+        assert "/srv/app" not in logged
+        assert "user-42" not in logged

@@ -3,7 +3,8 @@ providers and controllers fit; ``create_app(config=..., client=...)`` is
 the injection seam.
 
 Composition root for the AI Assistant demo: an external-integration
-starter — Quadkit ships no AI client, so the demo shows the seam. The
+starter — this demo uses an application-owned HTTP client rather than the
+Quadkit AI LLM integration. The
 controller depends on the ``AssistantClient`` protocol; the provider
 binds an OpenAI-compatible HTTP client in production and accepts a fake
 in tests.

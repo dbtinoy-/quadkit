@@ -169,6 +169,27 @@ class HandlerRegistry:
             if self._is_handler_class(obj):
                 discovered += self._register_handler_class(obj)
 
+        # Scan module for @event_handler / @command_handler / @query_handler functions
+        from quadkit.events.constants import HandlerType
+        from quadkit.events.decorators.handlers import get_handler_info
+
+        for _name, fn in inspect.getmembers(module, inspect.isfunction):
+            if fn.__module__ != module.__name__:
+                continue
+            info = get_handler_info(fn)
+            if info is None or not info.message_types:
+                continue
+            if info.handler_type == HandlerType.COMMAND:
+                self.register_command_handler(info.message_types[0], fn)
+                discovered += 1
+            elif info.handler_type == HandlerType.QUERY:
+                self.register_query_handler(info.message_types[0], fn)
+                discovered += 1
+            elif info.handler_type == HandlerType.EVENT:
+                for event_type in info.message_types:
+                    self.register_event_handler(event_type, fn)
+                    discovered += 1
+
         # Recursively scan submodules
         if recursive and hasattr(module, "__path__"):
             for _, submodule_name, _ in pkgutil.iter_modules(module.__path__):

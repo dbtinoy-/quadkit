@@ -15,6 +15,9 @@ Key classes:
 
 from __future__ import annotations
 
+import importlib
+from typing import Any
+
 from quadkit.events.stores.base import (
     AbstractEventStore,
     AbstractSnapshotStore,
@@ -22,6 +25,7 @@ from quadkit.events.stores.base import (
 )
 from quadkit.events.stores.memory import InMemoryEventStore, InMemorySnapshotStore
 from quadkit.events.stores.outbox import (
+    AcknowledgedEventSink,
     OutboxEntry,
     OutboxEntryStatus,
     OutboxEventStore,
@@ -88,6 +92,7 @@ __all__ = [
     "HAS_SQLITE",
     "AbstractEventStore",
     "AbstractSnapshotStore",
+    "AcknowledgedEventSink",
     "CompositePolicy",
     "EventCountPolicy",
     "InMemoryEventStore",
@@ -115,3 +120,26 @@ if HAS_MONGODB:
 
 if HAS_REDIS:
     __all__.extend(["RedisEventStore"])
+
+_SQLITE_EXPORTS = frozenset(
+    {"SqliteConfig", "SqliteEventStore", "SqliteSnapshotStore"}
+)
+
+
+def __getattr__(name: str) -> Any:
+    """Resolve optional SQLite stores on demand.
+
+    The eager import above can lose a race against a partially initialized
+    ``quadkit.events`` package (a swallowed ImportError would otherwise leave
+    the names unavailable for the rest of the process). Re-resolving on first
+    attribute access keeps the optional export usable in that case.
+    """
+    if name in _SQLITE_EXPORTS:
+        global HAS_SQLITE
+        module = importlib.import_module("quadkit.events.stores.sqlite")
+        HAS_SQLITE = True
+        for export in _SQLITE_EXPORTS:
+            if export not in __all__:
+                __all__.append(export)
+        return getattr(module, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

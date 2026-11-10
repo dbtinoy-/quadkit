@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 from functools import wraps
-import hashlib
 from typing import TYPE_CHECKING, Any, cast
 
 from quadkit.auth.config import AuthMiddlewareConfig
@@ -59,6 +58,11 @@ class AuthMiddleware:
         # Initialize extracted components
         self.token_extractor = TokenExtractor(self.config)
         self.session_validator = SessionValidator(self.config, self.auth_provider)
+        # Retained for compatibility with callers inspecting/clearing this
+        # utility. Principal snapshots must never authenticate a request: they
+        # outlive token expiry/revocation, account status and authorization data.
+        # Credential verification may optimize internally, but must recheck its
+        # validity and resolve the current user on every request.
         self.token_cache = TokenCache()
         self.api_key_authenticator = ApiKeyAuthenticator(self.auth_provider)
         self.session_authenticator = SessionAuthenticator(self.auth_provider)
@@ -104,20 +108,9 @@ class AuthMiddleware:
                 )
                 return None
 
-        # Check token cache first (avoid JWT decode + DB lookup)
-        cached_user = await self.token_cache.get(token)
-        if cached_user:
-            token_hash = hashlib.sha256(token.encode()).hexdigest()
-            logger.info(
-                "AuthMiddleware.authenticate_request: Token cache HIT for token_hash=%s",
-                token_hash[:10],
-            )
-            return cast("User | None", cached_user)
-
         # Try API key authentication
         user = await self.api_key_authenticator.authenticate(token, request)
         if user:
-            await self.token_cache.set(token, user)
             return cast("User | None", user)
 
         # Try session authentication
@@ -128,8 +121,6 @@ class AuthMiddleware:
         # Try JWT authentication — the authenticator now extracts the token
         # from the request internally (signature changed in an earlier refactor).
         user = await self.jwt_authenticator.authenticate(request)
-        if user:
-            await self.token_cache.set(token, user)
 
         # Record failed attempt when all authenticators returned None
         if user is None and self.attempt_tracker is not None:
@@ -201,9 +192,9 @@ class AuthMiddleware:
         scope["state"]["user_id"] = str(user.user_id) if user is not None else None
 
         # Store user in runtime context for unified access across HTTP/WebSocket/Tasks
-        from quadkit.di.resolution.context import get_resolver
+        from quadkit.di.resolution.context import get_async_resolver
 
-        resolver = get_resolver(scope)
+        resolver = get_async_resolver(scope)
         if resolver and self._ctx is not None and user is not None:
             self._ctx.set(USER_ID, str(user.user_id))
 
@@ -243,6 +234,7 @@ class AuthMiddleware:
                 # User doesn't have required roles/permissions
                 response = await self.response_handler.forbidden_response(
                     "Insufficient permissions",
+                    request=request,
                 )
                 await response(scope, receive, send)
                 return

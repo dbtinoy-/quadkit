@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "quadkit-auth"
-version = "0.0.46"
+version = "0.0.50"
 description = "Authentication and authorization for Quadkit Framework - JWT, OAuth2, SAML, LDAP, RBAC, and multi-tenancy"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -38,9 +38,9 @@ classifiers = [
     "Typing :: Typed",
 ]
 dependencies = [
-    "quadkit>=0.0.2",
-    "quadkit-contracts>=0.0.2",
-    "quadkit-web>=0.0.2",
+    "quadkit>=0.0.50",
+    "quadkit-contracts>=0.0.50",
+    "quadkit-web>=0.0.50",
     "argon2-cffi>=21.1.0",
     "orjson>=3.9.0",
     "passlib[bcrypt]>=1.7.0",

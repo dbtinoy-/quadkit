@@ -15,7 +15,11 @@ from typing import Protocol, runtime_checkable
 
 @dataclass(frozen=True, slots=True)
 class RelayRequestLogEntry:
-    """One gateway request dispatch, redaction-safe."""
+    """One gateway request dispatch, with identifiers omitted by the emitter.
+
+    The identifier fields remain for schema compatibility but must be empty in
+    all redacted entries, including read-side mappings of historical rows.
+    """
 
     request_id: str
     user_id: str

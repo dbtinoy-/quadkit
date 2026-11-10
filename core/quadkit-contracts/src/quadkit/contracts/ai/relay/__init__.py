@@ -41,6 +41,7 @@ from quadkit.contracts.ai.relay.gateway import (
     RelayGatewayProtocol,
     RelayGatewayRequest,
     RelayGatewayResult,
+    RelayRuntimeEnableProtocol,
 )
 from quadkit.contracts.ai.relay.ir import (
     RelayRequest,
@@ -82,6 +83,11 @@ from quadkit.contracts.ai.relay.ratelimit import (
     RelayRateLimitCounterProtocol,
     RelayRateLimitDecision,
 )
+from quadkit.contracts.ai.relay.retry import (
+    NEVER_RETRY_STATUSES,
+    NEW_API_RETRY_RANGES,
+    RelayRetryPolicy,
+)
 from quadkit.contracts.ai.relay.store import (
     RelayChannelSnapshot,
     RelayChannelStoreProtocol,
@@ -112,6 +118,8 @@ from quadkit.contracts.ai.relay.usage import (
 )
 
 __all__ = [
+    "NEVER_RETRY_STATUSES",
+    "NEW_API_RETRY_RANGES",
     "ClaudeContent",
     "ClaudeMessage",
     "ClaudeOptions",
@@ -169,7 +177,9 @@ __all__ = [
     "RelayRequestPayload",
     "RelayResponse",
     "RelayResponsePayload",
+    "RelayRetryPolicy",
     "RelayRouteMetrics",
+    "RelayRuntimeEnableProtocol",
     "RelayStreamOptions",
     "RelayStreamSessionProtocol",
     "RelayUpstreamProtocol",

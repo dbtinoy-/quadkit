@@ -1,0 +1,61 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: ai_llm:
+# Environment variable prefix: QK_AI_LLM__
+#
+# NOTE: When using AIConfig (the optional provider), this config is nested under the `ai:` key:
+#   ai:
+#     llm:
+#       ...fields...
+#
+# IMPORTANT: Never commit API keys. Set via environment variable:
+#   QK_AI_LLM__API_KEY=sk-...
+
+ai_llm:
+  # LLM provider to use.
+  # Options: "openai", "anthropic", "ollama", "cohere", "groq", "mistral", "openrouter"
+  provider: "openai"
+
+  # Model identifier.
+  # Examples: "gpt-4-turbo", "claude-3-5-sonnet-20241022", "llama3.2", "mixtral-8x7b-32768"
+  model: "gpt-4-turbo"
+
+  # API key for the chosen provider.
+  # Recommended: set via QK_AI_LLM__API_KEY environment variable.
+  api_key: "${QK_AI_LLM__API_KEY}"
+
+  # Custom API base URL. Use for Azure OpenAI, local proxies, or compatible endpoints.
+  # null = use the provider's default endpoint.
+  api_base: null  # e.g. "https://my-resource.openai.azure.com/"
+
+  # Sampling temperature (0.0 = deterministic, 2.0 = very creative).
+  temperature: 0.7
+
+  # Maximum tokens to generate in a response. null = use provider default.
+  max_tokens: null  # e.g. 4096
+
+  # Request timeout in seconds.
+  timeout: 60.0
+
+  # -------------------------------------------------------------------------
+  # Response caching
+  # -------------------------------------------------------------------------
+
+  # Cache LLM responses for identical prompts (requires CacheProvider in container).
+  enable_cache: false
+
+  # TTL for cached responses (seconds).
+  cache_ttl: 3600
+
+  # -------------------------------------------------------------------------
+  # Provider-specific extras
+  # -------------------------------------------------------------------------
+
+  # Additional parameters passed verbatim to the provider client.
+  # Use for provider-specific options not covered above.
+  extra: {}
+  # Examples for OpenAI:
+  #   top_p: 0.9
+  #   presence_penalty: 0.0
+  #   frequency_penalty: 0.0
+  #   seed: 42

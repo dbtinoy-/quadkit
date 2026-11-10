@@ -73,7 +73,8 @@ def test_missing_file_returns_defaults(capsys) -> None:
     assert isinstance(cfg, QuadkitConfig)
     out = capsys.readouterr().out
     assert "config.defaults_only" in out
-    assert "/tmp/opencode/never" in out
+    assert "/tmp/opencode/never" not in out
+    assert "application.yaml or set QK_* env vars" in out
 
 
 # ── Mode 4: missing section ─────────────────────────────────────────────

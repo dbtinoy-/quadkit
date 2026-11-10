@@ -26,7 +26,7 @@ from quadkit.logging import get_logger
 from quadkit.logging.configurator import apply_config as _apply_logging_config
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterable
 
     from quadkit.di.module.dynamic import DynamicModule
     from quadkit.di.module.graph import CompiledModuleGraph
@@ -237,8 +237,11 @@ class Application(SecretsMixin, HealthProbeMixin):
             )
         self._modules.append(module)
 
-    def add_modules(self, modules: list[type | Any]) -> None:
-        """Add multiple modules. Must be called before ``start()``."""
+    def add_modules(self, modules: Iterable[type | Any]) -> None:
+        """Register modules in iterable order without mutating the collection.
+
+        Each item retains the same pre-start guard as ``add_module``.
+        """
         for mod in modules:
             self.add_module(mod)
 
@@ -380,8 +383,8 @@ class Application(SecretsMixin, HealthProbeMixin):
             sys.stderr.write("================================\n")
             sys.stderr.flush()
             try:
-                await self._orchestrator.shutdown()
-            except RuntimeError as cleanup_err:
+                await self._lifecycle.shutdown()
+            except Exception as cleanup_err:  # noqa: BLE001 — preserve the original startup failure
                 self._logger.exception(
                     "application.cleanup_failed",
                     error=str(cleanup_err),

@@ -25,10 +25,11 @@ plus `quadkit-web` with the [Granian](https://github.com/emmett-framework/grania
 server backend. That single dependency line is all the
 [first app](./first-app.md) needs.
 
-## The thirteen packages
+## The 18 public-use packages
 
-Everything published from this repository is one of these thirteen
-distributions. They version in lockstep — see
+The public-use set contains these 18 independently versioned distributions.
+This is not an assertion that every candidate is published. Check index
+availability and dependency floors before installation; see
 [stability and compatibility](../reference/stability.md).
 
 | Distribution | Install command | Provides |
@@ -46,6 +47,11 @@ distributions. They version in lockstep — see
 | `quadkit-tasks` | `pip install quadkit-tasks` | Background tasks and scheduling |
 | `quadkit-http` | `pip install quadkit-http` | Outbound HTTP client: pooling, retries, streaming |
 | `quadkit-monitor` | `pip install quadkit-monitor` | Metrics and runtime monitoring |
+| `quadkit-ai-llm` | `pip install quadkit-ai-llm` | LLM provider contracts and runtime |
+| `quadkit-ai-agents` | `pip install quadkit-ai-agents` | Agent runtime |
+| `quadkit-ai-mcp` | `pip install quadkit-ai-mcp` | MCP integration |
+| `quadkit-workflow` | `pip install quadkit-workflow` | Workflow runtime (installation does not enable features) |
+| `quadkit-notification` | `pip install quadkit-notification` | Notification runtime |
 
 Internal dependencies point inward only: `quadkit`,
 `quadkit-web`, `quadkit-testing`, and `quadkit-cli` all resolve

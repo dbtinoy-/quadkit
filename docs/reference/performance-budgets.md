@@ -46,7 +46,7 @@ numbers, regenerate `baselines.json` in the same PR that changes them.
 
 ## Running locally
 
-From a checkout of this repository with the thirteen distributions installed:
+From a checkout of this repository with the 18 distributions installed:
 
 ```bash
 python benchmarks/measure.py --json results.json --baseline benchmarks/baselines.json

@@ -74,10 +74,7 @@ class ResourceExhaustedError(GovernanceError):
         self.limit = limit
         self.current = current
         self.actor_id = actor_id
-        super().__init__(
-            f"Resource quota exhausted: tenant={tenant_id}, unit={unit_name}, "
-            f"{current}/{limit}"
-        )
+        super().__init__("Resource quota exhausted")
 
 
 __all__ = [

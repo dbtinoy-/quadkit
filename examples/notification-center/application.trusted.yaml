@@ -1,0 +1,21 @@
+# Explicit separate mode; ordinary Notification Center remains unchanged.
+trusted_publication:
+  recipient_email: ${EDITORIAL_RECIPIENT_EMAIL:}
+  token_secret: ${EDITORIAL_TOKEN_SECRET:}
+sql:
+  backend:
+    url: ${QK_SQL__BACKEND__URL:sqlite+aiosqlite:///editorial-notifications.db}
+web:
+  server:
+    host: 0.0.0.0
+    port: 8086
+    backend: uvicorn
+  security:
+    custom_headers:
+      cache-control: no-store
+      x-content-type-options: nosniff
+      x-frame-options: DENY
+      x-xss-protection: 1; mode=block
+    csrf:
+      enabled: true
+      exclude_auth_schemes: [Bearer]

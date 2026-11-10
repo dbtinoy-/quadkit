@@ -156,10 +156,10 @@ class MonitorScheduledWorker(ABC):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
-                logger.exception(
+                logger.error(
                     "worker_cycle_error",
                     worker=type(self).__name__,
-                    error=str(exc),
+                    error_type=type(exc).__name__,
                     policy=str(self.on_error_policy),
                 )
                 if self.on_error_policy is OnErrorPolicy.STOP:

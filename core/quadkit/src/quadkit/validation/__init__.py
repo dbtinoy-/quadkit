@@ -90,11 +90,13 @@ if TYPE_CHECKING:
         validate_type,
     )
     from quadkit.validation.schema import (
+        AliasChoices,
         ConfigDict,
         EmailStr,
         Field,
         HttpUrl,
         SecretStr,
+        computed_field,
         field_validator,
         model_validator,
     )
@@ -115,9 +117,11 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
     # --- Decorators ---
     "validate_input": ("quadkit.validation.decorators", "validate_input"),
     # --- Fields ---
+    "AliasChoices": ("quadkit.validation.schema", "AliasChoices"),
     "ConfigDict": ("quadkit.validation.schema", "ConfigDict"),
     "EmailStr": ("quadkit.validation.schema", "EmailStr"),
     "Field": ("quadkit.validation.schema", "Field"),
+    "computed_field": ("quadkit.validation.schema", "computed_field"),
     "HttpUrl": ("quadkit.validation.schema", "HttpUrl"),
     "SecretStr": ("quadkit.validation.schema", "SecretStr"),
     "field_validator": ("quadkit.validation.schema", "field_validator"),
@@ -203,6 +207,7 @@ __all__ = [
     "CODE_TYPE",
     "AbstractAsyncRule",
     "AbstractRule",
+    "AliasChoices",
     "AsyncRuleProtocol",
     "AsyncValidator",
     "ConfigDict",
@@ -229,6 +234,7 @@ __all__ = [
     "ValidationSystemError",
     "ValidatorImpl",
     "ValidatorProtocol",
+    "computed_field",
     "custom",
     "email_format",
     "field_validator",

@@ -7,11 +7,13 @@ single-instance applications.
 from __future__ import annotations
 
 from collections import defaultdict
+from copy import copy
 import dataclasses
 from typing import TYPE_CHECKING
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus
-from quadkit.events.exceptions import ConcurrencyError
+from quadkit.events.exceptions import ConcurrencyError, EventStoreError
+from quadkit.events.stores._history import validated_stream_version
 from quadkit.events.stores.base import AbstractEventStore, AbstractSnapshotStore
 
 if TYPE_CHECKING:
@@ -20,7 +22,7 @@ if TYPE_CHECKING:
 
     from quadkit.events.messages.event import Event
     from quadkit.events.schema.evolution import SchemaEvolution
-    from quadkit.events.types import Snapshot
+    from quadkit.events.types import Snapshot, StreamInfo
 
 
 class InMemoryEventStore(AbstractEventStore):
@@ -60,6 +62,8 @@ class InMemoryEventStore(AbstractEventStore):
         super().__init__(schema_evolution=schema_evolution)
         self._max_events_per_stream = max_events_per_stream
         self._streams: dict[str, list[Event]] = defaultdict(list)
+        # Absolute versions survive prefix eviction and stream compaction.
+        self._stream_versions: dict[str, int] = {}
         # M-19: global log maintains insertion order across all streams
         self._global_log: list[Event] = []
         self._global_position: int = 0
@@ -95,13 +99,9 @@ class InMemoryEventStore(AbstractEventStore):
         Returns:
             New stream version.
         """
+        current_version = self._stream_versions.get(stream_id, 0)
         if not events:
-            return len(self._streams[stream_id])
-
-        current_stream = self._streams[stream_id]
-        current_version = len(current_stream)
-
-        # Optimistic concurrency check
+            return current_version
         if expected_version is not None and current_version != expected_version:
             raise ConcurrencyError(
                 stream_id=stream_id,
@@ -109,38 +109,48 @@ class InMemoryEventStore(AbstractEventStore):
                 actual_version=current_version,
             )
 
-        # Assign versions and sequence numbers to new events
+        # Prepare the entire batch before touching the stream, global position,
+        # or indexes. Constructor-based reconstruction rejects generated frozen
+        # dataclasses and can drop dynamic legacy fields; copying preserves both.
+        staged: list[tuple[Event, str]] = []
         for i, event in enumerate(events):
+            position = self._global_position + i + 1
             version = current_version + i + 1
-            self._global_position += 1
+            try:
+                field_names = {f.name for f in dataclasses.fields(event)}
+                stamped = copy(event)
+                if stamped is event or type(stamped) is not type(event):
+                    raise TypeError("event copy is not independent")
+                original_dict = getattr(event, "__dict__", None)
+                if (
+                    original_dict is not None
+                    and getattr(stamped, "__dict__", None) is original_dict
+                ):
+                    raise TypeError("event copy shares attribute storage")
+                object.__setattr__(stamped, "sequence_number", position)
+                object.__setattr__(stamped, "stream_id", stream_id)
+                if "version" in field_names:
+                    object.__setattr__(stamped, "version", version)
+                if (
+                    stamped.sequence_number != position
+                    or getattr(stamped, "stream_id", None) != stream_id
+                    or ("version" in field_names and stamped.version != version)
+                ):
+                    raise TypeError("event did not retain stream metadata")
+                type_name = str(stamped.event_type)
+            except Exception as exc:  # noqa: BLE001 — incompatible events cannot be safely committed
+                raise EventStoreError("Could not prepare in-memory event") from exc
+            staged.append((stamped, type_name))
+
+        current_stream = self._streams[stream_id]
+        for versioned_event, type_name in staged:
             global_idx = len(self._global_log)
-
-            # Create event with version and sequence number.
-            # DomainEvent.__init__ may store extra attrs via object.__setattr__
-            # (outside the dataclass field registry) — dataclasses.replace() would
-            # silently drop those.  We collect ALL instance attributes, overlay
-            # the version fields, then reconstruct via the class __init__.
-            all_attrs = {
-                f.name: getattr(event, f.name) for f in dataclasses.fields(event)
-            }
-            # Pick up any extra attrs set by DomainEvent.__init__ for non-@dataclass subclasses
-            for k, v in vars(event).items():
-                if k not in all_attrs:
-                    all_attrs[k] = v
-            all_attrs["sequence_number"] = self._global_position
-            # Stamp the owning stream so partitioned reads
-            # (``stream_all(partition=...)``) hash by stream_id, matching the
-            # SQL/Redis stores.  Without this the partition filter would fall
-            # back to ``str(id(event))`` and scatter events across partitions.
-            all_attrs["stream_id"] = stream_id
-            if "version" in {f.name for f in dataclasses.fields(event)}:
-                all_attrs["version"] = version
-            versioned_event = event.__class__(**all_attrs)
-
-            # Update stream, global log, and type index (M-19)
             current_stream.append(versioned_event)
             self._global_log.append(versioned_event)
-            self._type_index[str(versioned_event.event_type)].append(global_idx)
+            self._type_index[type_name].append(global_idx)
+        self._global_position += len(staged)
+        new_version = current_version + len(staged)
+        self._stream_versions[stream_id] = new_version
 
         # Evict oldest events when limit is exceeded (0 = unbounded)
         if self._max_events_per_stream > 0:
@@ -148,7 +158,7 @@ class InMemoryEventStore(AbstractEventStore):
             if excess > 0:
                 current_stream[:] = current_stream[excess:]
 
-        return len(current_stream)
+        return new_version
 
     async def read(
         self,
@@ -160,14 +170,18 @@ class InMemoryEventStore(AbstractEventStore):
         """Read events from a stream (M-15)."""
 
         all_events = self._streams.get(stream_id, [])
-        # Stream position is 1-indexed (position = list index + 1).
-        # Events may not have a "version" field; use list position as the version.
+        high_water = self._stream_versions.get(stream_id, 0)
+        removed_count = high_water - len(all_events)
+        start = max(1, from_version)
+        if limit == 0 or (to_version is not None and to_version < start):
+            return []
+        if start <= removed_count:
+            raise EventStoreError("In-memory event history was evicted or compacted")
 
-        # Filter by version range (position in stream, 1-indexed)
         events = [
-            e
-            for pos, e in enumerate(all_events, start=1)
-            if pos >= from_version and (to_version is None or pos <= to_version)
+            event
+            for version, event in enumerate(all_events, start=removed_count + 1)
+            if version >= start and (to_version is None or version <= to_version)
         ]
 
         if limit is not None:
@@ -178,7 +192,49 @@ class InMemoryEventStore(AbstractEventStore):
 
     async def get_stream_version(self, stream_id: str) -> int:
         """Get the current version of a stream."""
-        return len(self._streams.get(stream_id, []))
+        return self._stream_versions.get(stream_id, 0)
+
+    async def stream_exists(self, stream_id: str) -> bool:
+        """Check the logical version, even after full compaction."""
+        return await validated_stream_version(self, stream_id) > 0
+
+    async def get_stream_info(self, stream_id: str) -> StreamInfo | None:
+        """Report the logical version and metadata of the retained suffix."""
+        from quadkit.events.types import StreamInfo
+
+        version = await validated_stream_version(self, stream_id)
+        retained = len(self._streams.get(stream_id, []))
+        if retained > version:
+            raise EventStoreError("In-memory event history is inconsistent")
+        if version == 0:
+            return None
+        missing_prefix = version - retained
+        if not retained:
+            return StreamInfo(stream_id=stream_id, version=version, event_count=0)
+
+        first = await self.read(stream_id, from_version=missing_prefix + 1, limit=1)
+        last = (
+            first
+            if retained == 1
+            else await self.read(stream_id, from_version=version, limit=1)
+        )
+        if (
+            len(first) != 1
+            or len(last) != 1
+            or await validated_stream_version(self, stream_id) != version
+            or len(self._streams.get(stream_id, [])) != retained
+        ):
+            raise EventStoreError(
+                "In-memory event history changed during stream info read"
+            )
+        return StreamInfo(
+            stream_id=stream_id,
+            aggregate_type=first[0].aggregate_type,
+            version=version,
+            event_count=retained,
+            created_at=first[0].occurred_at if missing_prefix == 0 else None,
+            updated_at=last[0].occurred_at,
+        )
 
     async def get_stream_ids(self) -> list[str]:
         """Get all stream IDs (for testing/debugging)."""
@@ -190,8 +246,12 @@ class InMemoryEventStore(AbstractEventStore):
             return 0
 
         events = self._streams[stream_id]
-        # Use list position (1-indexed) as the stream version.
-        remaining = [e for pos, e in enumerate(events, start=1) if pos > up_to_version]
+        removed_count = self._stream_versions[stream_id] - len(events)
+        remaining = [
+            event
+            for version, event in enumerate(events, start=removed_count + 1)
+            if version > up_to_version
+        ]
         deleted_count = len(events) - len(remaining)
         self._streams[stream_id] = remaining
 
@@ -262,6 +322,7 @@ class InMemoryEventStore(AbstractEventStore):
     def clear(self) -> None:
         """Clear all events (for testing)."""
         self._streams.clear()
+        self._stream_versions.clear()
         self._global_log.clear()
         self._global_position = 0
         self._type_index.clear()

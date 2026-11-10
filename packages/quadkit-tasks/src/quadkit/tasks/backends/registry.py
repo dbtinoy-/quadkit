@@ -100,7 +100,7 @@ def _create_memory(config: TaskConfig) -> Any:
     """Factory: in-memory task queue (always available; no extras required)."""
     from quadkit.tasks.backends.memory import MemoryTaskQueue
 
-    return MemoryTaskQueue()  # type: ignore[abstract]
+    return MemoryTaskQueue()
 
 
 def _create_redis(config: TaskConfig) -> Any:

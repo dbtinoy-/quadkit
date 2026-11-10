@@ -145,7 +145,8 @@ class RabbitMQAdapter(MessageAdapter["Event"]):
             ) from e
 
         try:
-            self._connection = await aio_pika.connect_robust(
+            connect_fn: Any = aio_pika.connect_robust
+            self._connection = await connect_fn(
                 self.config.connection_string.get_secret_value(),
                 heartbeat=self.config.heartbeat,
                 timeout=self.config.timeout,

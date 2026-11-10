@@ -9,6 +9,7 @@ from quadkit.monitor.health.cached import CachedHealthChecker
 from quadkit.monitor.health.checker import HealthChecker, health_checker
 from quadkit.monitor.health.checker_registry import HealthCheckerRegistry
 from quadkit.monitor.health.functions import FunctionHealthCheck
+from quadkit.monitor.health.infra_provider import InfrastructureHealthProvider
 from quadkit.monitor.health.registry import HealthCheckRegistry
 
 __all__ = [
@@ -21,5 +22,6 @@ __all__ = [
     "HealthChecker",
     "HealthCheckerRegistry",
     "HealthStatus",
+    "InfrastructureHealthProvider",
     "health_checker",
 ]

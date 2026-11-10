@@ -28,6 +28,13 @@ class TestSagaGenerator:
         content = (self.tmp_dir / "payment_capture_saga.py").read_text()
         assert "class PaymentCaptureSaga:" in content
 
+    def test_doc_option_replaces_the_default_docstring_line(self) -> None:
+        gen = SagaGenerator(output_dir=str(self.tmp_dir))
+        gen.generate("PaymentCapture", doc="Coordinate payment capture.")
+        content = (self.tmp_dir / "payment_capture_saga.py").read_text()
+        assert content.startswith('"""Coordinate payment capture.\n')
+        assert "PaymentCapture saga orchestrator." not in content
+
     def test_dry_run_creates_no_files_on_disk(self) -> None:
         gen = SagaGenerator(output_dir=str(self.tmp_dir))
         result = gen.generate("Widget", dry_run=True)

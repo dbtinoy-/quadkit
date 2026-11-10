@@ -16,15 +16,12 @@ authenticated users were rejected with 401.
 
 from __future__ import annotations
 
-import asyncio
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 from typing import Any
 
 import pytest
-from quadkit.result import Err, Ok
 
-from quadkit.auth.config import AuthMiddlewareConfig
 from quadkit.auth.models.user import User
 from quadkit.auth.types import GuardContext
 from quadkit.auth.web.guards import (
@@ -34,7 +31,6 @@ from quadkit.auth.web.guards import (
     GuardFactory,
     PermissionGuard,
     RoleGuard,
-    UserGuard,
     require_admin,
     require_auth,
     require_permission,
@@ -47,14 +43,15 @@ from quadkit.auth.web.middleware.auth import (
 )
 from quadkit.auth.web.middleware.response_handler import AuthResponseHandler
 
-
 # --------------------------------------------------------------------------
 # Fakes
 # --------------------------------------------------------------------------
 
 
 class _RecordingResponse:
-    def __init__(self, status: int, content: Any, headers: dict[str, Any] | None) -> None:
+    def __init__(
+        self, status: int, content: Any, headers: dict[str, Any] | None
+    ) -> None:
         self.status = status
         self.content = content
         self.headers = headers
@@ -64,7 +61,10 @@ class _RecordingResponse:
             {
                 "type": "http.response.start",
                 "status": self.status,
-                "headers": [(k.lower().encode(), v.encode()) for k, v in (self.headers or {}).items()],
+                "headers": [
+                    (k.lower().encode(), v.encode())
+                    for k, v in (self.headers or {}).items()
+                ],
             }
         )
         await send({"type": "http.response.body", "body": b"{}"})
@@ -80,10 +80,17 @@ class _FakeResponseFactory:
         status_code: int = 200,
         headers: dict[str, str] | None = None,
     ) -> _RecordingResponse:
-        self.calls.append(("json", {"content": content, "status_code": status_code, "headers": headers}))
+        self.calls.append(
+            (
+                "json",
+                {"content": content, "status_code": status_code, "headers": headers},
+            )
+        )
         return _RecordingResponse(status_code, content, headers)
 
-    def redirect(self, url: str, status_code: int = 302, headers: dict[str, str] | None = None) -> _RecordingResponse:
+    def redirect(
+        self, url: str, status_code: int = 302, headers: dict[str, str] | None = None
+    ) -> _RecordingResponse:
         self.calls.append(("redirect", {"url": url, "status_code": status_code}))
         return _RecordingResponse(status_code, {"url": url}, headers)
 
@@ -105,7 +112,7 @@ class _FakeResolver:
     passed (see ``forbidden_response``).
     """
 
-    _global_instance: "_FakeResolver | None" = None
+    _global_instance: _FakeResolver | None = None
 
     def __init__(self, services: dict[Any, Any] | None = None) -> None:
         self._services = services or {}
@@ -116,7 +123,9 @@ class _FakeResolver:
             raise RuntimeError(msg)
         return self._services[cls]
 
-    async def resolve_optional(self, cls: Any, *, bypass_visibility: bool = False) -> Any:
+    async def resolve_optional(
+        self, cls: Any, *, bypass_visibility: bool = False
+    ) -> Any:
         return self._services.get(cls)
 
     async def resolve_all(self, cls: Any, *, bypass_visibility: bool = False) -> Any:
@@ -205,7 +214,9 @@ def _request(
     return request
 
 
-def _asgi_scope(path: str = "/api/x", method: str = "GET", **scope_extra: Any) -> dict[str, Any]:
+def _asgi_scope(
+    path: str = "/api/x", method: str = "GET", **scope_extra: Any
+) -> dict[str, Any]:
     scope: dict[str, Any] = {
         "type": "http",
         "path": path,
@@ -241,7 +252,6 @@ async def test_auth_guard_rejection_response() -> None:
     resolver = _FakeResolver({"quadkit.contracts.web.ResponseFactoryProtocol": rf})
     # the guards resolve by the protocol class itself
     from quadkit.contracts.web import ResponseFactoryProtocol
-
     from quadkit.di.resolution.context import ContainerResolverProtocol
 
     assert isinstance(_FakeResolver({}), ContainerResolverProtocol)
@@ -380,7 +390,9 @@ async def test_use_guards_happy_path_and_rejection() -> None:
 
     # unauthenticated -> 401 rejection response
     called.clear()
-    rejected = await guarded(_request(resolver=_FakeResolver({ResponseFactoryProtocol: rf})))
+    rejected = await guarded(
+        _request(resolver=_FakeResolver({ResponseFactoryProtocol: rf}))
+    )
     assert called == []
     assert rejected.status == 401
 
@@ -449,10 +461,14 @@ async def test_require_admin_and_roles_permissions() -> None:
     guarded_admin = require_admin()(func)
     assert await guarded_admin(_request(user=admin, resolver=resolver)) == "ok"
     assert called == ["ran"]
-    assert (await guarded_admin(_request(user=User(email="x@x.com"), resolver=resolver))).status == 403
+    assert (
+        await guarded_admin(_request(user=User(email="x@x.com"), resolver=resolver))
+    ).status == 403
 
     guarded_role = require_role("admin")(func)
-    assert (await guarded_role(_request(user=User(email="x@x.com"), resolver=resolver))).status == 403
+    assert (
+        await guarded_role(_request(user=User(email="x@x.com"), resolver=resolver))
+    ).status == 403
 
     guarded_perm = require_permission("orders:read")(func)
     assert await guarded_perm(_request(user=admin, resolver=resolver)) == "ok"
@@ -460,7 +476,9 @@ async def test_require_admin_and_roles_permissions() -> None:
     # missing permission -> 403 via the fail-closed permission check
     outsider = User(email="o@x.com")
     outsider.user_id = "u-outsider"
-    assert (await guarded_perm(_request(user=outsider, resolver=resolver))).status == 403
+    assert (
+        await guarded_perm(_request(user=outsider, resolver=resolver))
+    ).status == 403
 
 
 # --------------------------------------------------------------------------
@@ -518,6 +536,7 @@ def _make_middleware(
         provider.users[user.user_id] = user
         provider_overrides.setdefault("users", provider.users)
     mw = AuthMiddleware(provider, ctx=None, attempt_tracker=tracker)
+
     # stub the JWT authenticator to avoid real token verification
     async def fake_jwt_authenticate(request: Any) -> Any:
         return provider_overrides.get("jwt_user")
@@ -543,27 +562,34 @@ async def test_authenticate_request_chain() -> None:
     assert tracker.locked_calls == 1
     assert api.calls == 0
 
-    # 3. API key path: sk_ prefix -> validate -> user, token cached
+    # 3. API key path: sk_ prefix -> validate -> current user
     api2 = _FakeApiKeyManager(user)
     mw3 = _make_middleware(user, api_key_manager=api2)
-    got = await mw3.authenticate_request(_request(headers={"Authorization": "Bearer sk_valid"}))
+    got = await mw3.authenticate_request(
+        _request(headers={"Authorization": "Bearer sk_valid"})
+    )
     assert got is user
     assert api2.calls == 1
-    # second call served from the token cache — no second validation
-    again = await mw3.authenticate_request(_request(headers={"Authorization": "Bearer sk_valid"}))
+    # second call must validate the key again to observe revocation
+    again = await mw3.authenticate_request(
+        _request(headers={"Authorization": "Bearer sk_valid"})
+    )
     assert again is user
-    assert api2.calls == 1
+    assert api2.calls == 2
 
     # 4. session path: cookie session_id -> validate -> user,
     #    session stashed on request.state for downstream use
     sess = _FakeSessionManager(user.user_id)
     mw4 = _make_middleware(user, session_manager=sess)
-    req4 = _request(headers={"Authorization": "Bearer not-an-api-key"}, cookies={"session_id": "sess-ok"})
+    req4 = _request(
+        headers={"Authorization": "Bearer not-an-api-key"},
+        cookies={"session_id": "sess-ok"},
+    )
     got4 = await mw4.authenticate_request(req4)
     assert got4 is user
     assert req4.state.session is not None
 
-    # 5. JWT path: authenticator returns a user -> cached
+    # 5. JWT path: authenticate on each request
     jwt_user = User(email="j@x.com")
     mw5 = _make_middleware(jwt_user, jwt_user=jwt_user)
     jwt_req = _request(headers={"Authorization": "Bearer jwt.token.here"})
@@ -575,7 +601,12 @@ async def test_authenticate_request_chain() -> None:
     # 6. all authenticators fail -> record_failure called
     tracker2 = _FakeTracker()
     mw6 = _make_middleware(None, tracker=tracker2)
-    assert await mw6.authenticate_request(_request(headers={"Authorization": "Bearer sk_bad"})) is None
+    assert (
+        await mw6.authenticate_request(
+            _request(headers={"Authorization": "Bearer sk_bad"})
+        )
+        is None
+    )
     assert tracker2.failures == ["10.0.0.1"]
 
 
@@ -653,7 +684,10 @@ async def _run_middleware(
     return {
         "scope": scope,
         "app_called": seen_app_called["v"],
-        "status": next((m["status"] for m in messages if m.get("type") == "http.response.start"), None),
+        "status": next(
+            (m["status"] for m in messages if m.get("type") == "http.response.start"),
+            None,
+        ),
         "messages": messages,
     }
 
@@ -681,7 +715,8 @@ async def test_middleware_bypass_paths() -> None:
     )
     assert result4["app_called"] is False
     assert result4["status"] == 401
-    assert rf.calls and rf.calls[0][0] == "json"
+    assert rf.calls
+    assert rf.calls[0][0] == "json"
 
 
 async def test_middleware_enforces_auth() -> None:
@@ -794,13 +829,17 @@ async def test_response_handler() -> None:
     assert resp.status == 401
     assert "WWW-Authenticate" in (rf.calls[0][1]["headers"] or {})
 
-    forbidden = await AuthResponseHandler.forbidden_response("nope", response_factory=rf)
+    forbidden = await AuthResponseHandler.forbidden_response(
+        "nope", response_factory=rf
+    )
     assert forbidden.status == 403
 
     # HTML accept + request -> redirect to login with next=
     html_request = _request(headers={"Accept": "text/html"})
     html_request.login_url = "/login"
-    redirect_resp = await AuthResponseHandler.unauthorized_response("nope", request=html_request, response_factory=rf)
+    redirect_resp = await AuthResponseHandler.unauthorized_response(
+        "nope", request=html_request, response_factory=rf
+    )
     assert redirect_resp.status == 302
     assert rf.calls[-1][0] == "redirect"
     assert "/login?next=/api/x" in rf.calls[-1][1]["url"]

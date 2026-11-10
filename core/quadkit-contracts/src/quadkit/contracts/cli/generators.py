@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import StrEnum
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -182,6 +183,80 @@ def pascal_case(name: str) -> str:
     return "".join(part.capitalize() for part in snake_case(name).split("_") if part)
 
 
+def pluralize_identifier(name: str) -> str:
+    """Pluralize one singular entity/class identifier deterministically.
+
+    This is the framework's single Python identifier-pluralization rule.
+    Callers pass a singular class or snake_case identifier; authored
+    table/route overrides bypass this helper. Only the final snake_case
+    token changes, so ``saved_search`` becomes ``saved_searches`` and
+    ``UserProfile`` becomes ``user_profiles``.
+
+    Rules, in order: consonant + ``y`` -> ``ies``; endings ``s``, ``x``,
+    ``z``, ``ch``, and ``sh`` gain ``es``; all other endings gain ``s``.
+
+    Args:
+        name: Singular identifier or class name.
+
+    Returns:
+        The plural snake_case identifier.
+
+    Raises:
+        ValueError: If *name* contains no identifier characters.
+    """
+
+    normalized = snake_case(name)
+    if not normalized:
+        raise ValueError("Cannot pluralize an empty identifier")
+    head, separator, tail = normalized.rpartition("_")
+    if len(tail) >= 2 and tail.endswith("y") and tail[-2] not in "aeiou":
+        plural_tail = f"{tail[:-1]}ies"
+    elif tail.endswith(("s", "x", "z", "ch", "sh")):
+        plural_tail = f"{tail}es"
+    else:
+        plural_tail = f"{tail}s"
+    return f"{head}{separator}{plural_tail}"
+
+
+def foreign_key_constraint_name(
+    source_table: str,
+    source_column: str,
+    target_table: str,
+) -> str:
+    """Return the deterministic generated foreign-key constraint name.
+
+    The readable form is ``fk_<source_table>_<source_column>_<target_table>``.
+    Names are capped at 60 characters—below PostgreSQL's identifier limit—
+    with a stable eight-character hash suffix when truncation is required.
+    SQL generators and Playground migration orchestration share this helper
+    so an inline constraint and a deferred-cycle constraint use one name.
+    """
+
+    name = f"fk_{source_table}_{source_column}_{target_table}"
+    if len(name) <= 60:
+        return name
+    suffix = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    return f"{name[:51].rstrip('_')}_{suffix}"
+
+
+def derived_index_name(table: str, columns: tuple[str, ...]) -> str:
+    """Return the deterministic generated index name for *columns*.
+
+    The readable form is ``ix_<table>_<column...>``. As with foreign-key
+    names, the result is capped at 60 characters with a stable hash suffix
+    so the SQL migration generator and a deferred-foreign-key revision do
+    not derive competing names for the same index.
+    """
+
+    if not table or not columns or any(not column for column in columns):
+        raise ValueError("A derived index requires a table and at least one column")
+    name = "_".join(("ix", table, *columns))
+    if len(name) <= 60:
+        return name
+    suffix = hashlib.sha256(name.encode("utf-8")).hexdigest()[:8]
+    return f"{name[:51].rstrip('_')}_{suffix}"
+
+
 def validate_component_name(name: str) -> str:
     """Validate a user-supplied component name for safe code generation.
 
@@ -242,8 +317,11 @@ __all__ = [
     "GenerationOptions",
     "GenerationResult",
     "GeneratorProtocol",
+    "derived_index_name",
     "find_project_anchor",
+    "foreign_key_constraint_name",
     "pascal_case",
+    "pluralize_identifier",
     "resolve_options",
     "snake_case",
     "validate_component_name",

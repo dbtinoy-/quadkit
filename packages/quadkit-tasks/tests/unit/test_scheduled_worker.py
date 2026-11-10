@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from unittest.mock import patch
 
 import pytest
 
@@ -136,6 +137,27 @@ class TestScheduledWorkerLifecycle:
 
 class TestScheduledWorkerErrorPolicies:
     """Error-policy coverage for scheduled worker execution."""
+
+    @pytest.mark.asyncio
+    async def test_worker_cycle_logs_only_exception_type(self) -> None:
+        """Scheduled workers log an exception class without message or traceback."""
+        mgr = _make_manager()
+        worker = _FailingWorker(mgr, policy=OnErrorPolicy.STOP)
+
+        with patch("quadkit.tasks.scheduled_worker.logger") as mock_logger:
+            await worker.start()
+            assert worker._task is not None
+            await asyncio.wait_for(worker._task, timeout=1.0)
+            await worker.stop()
+
+        mock_logger.error.assert_called_once_with(
+            "worker_cycle_error",
+            error_type="ValueError",
+            policy=str(OnErrorPolicy.STOP),
+        )
+        assert "intentional test error" not in repr(mock_logger.error.call_args)
+        assert "_FailingWorker" not in repr(mock_logger.error.call_args)
+        mock_logger.exception.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_log_and_continue_survives_errors(self) -> None:

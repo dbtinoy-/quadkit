@@ -21,7 +21,10 @@ from quadkit.logging import get_logger
 from quadkit.result import Err, Ok, Result
 
 logger = get_logger(__name__)
+{% if base_url %}
 
+DEFAULT_BASE_URL = {{ base_url_literal }}
+{% endif %}
 
 class {{ client_name }}Client:
     """Client for the {{ client_name }} API.
@@ -34,7 +37,7 @@ class {{ client_name }}Client:
 
     def __init__(
         self,
-        base_url: str,
+        base_url: str{% if base_url %} = DEFAULT_BASE_URL{% endif %},
         api_key: str | None = None,
         timeout: float = 30.0,
     ) -> None:
@@ -181,7 +184,7 @@ class {{ client_name }}APIError(Exception):
 # =============================================================================
 
 def create_{{ client_name_snake }}_client(
-    base_url: str,
+    base_url: str{% if base_url %} = DEFAULT_BASE_URL{% endif %},
     api_key: str | None = None,
     timeout: float = 30.0,
 ) -> {{ client_name }}Client:

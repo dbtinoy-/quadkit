@@ -109,6 +109,7 @@ if TYPE_CHECKING:
         InMemoryResultStore,
         ResultStore,
     )
+    from quadkit.tasks.scheduled_task import ScheduledTask
     from quadkit.tasks.scheduled_worker import OnErrorPolicy, ScheduledWorker
     from quadkit.tasks.scheduling import (
         CronExpression,
@@ -149,6 +150,7 @@ _LAZY_IMPORTS: dict[str, tuple[str, str]] = {
         "quadkit.tasks.background_task_manager",
         "BackgroundTaskManager",
     ),
+    "ScheduledTask": ("quadkit.tasks.scheduled_task", "ScheduledTask"),
     "ScheduledWorker": ("quadkit.tasks.scheduled_worker", "ScheduledWorker"),
     "OnErrorPolicy": ("quadkit.tasks.scheduled_worker", "OnErrorPolicy"),
     # Module

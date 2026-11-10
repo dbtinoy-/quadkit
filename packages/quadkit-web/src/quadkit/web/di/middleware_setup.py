@@ -174,6 +174,11 @@ class MiddlewareSetup:
         from quadkit.web.security.config.csp import CSPConfig
 
         directives: dict[str, Any] = dict(CSPConfig().directives)
+        app_csp = getattr(getattr(self._config, "security", None), "csp", None)
+        if app_csp is not None and isinstance(app_csp.directives, dict):
+            configured_ancestors = app_csp.directives.get("frame-ancestors")
+            if configured_ancestors is not None:
+                directives["frame-ancestors"] = configured_ancestors
         for directive, domains in api_docs.get_required_domains().items():
             merged = set(directives.get(directive, set())) | set(domains)
             directives[directive] = merged

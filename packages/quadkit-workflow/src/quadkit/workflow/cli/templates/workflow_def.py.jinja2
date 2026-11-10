@@ -1,0 +1,54 @@
+"""{{ workflow_name }} workflow definition.
+
+Model the step chain in :meth:`define_steps` (the last step's
+``next_step`` is ``None``); ``run_step`` dispatches each name to the
+business logic that fulfils it. Submit the definition to the engine
+to execute.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+
+
+@dataclass(frozen=True, slots=True)
+class WorkflowStep:
+    """One step in a workflow graph."""
+
+    name: str
+    next_step: str | None = None
+
+
+@dataclass(slots=True)
+class {{ workflow_name }}Workflow:
+    """The ``{{ workflow_name_snake }}`` workflow definition."""
+
+    name = "{{ workflow_name_snake }}"
+    steps: list[WorkflowStep] = field(default_factory=list)
+
+    def define_steps(self) -> list[WorkflowStep]:
+        """Return the ordered steps of this workflow.
+
+        Returns:
+            The step chain; the last step's ``next_step`` is ``None``.
+        """
+        # @INTENT: Model the ordered step chain of this workflow.
+        # @TODO: model your process flow.
+        # Example:
+        #   return [
+        #       WorkflowStep("validate", next_step="charge"),
+        #       WorkflowStep("charge", next_step="notify"),
+        #       WorkflowStep("notify"),
+        #   ]
+        return self.steps
+
+    async def run_step(self, step: str, context: dict[str, object]) -> None:
+        """Execute a single workflow step.
+
+        Args:
+            step: Step name to execute.
+            context: Shared workflow state.
+        """
+        # @INTENT: Dispatch a single named step to the business logic that fulfils it.
+        # @TODO: dispatch to your business logic / handlers here.
+        _ = step, context

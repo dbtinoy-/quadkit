@@ -1,7 +1,7 @@
 """Workflow-domain exception classes.
 
 Exceptions that cross extension-package boundaries live here so that core
-``quadkit``, ``the optional provider``, and all extension packages can import
+``quadkit``, ``quadkit-workflow``, and all extension packages can import
 them without cross-extension dependencies.
 """
 
@@ -28,8 +28,7 @@ class SagaVersionMismatchError(QuadkitError):
         stored_version: int,
     ) -> None:
         super().__init__(
-            f"Saga version mismatch for '{saga_id}': "
-            f"expected v{expected_version}, stored v{stored_version}"
+            "Saga state version is incompatible with the current definition."
         )
         self.saga_id = saga_id
         self.expected_version = expected_version

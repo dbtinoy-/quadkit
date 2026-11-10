@@ -77,6 +77,55 @@ class SQLRepository(  # type: ignore[misc]
         self._key_col = Column(key_field)
         # Validated + quoted table name string
         self._safe_table_name = str(self._table)
+        # Resolved on demand by `table_columns()`; `None` until then.
+        self._table_columns: frozenset[str] | None = None
+        self._table_column_types: dict[str, str] = {}
+        self._table_columns_resolved = False
+
+    async def table_columns(self) -> frozenset[str] | None:
+        """Return the table's real column names, or ``None`` if unknown.
+
+        ``create`` and ``upsert`` stamp ``created_at`` / ``updated_at`` onto an
+        entity that omits them, which is the framework's audit convention. Not
+        every table follows it: a key/value settings table keeps ``updated_at``
+        and no ``created_at``; a join table keeps neither. Stamping a column
+        the table does not have is not a soft failure — the INSERT is rejected
+        (``table settings has no column named created_at``) before any row
+        lands — so the write path asks the schema instead of assuming.
+
+        Resolved once per repository instance and cached; a table's columns do
+        not change while a repository object exists. ``None`` means the
+        provider could not answer (it predates ``get_table_columns``, or the
+        probe failed), in which case callers keep stamping both columns —
+        the behaviour every host had before this method existed.
+
+        Returns:
+            The table's column names, or ``None`` when unresolvable.
+        """
+        if self._table_columns_resolved:
+            return self._table_columns
+        self._table_columns_resolved = True
+
+        probe = getattr(self.provider, "get_table_columns", None)
+        if not callable(probe):
+            return None
+        try:
+            rows = await probe(self.write_table_name)
+        except Exception:  # noqa: BLE001 -- schema probe is best-effort; see docstring
+            logger.debug("table_columns_unavailable table=%s", self.write_table_name)
+            return None
+
+        col_types: dict[str, str] = {}
+        for row in rows or ():
+            if isinstance(row, dict) and row.get("name"):
+                col_name = str(row["name"])
+                col_types[col_name] = str(row.get("type") or "").lower()
+        # An empty answer is indistinguishable from "no such table"; treat it as
+        # unknown rather than as a table with no columns, so a typo'd table name
+        # does not silently disable timestamp stamping.
+        self._table_column_types = col_types
+        self._table_columns = frozenset(col_types) if col_types else None
+        return self._table_columns
 
     @property
     def write_table_name(self) -> str:

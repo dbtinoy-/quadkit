@@ -18,7 +18,7 @@ package indexes — sources that observe the project, not the user:
 
 | Metric | Source | Cadence |
 | --- | --- | --- |
-| Installation success rate | The wheel-only verification environment installs all thirteen distributions on every PR (and on 3.11/3.12/3.13 in the preview matrix) | Every PR |
+| Installation success rate | Target: wheel-only verification of the 18 public-use distributions; consult dated CI/artifact receipts for actual interpreter and release coverage | Every PR |
 | Time to first successful route | `app_boot_ms` + `first_request_ms` in [performance budgets](../reference/performance-budgets.md) | Every PR |
 | Time to first passing test | Starter-template suites run from the exported tree; wall-clock visible in job logs | Every PR |
 | Documentation accuracy | `check_public_docs.py` gates link validity, distribution claims, and snippet sync across all pages | Every PR |

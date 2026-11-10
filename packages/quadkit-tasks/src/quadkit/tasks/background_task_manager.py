@@ -27,7 +27,7 @@ from collections.abc import Awaitable
 from typing import TypeVar
 
 from quadkit.contracts.infra.tasks import TaskManagerProtocol
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 logger = get_logger(__name__)
 
@@ -51,7 +51,6 @@ class BackgroundTaskManager(TaskManagerProtocol):
 
     def __init__(self) -> None:
         self._tasks: set[asyncio.Task[object]] = set()
-        self._names: dict[asyncio.Task[object], str] = {}
 
     # ------------------------------------------------------------------
     # Public API
@@ -70,14 +69,14 @@ class BackgroundTaskManager(TaskManagerProtocol):
             The created :class:`asyncio.Task`.
         """
         task: asyncio.Task[T] = asyncio.create_task(coro)  # type: ignore[arg-type]
-        self._register(task, name=None)
+        self._register(task)
         return task
 
     def track_named(self, name: str, coro: Awaitable[T]) -> asyncio.Task[T]:
-        """Like :meth:`track` but attach a human-readable *name* for logs.
+        """Like :meth:`track` but attach a local asyncio task name.
 
-        Named tasks appear in ``shutdown()`` timeout warnings so operators
-        can identify which work is still running at stop time.
+        The name is available through the returned task's introspection API,
+        but is deliberately omitted from operational logs.
 
         Args:
             name: Label surfaced in observability/log output.
@@ -87,7 +86,7 @@ class BackgroundTaskManager(TaskManagerProtocol):
             The created :class:`asyncio.Task`.
         """
         task: asyncio.Task[T] = asyncio.create_task(coro, name=name)  # type: ignore[arg-type]
-        self._register(task, name=name)
+        self._register(task)
         return task
 
     @property
@@ -100,8 +99,8 @@ class BackgroundTaskManager(TaskManagerProtocol):
 
         After cancellation each task is given up to *timeout* seconds
         collectively to finish (honour CancelledError and finalise any
-        ``finally`` blocks).  Tasks that do not stop within the timeout
-        are logged by name; no exception is raised.
+        ``finally`` blocks). A count-only warning is emitted if any tasks
+        remain; task names are never logged.
 
         Args:
             timeout: Seconds to wait for all tasks to finish after
@@ -123,11 +122,10 @@ class BackgroundTaskManager(TaskManagerProtocol):
 
         done, still_running = await asyncio.wait(pending, timeout=timeout)
 
-        for task in still_running:
-            label = self._names.get(task) or task.get_name()
+        if still_running:
             logger.warning(
                 "background_task_manager.shutdown_timeout",
-                task=label,
+                timed_out=len(still_running),
                 timeout=timeout,
             )
 
@@ -141,19 +139,10 @@ class BackgroundTaskManager(TaskManagerProtocol):
     # Internal
     # ------------------------------------------------------------------
 
-    def _register(
-        self,
-        task: asyncio.Task[object],
-        *,
-        name: str | None,
-    ) -> None:
+    def _register(self, task: asyncio.Task[object]) -> None:
         """Store task handle and register cleanup/exception callbacks."""
         self._tasks.add(task)
-        if name is not None:
-            self._names[task] = name
-
         task.add_done_callback(self._tasks.discard)
-        task.add_done_callback(lambda t: self._names.pop(t, None))
         task.add_done_callback(_log_task_exception)
 
 
@@ -165,8 +154,7 @@ def _log_task_exception(task: asyncio.Task[object]) -> None:
     if exc is not None:
         logger.error(
             "background_task_manager.task_failed",
-            task_name=task.get_name(),
-            exc_info=exc,
+            error_type=safe_error_type(exc),
         )
 
 

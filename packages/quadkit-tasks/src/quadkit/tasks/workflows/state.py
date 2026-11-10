@@ -329,9 +329,7 @@ class DatabaseWorkflowStateStore:
             self._sql(_UPSERT_SQL),
             [workflow_id, str(result.status), state_json, now, now],
         )
-        logger.debug(
-            "workflow_state.saved", workflow_id=workflow_id, status=str(result.status)
-        )
+        logger.debug("workflow_state.saved", status=str(result.status))
 
     async def load_state(self, workflow_id: str) -> WorkflowResult | None:
         """Load and deserialize a workflow state from the database.
@@ -379,4 +377,4 @@ class DatabaseWorkflowStateStore:
         """
         await self._ensure_table()
         await self._db.execute(self._sql(_DELETE_SQL), [workflow_id])
-        logger.debug("workflow_state.deleted", workflow_id=workflow_id)
+        logger.debug("workflow_state.deleted")

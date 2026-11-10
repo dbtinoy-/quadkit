@@ -19,7 +19,7 @@ class ChatMessageProtocol(Protocol):
     """Structural protocol for chat message objects.
 
     Any object with ``role`` and ``content`` attributes satisfies this
-    protocol.  Implemented concretely by ``the optional provider module``.
+    protocol.  Implemented concretely by ``quadkit.ai.llm.types.ChatMessage``.
     """
 
     @property
@@ -36,7 +36,7 @@ class CompletionProtocol(Protocol):
     """Structural protocol for LLM completion objects.
 
     Any object with ``content`` and ``model`` attributes satisfies this
-    protocol.  Implemented concretely by ``the optional provider module``.
+    protocol.  Implemented concretely by ``quadkit.ai.llm.types.Completion``.
     """
 
     @property

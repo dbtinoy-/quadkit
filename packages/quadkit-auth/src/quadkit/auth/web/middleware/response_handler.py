@@ -60,9 +60,9 @@ class AuthResponseHandler:
 async def _get_response_factory(context: Any | None = None) -> Any:
     """Resolve `ResponseFactoryProtocol` from context or global container."""
     from quadkit.contracts.web import ResponseFactoryProtocol
-    from quadkit.di.resolution.context import get_resolver
+    from quadkit.di.resolution.context import get_async_resolver
 
-    resolver = get_resolver(context)
+    resolver = get_async_resolver(context)
     if not resolver:
         return None
 

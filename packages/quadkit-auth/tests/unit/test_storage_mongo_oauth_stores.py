@@ -6,10 +6,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from quadkit.auth.exceptions import EmailExistsError, UsernameExistsError
 from quadkit.auth.models.user import User
 from quadkit.auth.storage._mongo_store import MongoDBUserStore
-from quadkit.auth.storage._sql_store import SQLUserStore
-
 
 
 class MockQueryResult:
@@ -56,7 +55,7 @@ class TestMongoDBUserStore:
         """Create a mock MongoDB collection."""
         collection = MagicMock()
         collection.insert_one = AsyncMock()
-        collection.find_one = AsyncMock()
+        collection.find_one = AsyncMock(return_value=None)
         collection.replace_one = AsyncMock()
         collection.delete_one = AsyncMock()
         collection.count_documents = AsyncMock(return_value=0)
@@ -102,6 +101,44 @@ class TestMongoDBUserStore:
         assert user.email == "test@example.com"
         assert user.roles == ["user"]
         mock_collection.insert_one.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_create_user_duplicate_name(
+        self, store: MongoDBUserStore, mock_collection: MagicMock
+    ) -> None:
+        """A name hit on the pre-check is a typed conflict; nothing is inserted."""
+
+        async def _find_one(query: dict) -> dict | None:
+            return {"_id": "someone"} if "name" in query else None
+
+        mock_collection.find_one = AsyncMock(side_effect=_find_one)
+        with pytest.raises(UsernameExistsError, match="Name 'testuser' already exists"):
+            await store.create_user(
+                name="testuser",
+                email="fresh@example.com",
+                hashed_password="hashed_password",
+            )
+        mock_collection.insert_one.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_create_user_duplicate_email(
+        self, store: MongoDBUserStore, mock_collection: MagicMock
+    ) -> None:
+        """An email hit on the pre-check is a typed conflict; nothing is inserted."""
+
+        async def _find_one(query: dict) -> dict | None:
+            return {"_id": "someone"} if "email" in query else None
+
+        mock_collection.find_one = AsyncMock(side_effect=_find_one)
+        with pytest.raises(
+            EmailExistsError, match=r"Email 'test@example\.com' already exists"
+        ):
+            await store.create_user(
+                name="freshname",
+                email="test@example.com",
+                hashed_password="hashed_password",
+            )
+        mock_collection.insert_one.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_get_user_by_id(

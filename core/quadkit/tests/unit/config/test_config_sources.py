@@ -150,11 +150,21 @@ class TestDirectoryConfigSource:
     def test_missing_directory_empty(self, tmp_path: Path) -> None:
         assert DirectoryConfigSource(directory=tmp_path / "gone").load_sync() == {}
 
-    def test_bad_file_skipped_not_fatal(self, tmp_path: Path) -> None:
-        (tmp_path / "good.yaml").write_text("a: 1\n", encoding="utf-8")
-        (tmp_path / "bad.json").write_text("{broken", encoding="utf-8")
-        data = DirectoryConfigSource(directory=tmp_path).load_sync()
+    def test_bad_file_skipped_without_path_or_content_logs(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        private_dir = tmp_path / "PRIVATE_DIRECTORY_PATH_SENTINEL"
+        private_dir.mkdir()
+        (private_dir / "good.yaml").write_text("a: 1\n", encoding="utf-8")
+        (private_dir / "bad.json").write_text(
+            '{"PRIVATE_CONFIG_CONTENT_SENTINEL": [broken', encoding="utf-8"
+        )
+        data = DirectoryConfigSource(directory=private_dir).load_sync()
+        output = capsys.readouterr().out
         assert data == {"good": {"a": 1}}
+        assert "PRIVATE_DIRECTORY_PATH_SENTINEL" not in output
+        assert "PRIVATE_CONFIG_CONTENT_SENTINEL" not in output
+        assert "config_directory_file_load_failed" in output
 
 
 class TestCliConfigSource:
@@ -216,6 +226,47 @@ class TestFileConfigSource:
         d.mkdir()  # IsADirectoryError is an OSError
         with pytest.raises(ConfigurationError):
             FileConfigSource(d).load_sync()
+
+    def test_invalid_json_error_omits_path_and_file_content(
+        self, tmp_path: Path
+    ) -> None:
+        private_dir = tmp_path / "PRIVATE_JSON_PATH_SENTINEL"
+        private_dir.mkdir()
+        private_content = '{"PRIVATE_CONFIG_CONTENT_SENTINEL": [broken'
+        path = private_dir / "application.json"
+        path.write_text(private_content, encoding="utf-8")
+
+        with pytest.raises(ConfigurationError) as err:
+            FileConfigSource(path).load_sync()
+
+        assert "Config file contains invalid JSON" in str(err.value)
+        assert "PRIVATE_JSON_PATH_SENTINEL" not in str(err.value)
+        assert "PRIVATE_CONFIG_CONTENT_SENTINEL" not in str(err.value)
+
+    def test_read_error_omits_path_and_raw_exception(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        private_dir = tmp_path / "PRIVATE_CONFIG_PATH_SENTINEL"
+        private_dir.mkdir()
+        path = private_dir / "application.yaml"
+        path.write_text("key: value", encoding="utf-8")
+        original_read_text = Path.read_text
+
+        def fail_read_text(
+            target: Path, *args: object, **kwargs: object
+        ) -> str:
+            if target == path:
+                raise OSError("PRIVATE_CONFIG_ERROR_SENTINEL /srv/private")
+            return original_read_text(target, *args, **kwargs)
+
+        monkeypatch.setattr(Path, "read_text", fail_read_text)
+        with pytest.raises(ConfigurationError) as err:
+            FileConfigSource(path).load_sync()
+
+        assert "Failed to load config file" in str(err.value)
+        assert "PRIVATE_CONFIG_PATH_SENTINEL" not in str(err.value)
+        assert "PRIVATE_CONFIG_ERROR_SENTINEL" not in str(err.value)
+        assert err.value.__suppress_context__ is True
 
     async def test_async_load(self, tmp_path: Path) -> None:
         yf = tmp_path / "a.yaml"

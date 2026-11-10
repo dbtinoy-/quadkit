@@ -5,12 +5,15 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Any
 
+from quadkit.auth.cli.generators.shared_policy import shared_policy_context
 from quadkit.codegen import GenerationResult, GeneratorBase
 from quadkit.contracts.cli.generators import resolve_options
 
 
 class AuthPolicyGenerator(GeneratorBase):
     """Generate an authorization policy."""
+
+    supports_shared_permission_policy_v1 = True
 
     name = "auth_policy"
     description = "Generate an authorization policy"
@@ -25,6 +28,7 @@ class AuthPolicyGenerator(GeneratorBase):
         *,
         dry_run: bool = False,
         force: bool = False,
+        spec: dict[str, Any] | None = None,
         **options: Any,
     ) -> GenerationResult:
         """Generate an authorization policy module.
@@ -33,6 +37,8 @@ class AuthPolicyGenerator(GeneratorBase):
             name: Policy name (e.g. ``"ProjectAccess"`` or ``"project_access"``).
             dry_run: Compute output paths without writing.
             force: Overwrite an existing file.
+            spec: Explicit shared_authenticated permission/resource declaration;
+                omission retains the historical deny-all scaffold.
 
         Returns:
             ``GenerationResult`` with created/skipped/overwritten paths.
@@ -43,7 +49,11 @@ class AuthPolicyGenerator(GeneratorBase):
             "policy_name": policy_name,
             "policy_name_snake": policy_snake,
         }
-        content = self.render_template("auth_policy.py.jinja2", context)
+        template = "auth_policy.py.jinja2"
+        if spec is not None:
+            context.update(shared_policy_context(spec))
+            template = "shared_auth_policy.py.jinja2"
+        content = self.render_template(template, context)
         file_path = self.output_dir / f"{policy_snake}_policy.py"
         self.stage(file_path, content)
         return self.finalize(self.commit(resolve_options(dry_run=dry_run, force=force)))

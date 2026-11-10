@@ -8,6 +8,12 @@ and the project adheres to
 
 ## [Unreleased]
 
+## [0.0.50] — 2026-11-09
+
+### Added
+
+- **Open-core expansion.** `quadkit-ai-llm`, `quadkit-ai-agents`, `quadkit-ai-mcp`, `quadkit-workflow`, and `quadkit-notification` join the public catalog, bringing the published line to eighteen distributions. All eighteen release together at 0.0.50.
+
 ## [0.0.46] — 2026-10-23
 
 ### Changed

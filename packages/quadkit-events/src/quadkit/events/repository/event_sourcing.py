@@ -1,25 +1,24 @@
-"""Event Sourcing AbstractRepository with snapshot-accelerated loading.
+"""Event sourcing repository with snapshot-accelerated loading.
 
-This is the CRITICAL component that transforms O(N) aggregate loading
-into O(1) by utilizing snapshots.
-
-Traditional event sourcing: Load ALL events → O(N) where N = number of events
-With snapshots: Load latest snapshot + events after snapshot → O(1) amortized
+Snapshots avoid reapplying earlier events. Replay and version checks still
+have costs determined by the remaining suffix and the event-store backend.
 """
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from uuid import UUID
 
 from quadkit.events.aggregates.aggregate import AggregateRoot
-from quadkit.events.exceptions import AggregateNotFoundError
+from quadkit.events.exceptions import AggregateNotFoundError, EventStoreError
 from quadkit.events.repository.base import AbstractRepository
+from quadkit.events.stores._history import (
+    read_consistent_history,
+    validated_stream_version,
+)
 from quadkit.events.stores.snapshot import SnapshotManager, SnapshotPolicy
-from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
-    from uuid import UUID
-
     from quadkit.events.buses.event import EventBusImpl
     from quadkit.events.stores.base import AbstractEventStore, AbstractSnapshotStore
 
@@ -30,7 +29,7 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
     """AbstractRepository using event sourcing with snapshot acceleration.
 
     This repository:
-    1. Loads aggregates using snapshots when available (O(1) vs O(N))
+    1. Loads aggregates using snapshots when available
     2. Persists changes as events
     3. Automatically creates snapshots based on policy
     4. Publishes events to the event bus
@@ -56,9 +55,7 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
         await repository.save(order)
         ```
 
-    Performance comparison:
-        Without snapshots (1000 events): ~100ms to load
-        With snapshots (1000 events): ~1ms to load (snapshot + ~0 events)
+    Performance depends on the backend, snapshot size and remaining events.
     """
 
     def __init__(
@@ -75,7 +72,7 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
         Args:
             aggregate_type: The aggregate class to manage
             event_store: Event store for event persistence
-            snapshot_store: Snapshot store (optional, enables O(1) loading)
+            snapshot_store: Snapshot store (optional, avoids replaying earlier events)
             event_bus: Event bus for publishing events (optional)
             snapshot_policy: Custom snapshot policy (default: every N events)
             snapshot_every: Events between snapshots (default: 100)
@@ -87,7 +84,7 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
         self._snapshot_manager: SnapshotManager | None = None
 
         # Setup snapshot manager if snapshot store is provided
-        if snapshot_store:
+        if snapshot_store is not None:
             from quadkit.events.stores.snapshot import EventCountPolicy
 
             policy = snapshot_policy or EventCountPolicy(snapshot_every)
@@ -97,24 +94,12 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
                 policy=policy,
             )
 
-    async def get(self, aggregate_id: UUID | str) -> TAggregate | None:  # type: ignore[return]
-        """Load an aggregate by ID using snapshot acceleration.
-
-        This method:
-        1. Tries to load the latest snapshot
-        2. Loads only events after the snapshot version
-        3. Reconstructs the aggregate
-
-        Args:
-            aggregate_id: The aggregate identifier
-
-        Returns:
-            The aggregate if found, None otherwise
-        """
+    async def get(self, aggregate_id: UUID | str) -> TAggregate | None:
+        """Load an aggregate; reject snapshots or replay that cannot be applied."""
         stream_id = str(aggregate_id)
-
-        # Use snapshot manager if available
-        if self._snapshot_manager:
+        snapshot_state = None
+        starting_version = 0
+        if self._snapshot_manager is not None:
             (
                 snapshot_state,
                 events,
@@ -123,53 +108,65 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
                 aggregate_id=stream_id,
                 aggregate_type=self._aggregate_type.__name__,
             )
+        else:
+            events = await read_consistent_history(self._event_store, stream_id, 0)
 
-            if not snapshot_state and not events:
-                return None
+        if snapshot_state is None and not events:
+            return None
 
-            # Create aggregate instance
-            aggregate = self._aggregate_type()
+        try:
+            identity: UUID | str = UUID(stream_id)
+        except ValueError:
+            # Some custom stores use non-UUID stream IDs; retain those IDs.
+            identity = stream_id
 
-            # Restore from snapshot if available
-            if snapshot_state:
+        aggregate = self._aggregate_type()
+        try:
+            aggregate.id = identity
+            aggregate.version = starting_version
+            if snapshot_state is not None:
+                if "id" in snapshot_state and str(snapshot_state["id"]) != str(
+                    identity
+                ):
+                    raise ValueError("snapshot identity mismatch")
+                if "version" in snapshot_state and (
+                    type(snapshot_state["version"]) is not int
+                    or snapshot_state["version"] != starting_version
+                ):
+                    raise ValueError("snapshot version mismatch")
                 for key, value in snapshot_state.items():
-                    if hasattr(aggregate, key) and not key.startswith("_"):
-                        try:
-                            setattr(aggregate, key, value)
-                        except (AttributeError, TypeError, ValueError) as e:
-                            get_logger(__name__).exception(
-                                "Failed to set snapshot attribute %s on %s: %s",
-                                key,
-                                self._aggregate_type.__name__,
-                                e,
-                            )
+                    if key in {"id", "version"}:
+                        continue
+                    if (
+                        not isinstance(key, str)
+                        or key.startswith("_")
+                        or not hasattr(aggregate, key)
+                    ):
+                        raise ValueError("unsupported snapshot field")
+                    setattr(aggregate, key, value)
 
-            # Apply any events that occurred after the snapshot so the aggregate
-            # reflects the most recent state.
+            for event in events:
+                event_id = getattr(event, "aggregate_id", None)
+                if event_id is not None and str(event_id) != str(identity):
+                    raise ValueError("event aggregate identity mismatch")
+                # The default implementation silently ignores unknown events;
+                # custom _apply implementations own their own dispatch rules.
+                if (
+                    type(aggregate)._apply is AggregateRoot._apply
+                    and aggregate._get_event_handler(type(event)) is None
+                ):
+                    raise ValueError("event has no aggregate handler")
             if events:
-                try:
-                    aggregate.load_from_history(events)
-                except (AttributeError, TypeError, ValueError, RuntimeError) as e:
-                    get_logger(__name__).exception(
-                        "Failed to apply post-snapshot events for %s: %s",
-                        self._aggregate_type.__name__,
-                        e,
-                    )
-
-            return aggregate
-
-        if not self._snapshot_manager:
-            # Fallback: Load all events (O(N) operation)
-            events = await self._event_store.read(stream_id)
-
-            if not events:
-                return None
-
-            # Create and hydrate aggregate
-            aggregate = self._aggregate_type()
-            aggregate.load_from_history(events)
-
-            return aggregate
+                aggregate.load_from_history(events)
+            if str(aggregate.id) != str(identity):
+                raise ValueError("aggregate identity changed during replay")
+            if aggregate.version != starting_version + len(events):
+                raise ValueError("aggregate version changed unexpectedly during replay")
+        except Exception as exc:  # noqa: BLE001 — incomplete aggregates must never be returned
+            raise EventStoreError(
+                "Could not reconstruct aggregate from snapshot or events"
+            ) from exc
+        return aggregate
 
     async def save(self, aggregate: TAggregate) -> None:
         """Save an aggregate's pending events.
@@ -229,11 +226,11 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
             aggregate_id: The aggregate identifier
 
         Returns:
-            True if the aggregate has any events
+            True if the event stream has a positive logical version. This does
+            not establish that the aggregate can be replayed or that a snapshot
+            without events exists.
         """
-        stream_id = str(aggregate_id)
-        events = await self._event_store.read(stream_id)
-        return len(events) > 0
+        return await validated_stream_version(self._event_store, str(aggregate_id)) > 0
 
     async def get_or_raise(self, aggregate_id: UUID | str) -> TAggregate:
         """Get an aggregate or raise an error if not found.
@@ -266,13 +263,25 @@ class EventSourcingRepository(AbstractRepository[TAggregate], Generic[TAggregate
         if not self._snapshot_manager:
             return
 
-        state = aggregate.model_dump(exclude={"_pending_events", "_is_replaying"})
+        if aggregate.get_pending_events():
+            raise EventStoreError("Cannot snapshot an aggregate with pending events")
+        version = aggregate.version
+        aggregate_id = str(aggregate.id)
 
-        await self._snapshot_manager.create_snapshot(
-            aggregate_id=str(aggregate.id),
+        def extract_state() -> dict[str, Any]:
+            if (
+                aggregate.get_pending_events()
+                or aggregate.version != version
+                or str(aggregate.id) != aggregate_id
+            ):
+                raise EventStoreError("Aggregate changed while preparing snapshot")
+            return aggregate.model_dump(exclude={"_pending_events", "_is_replaying"})
+
+        await self._snapshot_manager.force_snapshot(
+            aggregate_id=aggregate_id,
             aggregate_type=self._aggregate_type.__name__,
-            version=aggregate.version,
-            state=state,
+            state_extractor=extract_state,
+            expected_version=version,
         )
 
 

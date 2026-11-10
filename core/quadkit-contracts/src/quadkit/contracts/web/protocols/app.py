@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Any, Protocol, TypeVar, runtime_checkable
 from quadkit.contracts.core.provider import ProviderProtocol
 
 if TYPE_CHECKING:
-    from collections.abc import Callable
+    from collections.abc import Awaitable, Callable
 
     from quadkit.contracts.core.result import Result
     from quadkit.contracts.exceptions.domain import DomainError
@@ -51,12 +51,17 @@ class HTTPApplicationProtocol(Protocol):
         """
         ...
 
-    def mount(self, path: str, app: HTTPApplicationProtocol) -> None:
+    def mount(
+        self,
+        path: str,
+        app: Callable[[dict[str, Any], Any, Any], Awaitable[None]],
+    ) -> None:
         """Mount a sub-application at the given path prefix.
 
         Args:
             path: URL path prefix (e.g. ``"/api/v2"``).
-            app: The application to mount.
+            app: An ASGI callable. A mounted leaf need not expose routing or
+                middleware registration methods of its own.
         """
         ...
 

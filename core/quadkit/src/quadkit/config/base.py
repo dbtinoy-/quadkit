@@ -105,7 +105,6 @@ class BaseConfig(DomainModel):
         else:
             logger.info(
                 "config.defaults_only",
-                path=str(yaml_path),
                 hint="create application.yaml or set QK_* env vars",
             )
 
@@ -242,7 +241,8 @@ class BaseConfig(DomainModel):
         cls,
         profile: str | None = None,
         *,
-        base_path: str | Path = ".",
+        base_path: str | Path | None = None,
+        fallback_path: str | Path | None = None,
         section: str | None = None,
     ) -> Self:
         """Load config for a named environment profile.
@@ -269,7 +269,11 @@ class BaseConfig(DomainModel):
         Args:
             profile: Environment profile name.  When ``None``, the
                 ``QK_PROFILE`` env-var is used.
-            base_path: Directory containing the profile YAML files.
+            base_path: Directory containing the profile YAML files (defaults to
+                the current working directory when ``None``).
+            fallback_path: Optional secondary directory (such as a workspace
+                member's package root) consulted when ``application.yaml`` is
+                not present in *base_path*.
             section: Override the section key for this call.  When omitted,
                 :attr:`config_section` is used automatically.
 
@@ -281,9 +285,13 @@ class BaseConfig(DomainModel):
             # Explicit override (e.g. non-standard nesting)
             config = CacheConfig.from_env_profile(section="services.cache")
         """
-        return cls.from_yaml(
-            Path(base_path) / "application.yaml", profile=profile, section=section
-        )
+        resolved_base = Path(base_path) if base_path is not None else Path()
+        yaml_file = resolved_base / "application.yaml"
+        if not yaml_file.exists() and fallback_path is not None:
+            candidate = Path(fallback_path) / "application.yaml"
+            if candidate.exists():
+                yaml_file = candidate
+        return cls.from_yaml(yaml_file, profile=profile, section=section)
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> Self:

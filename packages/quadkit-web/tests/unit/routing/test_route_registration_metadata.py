@@ -27,3 +27,20 @@ def test_registry_stores_registration_metadata():
         assert route_info["registered_line"] is not None
     finally:
         registry._debug = False
+
+
+def test_registry_keeps_deprecation_metadata():
+    class C(Controller):
+        @get("/old", deprecated=True)
+        async def old(self):
+            pass
+
+        @get("/current")
+        async def current(self):
+            pass
+
+    registry = RouteRegistry()
+    registry.register_controller(C)
+    assert registry.supports_route_deprecated_v1 is True
+    assert registry.get_all_routes()["/old"]["GET"]["deprecated"] is True
+    assert registry.get_all_routes()["/current"]["GET"]["deprecated"] is False

@@ -9,12 +9,13 @@ import asyncio
 import time
 from typing import TYPE_CHECKING, Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.result import Err, Ok, Result
 from quadkit.tasks.config import TaskWorkerConfig
 
 # Import DLQ for failed job management
 from quadkit.tasks.exceptions import (
+    TaskCancelledError,
     TaskError,
     TaskExecutionError,
     TaskNotFoundError,
@@ -48,6 +49,21 @@ if TYPE_CHECKING:
 
     from quadkit.contracts.core import HookRegistryProtocol
     from quadkit.contracts.infra.tasks import TaskQueueProtocol
+
+
+def _safe_task_error(error: TaskError) -> TaskError:
+    """Return a type-preserving task error without private message/details."""
+    error_type = safe_error_type(error)
+    message = f"Task failed ({error_type})"
+    if isinstance(error, TaskTimeoutError):
+        return TaskTimeoutError("Task execution timed out")
+    if isinstance(error, TaskNotFoundError):
+        return TaskNotFoundError("Task handler unavailable")
+    if isinstance(error, TaskCancelledError):
+        return TaskCancelledError("Task execution cancelled")
+    if type(error) is TaskError:
+        return TaskError(message)
+    return TaskExecutionError(message)
 
 
 class TaskWorker(WorkerConcurrencyMixin):
@@ -88,8 +104,8 @@ class TaskWorker(WorkerConcurrencyMixin):
                 idempotency manager, logger). Use :class:`TaskWorkerServices` to
                 compose only the services you need; absent services degrade
                 gracefully.  Pass a ``logger`` via ``services.logger`` to inject a
-                custom bound logger; otherwise a module logger is created and bound
-                to ``worker_id`` automatically.
+                custom logger; otherwise an unbound module logger is used so
+                worker identifiers are not added to log records.
             middleware_pipeline: Optional middleware pipeline for cross-cutting
                 concerns.
         """
@@ -117,8 +133,7 @@ class TaskWorker(WorkerConcurrencyMixin):
         self._task_manager = _svc.task_manager
         self._retry_policy = _svc.retry_policy
 
-        _log = _svc.logger if _svc.logger is not None else get_logger(__name__)
-        self.logger = _log.bind(worker_id=worker_id)
+        self.logger = _svc.logger if _svc.logger is not None else get_logger(__name__)
         self._hooks: HookRegistryProtocol | None = _svc.hooks
 
         # Track background tasks
@@ -162,12 +177,7 @@ class TaskWorker(WorkerConcurrencyMixin):
                     job.idempotency_key,
                 )
                 if existing and existing.status == "completed":
-                    self.logger.info(
-                        "Worker %s skipping job %s - already completed (idempotency_key=%s)",
-                        self.worker_id,
-                        job.id,
-                        job.idempotency_key,
-                    )
+                    self.logger.info("worker_job_idempotency_skip")
                     duration = time.time() - start_time
                     job_result = JobResult.ok(existing.result, duration)
                     job.mark_completed(job_result)
@@ -193,10 +203,9 @@ class TaskWorker(WorkerConcurrencyMixin):
                 timeout = self.config.default_timeout
             if timeout is not None and timeout > self.config.max_timeout:
                 self.logger.warning(
-                    "JobProtocol %s timeout %ds exceeds maximum %ds, capping",
-                    job.id,
-                    timeout,
-                    self.config.max_timeout,
+                    "worker_timeout_capped",
+                    timeout_seconds=timeout,
+                    max_timeout_seconds=self.config.max_timeout,
                 )
                 timeout = self.config.max_timeout
 
@@ -212,27 +221,15 @@ class TaskWorker(WorkerConcurrencyMixin):
                         )
                     except TimeoutError as te:
                         raise TaskTimeoutError(
-                            f"JobProtocol timed out after {timeout}s",
-                            details={
-                                "job_id": job.id,
-                                "job_name": job.name,
-                                "timeout_seconds": timeout,
-                            },
-                            hint=f"Increase the timeout for job {job.name!r} or optimise the handler to complete faster.",
+                            "Task execution timed out",
+                            details={"timeout_seconds": timeout},
+                            hint="Review the configured timeout or handler execution time.",
                         ) from te
                 else:
                     job_result_inner = await self._execute_with_middleware(handler, job)
 
                 if not job_result_inner.success:
-                    raise TaskExecutionError(
-                        job_result_inner.error or "handler execution failed",
-                        details={
-                            "job_id": job.id,
-                            "job_name": job.name,
-                            "retry_count": job.retry_count,
-                        },
-                        hint=f"Check the handler implementation for {job.name!r}. See job logs for the root cause.",
-                    )
+                    raise TaskExecutionError("Task handler failed")
                 return job_result_inner
 
             # Execute with retry policy if injected; otherwise single attempt (fail-open)
@@ -277,36 +274,40 @@ class TaskWorker(WorkerConcurrencyMixin):
 
             self.stats.record_job(job_result)
             self.logger.info(
-                "Worker %s completed job %s in %.2fs",
-                self.worker_id,
-                job.id,
-                duration,
+                "worker_job_completed",
+                duration_seconds=round(duration, 3),
             )
             return Ok(job_result)
 
-        except TaskError as e:
-            # TaskError failures (including after retries exhausted by injected policy)
-            await self._handle_job_failure(job, str(e), start_time)
-            return Err(e)
+        except TaskError as exc:
+            # Preserve the safe domain category without carrying message/details.
+            error_type = safe_error_type(exc)
+            safe_error = _safe_task_error(exc)
+            error_msg = f"Task failed ({error_type})"
+            await self._handle_job_failure(
+                job,
+                error_msg,
+                start_time,
+                error_type=error_type,
+            )
+            return Err(safe_error)
 
-        except Exception as e:  # noqa: BLE001 — job-failure boundary
+        except Exception as exc:  # noqa: BLE001 — job-failure boundary
             # ANY non-TaskError handler error (RuntimeError, AttributeError,
             # plain asyncio.TimeoutError, third-party SDK errors, ...) must
             # land in the failure path — stats, result store, DLQ — instead
             # of escaping to the work loop with the job stuck in RUNNING.
             # CancelledError is a BaseException and deliberately NOT caught,
             # so worker stop() still cancels cleanly.
-            await self._handle_job_failure(job, str(e), start_time)
-            task_error = TaskExecutionError(
-                str(e),
-                details={
-                    "job_id": job.id,
-                    "job_name": job.name,
-                    "retry_count": job.retry_count,
-                },
-                hint=f"Check the handler implementation for {job.name!r}. See job logs for the root cause.",
+            error_type = safe_error_type(exc)
+            error_msg = f"Task failed ({error_type})"
+            await self._handle_job_failure(
+                job,
+                error_msg,
+                start_time,
+                error_type=error_type,
             )
-            return Err(task_error)
+            return Err(TaskExecutionError(error_msg))
 
         finally:
             self.current_job = None
@@ -314,8 +315,10 @@ class TaskWorker(WorkerConcurrencyMixin):
     async def _handle_job_failure(
         self,
         job: JobProtocol,
-        error_msg: str,
+        _error_msg: str,
         start_time: float,
+        *,
+        error_type: str = "UnknownError",
     ) -> None:
         """Record final job failure and route to dead letter queue.
 
@@ -324,11 +327,14 @@ class TaskWorker(WorkerConcurrencyMixin):
 
         Args:
             job: Failed job
-            error_msg: Error message from the last failure
-            start_time: JobProtocol start timestamp
+            _error_msg: Untrusted failure detail, intentionally discarded.
+            start_time: JobProtocol start timestamp.
+            error_type: Exception class name safe to include in operational logs.
         """
+        safe_type_name = error_type if error_type.isidentifier() else "UnknownError"
+        safe_error_msg = f"Task failed ({safe_type_name})"
         duration = time.time() - start_time
-        job_result = JobResult.fail(error_msg, job.retry_count, duration)
+        job_result = JobResult.fail(safe_error_msg, job.retry_count, duration)
         self.stats.record_job(job_result)
 
         if self.result_store is not None:
@@ -341,22 +347,20 @@ class TaskWorker(WorkerConcurrencyMixin):
                 job_id=job.id,
                 duration_ms=duration * 1000,
                 success=False,
-                error=error_msg,
+                error=safe_error_msg,
                 worker_id=self.worker_id,
             )
 
-        job.mark_failed(error_msg)
+        job.mark_failed(safe_error_msg)
         await self._emit_action(
             "task.failed",
-            TaskFailedHook(task_name=job.name, task_id=job.id, reason=error_msg),
+            TaskFailedHook(task_name=job.name, task_id=job.id, reason=safe_error_msg),
         )
-        await self._send_to_dlq(job, error_msg)
+        await self._send_to_dlq(job, safe_error_msg)
         self.logger.error(
-            "Worker %s job %s failed permanently after %s retries: %s",
-            self.worker_id,
-            job.id,
-            job.retry_count,
-            error_msg,
+            "worker_job_failed_permanently",
+            retry_count=job.retry_count,
+            error_type=safe_type_name,
         )
 
     async def _send_to_dlq(self, job: JobProtocol, error_msg: str = "") -> None:

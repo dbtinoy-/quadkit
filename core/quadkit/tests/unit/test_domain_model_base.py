@@ -6,7 +6,7 @@ from __future__ import annotations
 
 import dataclasses
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -255,6 +255,16 @@ def test_model_json_schema() -> None:
     schema = M.model_json_schema()
     assert isinstance(schema, dict)
     assert "name" in str(schema)
+
+
+def test_model_json_schema_excludes_classvars() -> None:
+    @dataclass
+    class M(DomainModel):
+        name: str
+        kind: ClassVar[str] = "m"
+
+    schema = M.model_json_schema()
+    assert set(schema["properties"]) == {"name"}
 
 
 def test_model_extra() -> None:

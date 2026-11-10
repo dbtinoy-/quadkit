@@ -89,7 +89,7 @@ class TestTypedRepositoryFilters:
 
         assert result == {"id": 1, "name": "john", "status": "active"}
         mock_provider.execute_query.assert_called_once_with(
-            'SELECT * FROM "users" WHERE ("status" = ? AND "name" ILIKE ?) LIMIT 1',
+            'SELECT * FROM "users" WHERE ("status" = ? AND LOWER("name") LIKE LOWER(?)) LIMIT 1',
             ["active", "%john%"],
         )
 

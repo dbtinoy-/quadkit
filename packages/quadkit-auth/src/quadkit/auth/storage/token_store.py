@@ -5,6 +5,7 @@ from __future__ import annotations
 import secrets
 from typing import Any, Protocol, runtime_checkable
 
+from quadkit.auth.exceptions import EmailExistsError, UsernameExistsError
 from quadkit.auth.models.user import User, UserCredentials
 
 
@@ -135,9 +136,9 @@ class InMemoryUserStore(UserStoreProtocol):
     ) -> User:
         """Create a new user"""
         if name in self.name_index:
-            raise ValueError(f"Name '{name}' already exists")
+            raise UsernameExistsError(f"Name '{name}' already exists")
         if email in self.email_index:
-            raise ValueError(f"Email '{email}' already exists")
+            raise EmailExistsError(f"Email '{email}' already exists")
 
         user_id = secrets.token_urlsafe(16)
 

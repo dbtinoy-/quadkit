@@ -1,6 +1,6 @@
-# quadkit
+# QuadKit
 
-![QuadKit Banner](banner.jpg)
+![QuadKit Banner](banner.svg)
 
 *async python, contract-driven, container-assembled.*
 
@@ -66,14 +66,14 @@ Also available by default:
 
 ## build in the browser
 
-[Quadkit Playground](https://playground.oridecon.dev) is the hosted visual
+[Quadkit Playground](https://builder.oridecon.dev) is the hosted visual
 builder for that same stack: draw framework-shaped nodes — entities, auth,
 jobs, routes — on a canvas, then generate and download a real standalone
 Quadkit project. One-way codegen, nothing to install locally.
 
 ## why quadkit?
 
-Quadkit is a kit of **13 published packages**, installed à la carte: eleven
+Quadkit is a kit of **18 public-use packages**, installed à la carte: sixteen
 to build with, one optional to test, one for the command line.
 
 ```mermaid
@@ -102,6 +102,11 @@ graph LR
 | [`quadkit-http`](https://pypi.org/project/quadkit-http/) | typed HTTP clients for talking to other services |
 | [`quadkit-monitor`](https://pypi.org/project/quadkit-monitor/) | metrics, tracing and health endpoints |
 | [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
+| [`quadkit-ai-llm`](https://pypi.org/project/quadkit-ai-llm/) | typed LLM clients and provider bindings |
+| [`quadkit-ai-agents`](https://pypi.org/project/quadkit-ai-agents/) | bounded agent execution and strategies |
+| [`quadkit-ai-mcp`](https://pypi.org/project/quadkit-ai-mcp/) | Model Context Protocol integration |
+| [`quadkit-workflow`](https://pypi.org/project/quadkit-workflow/) | application workflow and pipeline primitives |
+| [`quadkit-notification`](https://pypi.org/project/quadkit-notification/) | notification delivery and recipient inbox primitives |
 
 Every one of them binds against the same protocol layer, so the contracts
 define interfaces for SQL, cache, auth, events, tasks, queues, LLM, RAG, and

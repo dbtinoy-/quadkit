@@ -197,7 +197,32 @@ class TestInMemoryProgressTrackerBasics:
         snap = await tracker.get("t1")
         assert snap is not None
         assert snap.status == ProgressStatus.FAILED
-        assert snap.error == "disk full"
+        assert snap.error == "Task failed"
+
+    @pytest.mark.asyncio
+    async def test_fail_log_does_not_include_error_payload(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        from unittest.mock import MagicMock
+
+        import quadkit.tasks.progress.tracker as tracker_module
+
+        sentinel = "SENSITIVE_PROGRESS_ERROR_SENTINEL"
+        mock_logger = MagicMock()
+        monkeypatch.setattr(tracker_module, "logger", mock_logger)
+        tracker = InMemoryProgressTracker()
+
+        await tracker.fail("task-id", sentinel)
+
+        mock_logger.debug.assert_called_once_with(
+            "tasks.progress.fail", error_present=True
+        )
+        assert "task-id" not in str(mock_logger.mock_calls)
+        assert sentinel not in str(mock_logger.mock_calls)
+        snapshot = await tracker.get("task-id")
+        assert snapshot is not None
+        assert snapshot.error == "Task failed"
+        assert sentinel not in snapshot.error
 
     @pytest.mark.asyncio
     async def test_fail_preserves_metadata(self) -> None:
@@ -277,7 +302,7 @@ class TestInMemoryProgressTrackerSubscribe:
 
         assert len(received) == 2
         assert received[-1].status == ProgressStatus.FAILED
-        assert received[-1].error == "bad input"
+        assert received[-1].error == "Task failed"
 
     @pytest.mark.asyncio
     async def test_subscribe_after_complete_yields_terminal_snapshot_once(

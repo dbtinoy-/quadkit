@@ -103,8 +103,15 @@ class _TaskOperationsMixin(_TaskAttrsMixin):
             raise
 
     async def enqueue_job(self, job: JobProtocol) -> str:
-        """Enqueue a job for processing"""
-        await self.queue.enqueue(job)
+        """Return the job ID only after acceptance; raise queue rejection.
+
+        The provider's string-returning API cannot represent an Err value.
+        Preserve the backend's typed error rather than acknowledge a job the
+        queue rejected. Infrastructure exceptions propagate unchanged.
+        """
+        result = await self.queue.enqueue(job)
+        if result.is_err():
+            raise result.unwrap_err()
         return job.id
 
     async def _enqueue_job(self, job: JobProtocol) -> None:

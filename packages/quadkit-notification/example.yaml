@@ -1,0 +1,93 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML keys: notification: | mailer: | inbox:
+# Environment variable prefix: QK_NOTIFICATION__
+
+# ─── SMS & Push Channels ──────────────────────────────────────────────────────
+# Env prefix: QK_NOTIFICATION__
+
+notification:
+  # Named SMS backends.
+  # Each backend is registered under Named(entry.name).
+  # The first entry (or primary: true) also receives the unnamed SMSChannelProtocol binding.
+  sms_backends: []
+  # Example:
+  # sms_backends:
+  #   - name: alerts
+  #     primary: true
+  #     driver: twilio                        # twilio
+  #     twilio:
+  #       account_sid: "ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"  # QK_NOTIFICATION__SMS_BACKENDS__0__TWILIO__ACCOUNT_SID
+  #       auth_token: "your-auth-token"
+  #       from_number: "+15551234567"         # E.164 format
+  #       timeout: 30                         # HTTP timeout (s)
+
+  # Named push notification backends.
+  # Each backend is registered under Named(entry.name).
+  # The first entry (or primary: true) also receives the unnamed PushChannelProtocol binding.
+  push_backends: []
+  # Example:
+  # push_backends:
+  #   - name: mobile
+  #     primary: true
+  #     driver: fcm                           # fcm, apns
+  #     fcm:
+  #       server_key: "AAAA..."              # QK_NOTIFICATION__PUSH_BACKENDS__0__FCM__SERVER_KEY
+  #       timeout: 30                         # HTTP timeout (s)
+  #     apns: null
+  #
+  #   - name: ios
+  #     driver: apns
+  #     apns:
+  #       team_id: "XXXXXXXXXX"              # 10-character Apple Developer Team ID
+  #       key_id: "YYYYYYYYYY"               # APNs Auth Key ID
+  #       apns_auth_key: null                # PEM string or path to .p8 file
+  #       bundle_id: "com.example.MyApp"
+  #       sandbox: false                     # true = APNs sandbox endpoint
+  #       timeout: 30
+
+
+# ─── Mailer ───────────────────────────────────────────────────────────────────
+# Env prefix: QK_NOTIFICATION__MAILER__
+
+mailer:
+  # Named mailer backends.
+  # Each backend is registered under Named(entry.name).
+  # The first entry (or primary: true) also receives the unnamed MailerProtocol binding.
+  backends: []
+  # Example:
+  # backends:
+  #   - name: transactional
+  #     primary: true
+  #     driver: sendgrid                     # smtp, sendgrid
+  #     from_email: "noreply@example.com"
+  #     from_name: "My App"
+  #     sendgrid:
+  #       api_key: "SG.xxxx"               # QK_NOTIFICATION__MAILER__BACKENDS__0__SENDGRID__API_KEY
+  #       timeout: 30                       # HTTP timeout (s)
+  #       sandbox_mode: false              # true = emails not delivered
+  #     smtp: null
+  #
+  #   - name: internal
+  #     driver: smtp
+  #     from_email: "internal@example.com"
+  #     from_name: null
+  #     smtp:
+  #       host: "smtp.example.com"         # QK_NOTIFICATION__MAILER__BACKENDS__1__SMTP__HOST
+  #       port: 587                         # 587 (STARTTLS), 465 (SSL), 25 (plain)
+  #       username: null
+  #       password: null
+  #       use_tls: true                     # STARTTLS (port 587)
+  #       use_ssl: false                    # SSL from connect (port 465)
+  #       timeout: 30
+  #     sendgrid: null
+
+
+# ─── Inbox ────────────────────────────────────────────────────────────────────
+# Env prefix: QK_NOTIFICATION__INBOX__
+
+inbox:
+  store_backend: "database"  # database, memory (QK_NOTIFICATION__INBOX__STORE_BACKEND)
+  max_page_size: 50           # Maximum messages returned per page
+  retention_days: 30          # Days to retain messages before pruning
+  mark_read_on_fetch: false   # Automatically mark messages as read when fetched

@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from quadkit.contracts.observability.metrics import (
+    AlertDispatcherProtocol,
     HealthCheckRegistryProtocol,
     MetricsFactoryProtocol,
     MetricsRecorderProtocol,
@@ -76,10 +77,18 @@ class MonitorModule(Module):
 
         return DynamicModule(
             module=cls,
+            # Global: the monitor owns process-wide observability services — the
+            # health registry aliases, the tracer, the metrics collector — and
+            # every other module resolves them. Exports of a non-global module
+            # are invisible outside its importers (QK_ERR_MOD_005), so an app
+            # composing the monitor beside its own infrastructure module could
+            # not resolve ``HealthCheckRegistryProtocol`` at all.
+            is_global=True,
             providers=[
                 MonitorProvider(backend=backend, exporter=exporter, config=config)
             ],
             exports=[
+                AlertDispatcherProtocol,
                 MetricsCollectorProtocol,
                 MetricsRecorderProtocol,
                 MetricsFactoryProtocol,
@@ -117,10 +126,18 @@ class MonitorModule(Module):
 
         return DynamicModule(
             module=cls,
+            # Global: the monitor owns process-wide observability services — the
+            # health registry aliases, the tracer, the metrics collector — and
+            # every other module resolves them. Exports of a non-global module
+            # are invisible outside its importers (QK_ERR_MOD_005), so an app
+            # composing the monitor beside its own infrastructure module could
+            # not resolve ``HealthCheckRegistryProtocol`` at all.
+            is_global=True,
             providers=[
                 MonitorProvider(backend=backend, exporter=exporter, config=config)
             ],
             exports=[
+                AlertDispatcherProtocol,
                 MetricsCollectorProtocol,
                 MetricsRecorderProtocol,
                 MetricsFactoryProtocol,
@@ -155,8 +172,10 @@ class MonitorModule(Module):
 
         return DynamicModule(
             module=cls,
+            is_global=True,
             providers=[MonitorProvider(backend=NoOpMetricsBackend())],
             exports=[
+                AlertDispatcherProtocol,
                 MetricsCollectorProtocol,
                 MetricsRecorderProtocol,
                 MetricsFactoryProtocol,

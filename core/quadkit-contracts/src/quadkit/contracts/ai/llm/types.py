@@ -27,7 +27,7 @@ class ChatMessage:
 
     Satisfies ``ChatMessageProtocol``.  Suitable for construction in any
     package that needs to build messages without importing from
-    ``the optional provider``.
+    ``quadkit-ai-llm``.
     """
 
     role: str
@@ -57,7 +57,7 @@ class Completion:
     """Minimal completion data class shared across AI packages.
 
     Satisfies ``CompletionProtocol``.  Used by consumers that build
-    fallback completions without depending on ``the optional provider``'s
+    fallback completions without depending on ``quadkit-ai-llm``'s
     full Pydantic model.
     """
 

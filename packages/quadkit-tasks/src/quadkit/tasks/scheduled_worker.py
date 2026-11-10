@@ -31,7 +31,7 @@ import asyncio
 import random
 
 from quadkit.contracts.infra.tasks import OnErrorPolicy
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks.background_task_manager import BackgroundTaskManager
 
 logger = get_logger(__name__)
@@ -119,16 +119,13 @@ class ScheduledWorker(ABC):
         is a no-op (logs a warning).
         """
         if self._task is not None and not self._task.done():
-            logger.warning(
-                "scheduled_worker.already_running",
-                worker=type(self).__name__,
-            )
+            logger.warning("scheduled_worker.already_running")
             return
 
         self._stop_event.clear()
         worker_name = f"scheduled_worker.{type(self).__name__}"
         self._task = self._task_manager.track_named(worker_name, self._run_loop())
-        logger.info("worker_started", worker=type(self).__name__)
+        logger.info("worker_started")
 
     async def stop(self, grace_seconds: float = 2.0) -> None:
         """Signal the worker to stop and wait for it to finish.
@@ -155,7 +152,7 @@ class ScheduledWorker(ABC):
             except (asyncio.CancelledError, Exception):  # noqa: S110 — intentional best-effort fallback
                 pass
 
-        logger.info("worker_stopped", worker=type(self).__name__)
+        logger.info("worker_stopped")
 
     # -- Abstract interface -------------------------------------------------
 
@@ -184,10 +181,9 @@ class ScheduledWorker(ABC):
             except asyncio.CancelledError:
                 raise
             except Exception as exc:  # noqa: BLE001
-                logger.exception(
+                logger.error(
                     "worker_cycle_error",
-                    worker=type(self).__name__,
-                    error=str(exc),
+                    error_type=safe_error_type(exc),
                     policy=str(self.on_error_policy),
                 )
                 if self.on_error_policy is OnErrorPolicy.STOP:

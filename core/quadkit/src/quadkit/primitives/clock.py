@@ -13,7 +13,7 @@ from __future__ import annotations
 from collections.abc import Iterator
 from contextlib import contextmanager
 import contextvars
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 import time
 
 from quadkit.contracts.core.clock import ClockProtocol
@@ -55,6 +55,11 @@ def now() -> datetime:
     return _ambient.get().now()
 
 
+def today() -> date:
+    """Return the current UTC calendar date from the active clock."""
+    return _ambient.get().now().date()
+
+
 def monotonic() -> float:
     return _ambient.get().monotonic()
 
@@ -73,4 +78,4 @@ def use(implementation: ClockProtocol) -> Iterator[None]:
         _ambient.reset(token)
 
 
-__all__ = ["current", "install", "monotonic", "now", "timestamp", "use"]
+__all__ = ["current", "install", "monotonic", "now", "timestamp", "today", "use"]

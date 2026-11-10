@@ -6,10 +6,11 @@ from typing import Any
 
 from quadkit.contracts.web import HTTPClientProtocol
 from quadkit.di.module import DynamicModule, Module, module
+from quadkit.http.client import HTTPClient
 from quadkit.http.di.provider import HTTPProvider
 
 
-@module()
+@module(is_global=True)
 class HTTPModule(Module):
     """Async outbound HTTP client backed by aiohttp with connection pooling.
 
@@ -54,7 +55,7 @@ class HTTPModule(Module):
         return DynamicModule(
             module=cls,
             providers=[HTTPProvider(config=config)],
-            exports=[HTTPClientProtocol],
+            exports=[HTTPClient, HTTPClientProtocol],
         )
 
     @classmethod
@@ -70,7 +71,7 @@ class HTTPModule(Module):
         return DynamicModule(
             module=cls,
             providers=[HTTPProvider()],
-            exports=[HTTPClientProtocol],
+            exports=[HTTPClient, HTTPClientProtocol],
         )
 
 

@@ -108,6 +108,20 @@ class WebConfig(BaseConfig):
         default=None,
         description="Token required to access debug routes (sent as X-Debug-Token header).",
     )
+    debug_routes_require_middleware: str | None = Field(
+        default=None,
+        description=(
+            "Only grant debug-route access when this named middleware is registered."
+        ),
+    )
+    debug_routes_rate_limit: int = Field(
+        default=0,
+        description="Maximum debug-route requests per window (0 disables).",
+    )
+    debug_routes_rate_window_seconds: int = Field(
+        default=60,
+        description="Window in seconds for the debug-route rate limit.",
+    )
 
     # OAuth Identity Resolution - resolve external OAuth IDs to internal UUIDs
     enable_identity_resolution: bool = Field(

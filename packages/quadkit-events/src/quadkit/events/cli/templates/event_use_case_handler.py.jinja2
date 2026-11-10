@@ -1,0 +1,40 @@
+"""Internal event → existing command bus; no user authority or delivery guarantee.
+
+Subscribe ``on_{{ event_name }}`` to the exact event class in provider boot.
+A successful event-bus publish means enqueue, not completed command execution.
+The command handler owns validation, policy and persistence. Failures propagate
+from this handler; bus retry/error policy remains an explicit application choice.
+No event deduplication, rollback or exactly-once guarantee is supplied here.
+"""
+from __future__ import annotations
+
+from dataclasses import fields
+from uuid import UUID
+
+from quadkit.contracts import CommandBusProtocol
+from quadkit.events.messages import Command
+from {{ binding.event_module }} import {{ binding.event_class }}
+from {{ binding.module }} import {{ binding.command }}, {{ binding.result }}
+
+
+class {{ handler_name }}Handler:
+    """Map only declared payload fields; event actor/metadata is never authority."""
+
+    event_name = {{ event_name | tojson }}
+
+    def __init__(self, command_bus: CommandBusProtocol) -> None:
+        declared = {field.name for field in fields({{ binding.command }})}
+        inherited = {field.name for field in fields(Command)}
+        if not issubclass({{ binding.command }}, Command) or declared - inherited != set({{ binding.inputs | tojson }}):
+            raise ValueError("command fields differ from declared input binding; no implicit context")
+        self.command_bus = command_bus
+
+    async def on_{{ event_name }}(self, event: {{ binding.event_class }}) -> None:
+        if type(event) is not {{ binding.event_class }} or type(event.aggregate_id) is not UUID:
+            raise ValueError("event requires exact declared type and UUID aggregate_id")
+        command = {{ binding.command }}(
+{% for name in binding.inputs %}            {{ name }}=event.{{ name }},
+{% endfor %}        ).for_aggregate(event.aggregate_id)
+        result = await self.command_bus.dispatch(command)
+        if type(result) is not {{ binding.result }} or result.success is not True:
+            raise RuntimeError("event-triggered use case did not succeed")

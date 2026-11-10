@@ -106,10 +106,18 @@ class TestOperatorFilters:
         assert "%abc%" in params
 
     async def test_icontains(self) -> None:
+        """Case-insensitive LIKE in a form every dialect accepts.
+
+        `ILIKE` is Postgres-only: SQLite answers `near "ILIKE": syntax error`
+        and MySQL has no equivalent. The predicate is rendered as
+        `LOWER(x) LIKE LOWER(?)` so the filter works wherever the framework
+        claims to work, which is what a typed filter promises.
+        """
         host = _Host()
         params: list[Any] = []
         query = await host._apply_filters_to_query("SELECT 1", params, {"note__icontains": "abc"})
-        assert "ILIKE" in query
+        assert 'LOWER("note") LIKE LOWER(?)' in query
+        assert "ILIKE" not in query
 
     async def test_isnull(self) -> None:
         host = _Host()
@@ -162,7 +170,12 @@ class TestTypedFilterExpressions:
 
 
 class TestSearch:
-    async def test_ilike_search_clause(self) -> None:
+    async def test_icase_search_clause(self) -> None:
+        """Case-insensitive search, in a form SQLite and MySQL accept.
+
+        `ILIKE` is Postgres-only; on SQLite the clause was a syntax error, so
+        `search_fields` did not work on the dialect the suite runs on.
+        """
         host = _Host()
         params: list[Any] = []
         query = await host._apply_filters_to_query(
@@ -170,7 +183,8 @@ class TestSearch:
             params,
             {"search": "acme", "search_fields": ["name", "email"]},
         )
-        assert '"name" ILIKE ? OR "email" ILIKE ?' in query
+        assert 'LOWER("name") LIKE LOWER(?) OR LOWER("email") LIKE LOWER(?)' in query
+        assert "ILIKE" not in query
         assert params == ["%acme%", "%acme%"]
 
     async def test_search_without_fields_ignored(self) -> None:
@@ -234,3 +248,19 @@ class TestWhereMerging:
             "SELECT * FROM orders WHERE (a = 1)", params, {"b": 2}
         )
         assert query.endswith('WHERE (a = 1) AND "b" = ?')
+
+class TestSearchClauseDialect:
+    """The `search_fields` shortcut renders the same portable predicate."""
+
+    async def test_search_uses_lower_like(self) -> None:
+        host = _Host()
+        params: list[Any] = []
+        query = await host._apply_filters_to_query(
+            "SELECT 1",
+            params,
+            {"search": "abc", "search_fields": ["name", "description"]},
+        )
+        assert 'LOWER("name") LIKE LOWER(?)' in query
+        assert 'LOWER("description") LIKE LOWER(?)' in query
+        assert "ILIKE" not in query
+        assert params == ["%abc%", "%abc%"]

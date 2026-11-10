@@ -6,16 +6,22 @@ with SQLite backend using the generic database provider.
 
 from __future__ import annotations
 
+from copy import copy
 from datetime import UTC, datetime
+from hashlib import md5
 from types import TracebackType
 from typing import TYPE_CHECKING, Any
 
-from quadkit.contracts.data.identifiers import Table
+from quadkit.contracts.domain import DomainEvent
 from quadkit.events.config import SqliteConfig
-from quadkit.events.exceptions import ConcurrencyError
+from quadkit.events.exceptions import ConcurrencyError, EventStoreError
+from quadkit.events.stores._history import validated_stream_version
 from quadkit.events.stores.base import AbstractEventStore
 from quadkit.events.stores.sqlite.queries import SqliteQueries
-from quadkit.events.stores.sqlite.serializer import SqliteEventSerializer
+from quadkit.events.stores.sqlite.serializer import (
+    SqliteEventSerializer,
+    validate_event_identity,
+)
 from quadkit.logging import get_logger
 from quadkit.serialization import dumps
 
@@ -24,6 +30,7 @@ if TYPE_CHECKING:
 
     from quadkit.contracts.data.sql.database import DatabaseProviderProtocol
     from quadkit.events.messages.event import Event
+    from quadkit.events.types import StreamInfo
 
 logger = get_logger(__name__)
 
@@ -48,6 +55,7 @@ class SqliteEventStore(AbstractEventStore):
             provider: The generic database provider injected via DI.
             event_serializer: Optional custom event serializer.
         """
+        super().__init__()
         self.config = config or SqliteConfig()
         if provider is None:
             raise ValueError("provider (DatabaseProviderProtocol) is required")
@@ -62,8 +70,20 @@ class SqliteEventStore(AbstractEventStore):
 
     async def connect(self) -> None:
         """Connection is managed by the provider. Tables are created if configured."""
+        self._connected = False
         if self.config.auto_create_tables:
             await self._create_tables()
+
+        try:
+            state_schema = await self.provider.execute_query(
+                self.queries.get_check_stream_state_sql()
+            )
+        except Exception as exc:
+            raise EventStoreError(
+                "SQLite event stream-state schema is unavailable"
+            ) from exc
+        if not state_schema.success:
+            raise EventStoreError("SQLite event stream-state schema is unavailable")
 
         self._connected = True
         logger.info("SQLite event store connected via provider")
@@ -74,7 +94,9 @@ class SqliteEventStore(AbstractEventStore):
 
         for statement in ddl.split(";"):
             if statement.strip():
-                await self.provider.execute_query(statement)
+                result = await self.provider.execute_query(statement)
+                if not result.success:
+                    raise EventStoreError("Could not create SQLite event schema")
 
     async def append(
         self,
@@ -134,11 +156,15 @@ class SqliteEventStore(AbstractEventStore):
                     "event_id",
                     None,
                 )
+                if not self.serializer.event_serializer and isinstance(
+                    event, DomainEvent
+                ):
+                    validate_event_identity(event_data, event_id)
                 metadata = getattr(event, "metadata", {})
                 if hasattr(metadata, "model_dump"):
                     metadata = metadata.model_dump(mode="json")
 
-                await self.provider.execute(
+                result = await self.provider.execute(
                     self.queries.get_insert_event_sql(),
                     [
                         stream_id,
@@ -154,6 +180,8 @@ class SqliteEventStore(AbstractEventStore):
                         timestamp.isoformat(),
                     ],
                 )
+                if not result.success:
+                    raise EventStoreError("Could not write event")
                 new_version = version
         except Exception as exc:  # noqa: BLE001 — maps the UNIQUE(stream_id, stream_version) backstop violation to the framework's conflict type
             if (
@@ -192,28 +220,106 @@ class SqliteEventStore(AbstractEventStore):
         if limit is not None:
             args.append(limit)
 
-        result = await self.provider.execute_query(query, args)
-        events = [self.serializer.deserialize_event(row) for row in result.rows]
+        # Read bounds and rows in one provider transaction to avoid returning
+        # a partial history if compaction races this read.
+        async with self.provider.transaction():
+            _, compacted_through = await self._stream_bounds(stream_id)
+            start = max(1, from_version)
+            if (
+                limit != 0
+                and (to_version is None or to_version >= start)
+                and start <= compacted_through
+            ):
+                raise EventStoreError("SQLite event history was compacted")
+            result = await self.provider.execute_query(query, args)
+            if not result.success:
+                raise EventStoreError("Could not read SQLite event stream")
+            events = [self.serializer.deserialize_event(row) for row in result.rows]
 
         # M-03: Apply upcasting
         return await self._apply_upcasting(events)
 
     async def get_stream_version(self, stream_id: str) -> int:
-        """Get current stream version."""
-        result = await self.provider.execute_query(
-            self.queries.get_stream_version_sql(),
-            [stream_id],
-        )
+        """Get the stream high-water version, including compacted events."""
+        version, _ = await self._stream_bounds(stream_id)
+        return version
 
-        return (
-            int(
-                result.rows[0]["version"]
-                if "version" in result.rows[0]
-                else next(iter(result.rows[0].values()))
+    async def stream_exists(self, stream_id: str) -> bool:
+        """Check the logical version, including a compacted stream's marker."""
+        return await validated_stream_version(self, stream_id) > 0
+
+    async def get_stream_info(self, stream_id: str) -> StreamInfo | None:
+        """Report logical version and metadata of currently retained events."""
+        from quadkit.events.types import StreamInfo
+
+        async with self.provider.transaction():
+            version, missing_prefix = await self._stream_bounds(stream_id)
+            if version == 0:
+                return None
+            retained = version - missing_prefix
+            if not retained:
+                return StreamInfo(stream_id=stream_id, version=version, event_count=0)
+            first = await self.read(stream_id, from_version=missing_prefix + 1, limit=1)
+            last = (
+                first
+                if retained == 1
+                else await self.read(stream_id, from_version=version, limit=1)
             )
-            if result.rows
-            else 0
+            if (
+                len(first) != 1
+                or len(last) != 1
+                or await self._stream_bounds(stream_id) != (version, missing_prefix)
+            ):
+                raise EventStoreError(
+                    "SQLite event history changed during stream info read"
+                )
+            return StreamInfo(
+                stream_id=stream_id,
+                aggregate_type=first[0].aggregate_type,
+                version=version,
+                event_count=retained,
+                created_at=first[0].occurred_at if missing_prefix == 0 else None,
+                updated_at=last[0].occurred_at,
+            )
+
+    async def _stream_bounds(self, stream_id: str) -> tuple[int, int]:
+        """Return (high-water version, unavailable prefix) from one SQL view."""
+        result = await self.provider.execute_query(
+            self.queries.get_stream_version_sql(), [stream_id, stream_id]
         )
+        if not result.success or len(result.rows) != 1:
+            raise EventStoreError("Could not read event stream version")
+        row = result.rows[0]
+        try:
+            compacted = row["compacted_through"]
+            first = row["min_version"]
+            last = row["max_version"]
+            count = row["event_count"]
+            if (
+                type(compacted) is not int
+                or compacted < 0
+                or type(last) is not int
+                or last < 0
+                or type(count) is not int
+                or count < 0
+            ):
+                raise ValueError("invalid event bounds")
+            if count == 0:
+                if first is not None or last != 0:
+                    raise ValueError("invalid empty event bounds")
+                return compacted, compacted
+            if (
+                type(first) is not int
+                or first < 1
+                or first <= compacted
+                or last < first
+                or count != last - first + 1
+            ):
+                raise ValueError("inconsistent event history")
+            # Older databases may have a partially deleted prefix but no marker.
+            return last, max(compacted, first - 1)
+        except (KeyError, TypeError, ValueError) as exc:
+            raise EventStoreError("SQLite event history is inconsistent") from exc
 
     async def stream_all(
         self,
@@ -222,32 +328,69 @@ class SqliteEventStore(AbstractEventStore):
         partition: int | None = None,
         total_partitions: int | None = None,
     ) -> AsyncIterator[Event]:
-        """Stream all events from a global position."""
-        position = from_position
+        """Stream events after a global position, optionally by stream partition.
 
+        Partitioning scans ordered batches and hashes the stream ID in Python;
+        SQLite does not provide the old query's STR_HASH function. It uses the
+        same MD5-prefix rule as the memory and Redis stores, but does not imply
+        partition compatibility with every backend or a custom SQLite UDF.
+        """
+        if type(batch_size) is not int or batch_size <= 0:
+            raise ValueError("batch_size must be a positive integer")
+        if partition is not None or total_partitions is not None:
+            if (
+                type(partition) is not int
+                or type(total_partitions) is not int
+                or total_partitions <= 0
+                or not 0 <= partition < total_partitions
+            ):
+                raise ValueError("invalid stream partition")
+
+        position = from_position
         if not self._connected:
             await self.connect()
 
         while True:
-            if partition is not None and total_partitions is not None:
-                result = await self.provider.execute_query(
-                    self.queries.get_stream_all_partitioned_sql(),
-                    [position, total_partitions, partition, batch_size],
-                )
-            else:
-                result = await self.provider.execute_query(
-                    self.queries.get_stream_all_sql(),
-                    [position, batch_size],
-                )
-
+            result = await self.provider.execute_query(
+                self.queries.get_stream_all_sql(),
+                [position, batch_size],
+            )
+            if not result.success:
+                raise EventStoreError("Could not stream SQLite events")
             if not result.rows:
                 break
 
             for row in result.rows:
-                event = self.serializer.deserialize_event(row)
-                migrated = await self._apply_upcasting([event])
-                yield migrated[0]
+                # Advance for every scanned row, including rows belonging to
+                # other partitions, so a batch with no matches cannot loop.
                 position = row["global_sequence"]
+                if partition is not None and total_partitions is not None:
+                    stream_hash = int(
+                        md5(
+                            row["stream_id"].encode(), usedforsecurity=False
+                        ).hexdigest()[:8],
+                        16,
+                    )
+                    if stream_hash % total_partitions != partition:
+                        continue
+                yield await self._stream_event(row)
+
+    async def _stream_event(self, row: dict[str, Any]) -> Event:
+        """Return an isolated upcast event carrying its actual global cursor."""
+        event = self.serializer.deserialize_event(row)
+        migrated = (await self._apply_upcasting([event]))[0]
+        try:
+            stamped = copy(migrated)
+            if stamped is migrated:
+                raise TypeError("event copy is not independent")
+            object.__setattr__(stamped, "sequence_number", int(row["global_sequence"]))
+            if stamped.sequence_number != int(row["global_sequence"]):
+                raise TypeError("event did not retain stream position")
+        except Exception as exc:  # noqa: BLE001 — an incompatible custom event cannot be checkpointed safely
+            raise EventStoreError(
+                "Could not attach SQLite event stream position"
+            ) from exc
+        return stamped
 
     async def stream_by_type(
         self,
@@ -260,11 +403,11 @@ class SqliteEventStore(AbstractEventStore):
             query,
             [from_position, *event_types],
         )
+        if not result.success:
+            raise EventStoreError("Could not stream SQLite events by type")
 
         for row in result.rows:
-            event = self.serializer.deserialize_event(row)
-            migrated = await self._apply_upcasting([event])
-            yield migrated[0]
+            yield await self._stream_event(row)
 
     async def find_by_type(
         self,
@@ -277,16 +420,20 @@ class SqliteEventStore(AbstractEventStore):
             self.queries.find_by_type_sql(),
             [event_type, count, start],
         )
+        if not result.success:
+            raise EventStoreError("Could not find SQLite events by type")
 
         return [self.serializer.deserialize_event(row) for row in result.rows]
 
     async def get_events_count(self, stream_id: str | None = None) -> int:
         """Get total event count."""
         query = self.queries.get_events_count_sql(stream_id)
-        if stream_id:
+        if stream_id is not None:
             result = await self.provider.execute_query(query, [stream_id])
         else:
             result = await self.provider.execute_query(query)
+        if not result.success:
+            raise EventStoreError("Could not count SQLite events")
 
         return (
             int(
@@ -300,11 +447,21 @@ class SqliteEventStore(AbstractEventStore):
 
     async def delete_stream(self, stream_id: str) -> int:
         """Delete all events for a stream."""
-        count = await self.get_events_count(stream_id)
-        await self.provider.execute(
-            self.queries.get_delete_stream_sql(),
-            [stream_id],
-        )
+        async with self.provider.transaction():
+            count = await self.get_events_count(stream_id)
+            result = await self.provider.execute(
+                self.queries.get_delete_stream_sql(),
+                [stream_id],
+            )
+            if not result.success:
+                raise EventStoreError("Could not delete SQLite event stream")
+            state_result = await self.provider.execute(
+                self.queries.get_delete_stream_state_sql(), [stream_id]
+            )
+            if not state_result.success:
+                raise EventStoreError("Could not delete SQLite event stream state")
+            if await self._stream_bounds(stream_id) != (0, 0):
+                raise EventStoreError("Could not verify SQLite event stream deletion")
         return count
 
     async def get_stream_ids(self) -> list[str]:
@@ -315,6 +472,8 @@ class SqliteEventStore(AbstractEventStore):
         result = await self.provider.execute_query(
             self.queries.get_all_stream_ids_sql()
         )
+        if not result.success:
+            raise EventStoreError("Could not read SQLite event stream IDs")
         return [
             row["stream_id"] if "stream_id" in row else next(iter(row.values()))
             for row in result.rows
@@ -322,14 +481,49 @@ class SqliteEventStore(AbstractEventStore):
 
     async def compact(self, stream_id: str, up_to_version: int) -> int:
         """Purge events for a stream up to (and including) the given version (MF-04)."""
+        if type(up_to_version) is not int or up_to_version < 0:
+            raise ValueError("up_to_version must be a non-negative integer")
         if not self._connected:
             await self.connect()
 
-        result = await self.provider.execute_delete(
-            str(Table(self.config.events_table)),
-            "stream_id = ? AND stream_version <= ?",
-            [stream_id, up_to_version],
-        )
+        async with self.provider.transaction():
+            current_version, previous_prefix = await self._stream_bounds(stream_id)
+            compacted_through = min(up_to_version, current_version)
+            if compacted_through:
+                marker = await self.provider.execute(
+                    self.queries.get_record_compaction_sql(),
+                    [stream_id, compacted_through],
+                )
+                if not marker.success:
+                    raise EventStoreError("Could not record SQLite event compaction")
+            result = await self.provider.execute_delete(
+                self.config.events_table,
+                "stream_id = ? AND stream_version <= ?",
+                [stream_id, up_to_version],
+            )
+            expected_deleted = max(0, compacted_through - previous_prefix)
+            if (
+                not result.success
+                or type(result.affected_rows) is not int
+                or result.affected_rows != expected_deleted
+            ):
+                raise EventStoreError("Could not compact SQLite event stream")
+            if compacted_through:
+                marker_result = await self.provider.execute_query(
+                    self.queries.get_compaction_marker_sql(), [stream_id]
+                )
+                if (
+                    not marker_result.success
+                    or len(marker_result.rows) != 1
+                    or type(marker_result.rows[0].get("compacted_through")) is not int
+                    or marker_result.rows[0]["compacted_through"] < compacted_through
+                ):
+                    raise EventStoreError("Could not verify SQLite event compaction")
+            after_version, after_prefix = await self._stream_bounds(stream_id)
+            if after_version != current_version or after_prefix != max(
+                previous_prefix, compacted_through
+            ):
+                raise EventStoreError("Could not verify SQLite event compaction")
         return result.affected_rows
 
     async def close(self) -> None:

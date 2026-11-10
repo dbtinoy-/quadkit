@@ -68,15 +68,12 @@ def _write_atomic(resolved: Path, data: dict[str, Any]) -> None:
             fh.flush()
             os.fsync(fh.fileno())
         temp.replace(resolved)
-    except OSError as exc:
+    except OSError:
         try:
             temp.unlink()
         except OSError:
             pass
-        raise PluginStateError(
-            "failed to write plugin state",
-            path=str(resolved),
-        ) from exc
+        raise PluginStateError("failed to write plugin state") from None
 
 
 def _fail_open_corrupt(resolved: Path, reason: str) -> set[str]:
@@ -97,14 +94,11 @@ def _fail_open_corrupt(resolved: Path, reason: str) -> set[str]:
         resolved.replace(backup)
         logger.warning(
             "plugins.state.corrupt_file_backed_up",
-            path=str(resolved),
-            backup=str(backup),
             reason=reason,
         )
     except OSError:
         logger.warning(
             "plugins.state.corrupt_file_unreadable",
-            path=str(resolved),
             error="backup_failed",
             reason=reason,
         )
@@ -139,11 +133,11 @@ def load_disabled(path: str | Path | None = None) -> set[str]:
     if version is not None and (
         not isinstance(version, int) or version != _STATE_SCHEMA_VERSION
     ):
-        return _fail_open_corrupt(resolved, f"unsupported_version={version!r}")
+        return _fail_open_corrupt(resolved, "unsupported_schema_version")
 
     disabled = data.get("disabled", [])
     if not isinstance(disabled, list):
-        logger.warning("plugins.state.invalid_shape", path=str(resolved))
+        logger.warning("plugins.state.invalid_shape")
         return set()
     return {str(name) for name in disabled}
 

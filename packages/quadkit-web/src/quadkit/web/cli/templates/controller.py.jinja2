@@ -6,8 +6,8 @@ outcomes as ``Err`` values (R6: absence is a value, never ``None``), the
 controller maps the ``Ok`` arm through to a body, and the Result bridge
 renders any ``Err`` as RFC-9457 ``ProblemDetail``. A handler never probes
 a call result (``is None``, truthiness) — one representation per outcome.
-Even the infallible ``list`` is Result-shaped (its envelope is ``Ok(...)``)
-so one HTTP verb set has exactly one return shape.
+Even the normally infallible ``create``/``list`` repository calls are
+Result-shaped, so one HTTP verb set has exactly one return shape.
 
 {{ class_name }} controller module.
 {% if doc %}
@@ -16,26 +16,55 @@ so one HTTP verb set has exactly one return shape.
 Scaffold: endpoints delegate to ``self.repo`` — wire a repository with
 CRUD methods ({{ ops_enabled | join('/') }}) in your DI provider.
 {% if ops['create'] or ops['update'] %}
-Request bodies are validated through the generated Pydantic DTOs
-(``{{ class_name }}Create`` / ``{{ class_name }}Update``) so field types and
+Request bodies are validated through the generated Pydantic DTO{% if ops['create'] and ops['update'] %}s{% endif %}
+({% if ops['create'] %}``{{ class_name }}Create``{% endif %}{% if ops['create'] and ops['update'] %} / {% endif %}{% if ops['update'] %}``{{ class_name }}Update``{% endif %}) so field types and
 required-ness are enforced before the repository sees them; a body that
 is malformed or fails validation answers 400 as
 ``Err(Invalid{{ class_name }}Error)``.
-{% endif %}"""
+{% if principal_fields %}Ownership fields ({{ principal_fields | join(', ') }}) are assigned from the
+authenticated principal on create — they are absent from the write DTOs, so
+a request body can never spoof them.
+{% endif %}{% if validator_module %}The wired validator (``{{ validator_function }}``) is enforced after DTO
+validation on create/update; a payload breaking a declared rule answers 422
+before any repository write.
+{% endif %}{% endif %}"""
 from __future__ import annotations
 
 from typing import Any
 
-from quadkit.serialization.domain import json_serialize
+{% if datetime_fields %}from functools import partial
+
+from quadkit.web.responses.sql import serialize_sql_row
+{% else %}from quadkit.serialization.domain import json_serialize
+{% endif %}
 {% if write_ops %}from pydantic import ValidationError
 from starlette.requests import Request
 {% endif %}{% if contract_errors %}from quadkit.contracts.exceptions import {{ contract_errors | join(', ') }}
-{% endif %}{% if needs_result %}from quadkit.result import Err, Ok, Result
-{% endif %}from quadkit.web import Controller{% if ops['create'] %}, post{% endif %}{% if ops['list'] or ops['get'] %}, get{% endif %}{% if ops['update'] %}, put{% endif %}{% if ops['delete'] %}, delete{% endif %}
+{% endif %}{% if result_imports %}from quadkit.result import {{ result_imports | join(', ') }}
+{% endif %}from quadkit.web import Controller{% if ops['create'] %}, post{% endif %}{% if ops['list'] or ops['get'] %}, get{% endif %}{% if ops['update'] %}, put{% endif %}{% if ops['delete'] %}, delete{% endif %}{% if ops['list'] %}, query{% endif %}
 # resolves against the app source root (src/{{ repository_module }} by default)
-{% if write_ops %}from {{ models_module }}.{{ model_name }} import {{ class_name }}Create, {{ class_name }}Update
+{% if dto_imports %}from {{ models_module }}.{{ model_name }} import {{ dto_imports | join(', ') }}
 {% endif %}from {{ repository_module }}.{{ model_name }}_repository import {{ class_name }}Repository
+{% if ops['list'] or ops['delete'] %}from quadkit.web.docs.response_models import {% if ops['list'] %}CrudCollectionResponse{% if ops['delete'] %}, {% endif %}{% endif %}{% if ops['delete'] %}CrudDeleteResponse{% endif %}
+{% endif %}{% if ops['list'] %}from quadkit.web.filters.builtin import ValidationErrorFilter
+{% endif %}{% if validator_module %}from {{ validator_module }} import {{ validator_function }}
+{% endif %}
+{% if result_imports %}
+from quadkit.web.docs.generator import OpenAPIGenerator
 
+if getattr(OpenAPIGenerator, "supports_result_error_docs_v1", False) is not True:
+    raise RuntimeError("CRUD Result documentation requires compatible quadkit-web")
+if getattr(OpenAPIGenerator, "supports_response_schema_model_v1", False) is not True:
+    raise RuntimeError("CRUD success documentation requires compatible quadkit-web")
+{% endif %}
+{% if ops['list'] %}
+if getattr(ValidationErrorFilter, "supports_default_validation_docs_v1", False) is not True:
+    raise RuntimeError("CRUD query documentation requires compatible quadkit-web")
+{% endif %}
+{% if datetime_fields %}
+# SQL stores naive UTC; only explicitly declared datetime fields are restored.
+_serialize_row = partial(serialize_sql_row, datetime_fields={{ datetime_fields }})
+{% endif %}
 {% if write_ops %}
 class Invalid{{ class_name }}Error(DomainError):
     """The request body is not a usable {{ class_name }}.
@@ -57,6 +86,40 @@ async def _read_body(request: Request) -> Result[dict[str, Any], Invalid{{ class
     if not isinstance(data, dict) or not data:
         return Err(Invalid{{ class_name }}Error("Request body must be a non-empty JSON object"))
     return Ok(data)
+{% endif %}{% if principal_fields %}
+
+def _principal_subject(request: Request) -> str | None:
+    """The authenticated subject for ownership fields, or ``None``.
+
+    The framework auth surface puts the current user on
+    ``request.state.user`` and the subject id itself on
+    ``request.state.user_id``. The user value's shape depends on the
+    authenticator in play — a stored-record dict, a user object, or
+    bare JWT claims — so the subject is read defensively in that
+    order and a container is never stringified. ``None`` means no
+    subject could be read; a principal-assigned create must then
+    fail closed rather than guess an owner.
+    """
+    state = request.state
+    slot = getattr(state, "user_id", None)
+    if slot is not None and not isinstance(slot, (dict, list, tuple, set, bytes)) and slot:
+        return str(slot)
+    user = getattr(state, "user", None)
+    if user is None:
+        return None
+    if isinstance(user, str):
+        return user or None
+    if isinstance(user, dict):
+        value = user.get("user_id") or user.get("sub") or user.get("subject")
+    else:
+        value = (
+            getattr(user, "user_id", None)
+            or getattr(user, "sub", None)
+            or getattr(user, "subject", None)
+        )
+    if value is None or isinstance(value, (dict, list, tuple, set, bytes)) or not value:
+        return None
+    return str(value)
 {% endif %}
 
 class {{ class_name }}Controller(Controller):
@@ -66,59 +129,100 @@ class {{ class_name }}Controller(Controller):
         super().__init__()
         self.repo = repo
 {% if ops['list'] %}
-    @get("/{{ resource_path }}")
+    @get("/{{ resource_path }}", response_schema_model=CrudCollectionResponse[{{ class_name }}], responses=ValidationErrorFilter.default_documented_responses(), result_errors=[{{ result_errors['list'] | join(', ') }}])
     async def list(
         self,
-        limit: int = 20,
+        limit: int = query(default=20),
     ) -> Result[dict[str, Any], NotFoundError]:
         items = await self.repo.list(limit=limit)
-        return Ok({
-            "items": [json_serialize(item) for item in items],
-            "limit": limit,
-        })
+        return items.map_sync(
+            lambda rows: {
+                "items": [{{ '_serialize_row' if datetime_fields else 'json_serialize' }}(item) for item in rows],
+                "limit": limit,
+            }
+        )
 {% endif %}{% if ops['get'] %}
-    @get("/{{ resource_path }}/{item_id}")
+    @get("/{{ resource_path }}/{item_id}", response_schema_model={{ class_name }}, result_errors=[{{ result_errors['get'] | join(', ') }}])
     async def get(self, item_id: str) -> Result[dict[str, Any], NotFoundError]:
         item = await self.repo.get(item_id)
-        return item.map_sync(json_serialize)
+        return item.map_sync({{ '_serialize_row' if datetime_fields else 'json_serialize' }})
 {% endif %}{% if ops['create'] %}
-    @post("/{{ resource_path }}", status_code=201)
-    async def create(self, request: Request) -> Result[dict[str, Any], Invalid{{ class_name }}Error]:
+    @post("/{{ resource_path }}", status_code=201, request_model={{ class_name }}Create, response_schema_model={{ class_name }}, result_errors=[{{ result_errors['create'] | join(', ') }}])
+    async def create(self, request: Request) -> Result[dict[str, Any], Invalid{{ class_name }}Error{% if principal_fields %} | AuthenticationError{% endif %} | ConflictError | DomainValidationError | NotFoundError]:
         body = await _read_body(request)
         if body.is_err():
-            return body
+            return Err(body.unwrap_err())
         try:
             payload = {{ class_name }}Create(**body.unwrap())
         except ValidationError as exc:
             return Err(
                 Invalid{{ class_name }}Error(f"Invalid {{ class_name }} payload: {exc}")
             )
-        created = await self.repo.create(payload.model_dump(mode="json"))
-        return Ok(json_serialize(created))
+{% if validator_module or principal_fields %}        data = payload.model_dump(mode="json")
+{% if validator_module %}        problems = {{ validator_function }}(data)
+        if problems:
+            return Err(
+                DomainValidationError(
+                    "Invalid {{ class_name }} payload",
+                    errors=[
+                        FieldError(field, message, code="validator_rule")
+                        for field, message in problems.items()
+                    ],
+                )
+            )
+{% endif %}{% if principal_fields %}        subject = _principal_subject(request)
+        if subject is None:
+            return Err(
+                AuthenticationError(
+                    "Creating a {{ class_name }} requires an authenticated principal"
+                )
+            )
+{% for field in principal_fields %}        data["{{ field }}"] = subject
+{% endfor %}{% endif %}        created = await self.repo.create(data)
+{% else %}        created = await self.repo.create(payload.model_dump(mode="json"))
+{% endif %}        # Rebox the narrow repository Result into the handler's wider error union.
+        if created.is_err():
+            return Err(created.unwrap_err())
+        return Ok({{ '_serialize_row' if datetime_fields else 'json_serialize' }}(created.unwrap()))
 {% endif %}{% if ops['update'] %}
-    @put("/{{ resource_path }}/{item_id}")
+    @put("/{{ resource_path }}/{item_id}", request_model={{ class_name }}Update, response_schema_model={{ class_name }}, result_errors=[{{ result_errors['update'] | join(', ') }}])
     async def update(
         self,
         item_id: str,
         request: Request,
-    ) -> Result[dict[str, Any], Invalid{{ class_name }}Error | NotFoundError]:
+    ) -> Result[dict[str, Any], Invalid{{ class_name }}Error | ConflictError | DomainValidationError | NotFoundError]:
         body = await _read_body(request)
         if body.is_err():
-            return body
+            return Err(body.unwrap_err())
         try:
             payload = {{ class_name }}Update(**body.unwrap())
         except ValidationError as exc:
             return Err(
                 Invalid{{ class_name }}Error(f"Invalid {{ class_name }} payload: {exc}")
             )
-        updated = await self.repo.update(
+{% if validator_module %}        data = payload.model_dump(mode="json", exclude_unset=True)
+        problems = {{ validator_function }}(data)
+        if problems:
+            return Err(
+                DomainValidationError(
+                    "Invalid {{ class_name }} payload",
+                    errors=[
+                        FieldError(field, message, code="validator_rule")
+                        for field, message in problems.items()
+                    ],
+                )
+            )
+        updated = await self.repo.update(item_id, data)
+{% else %}        updated = await self.repo.update(
             item_id,
             payload.model_dump(mode="json", exclude_unset=True),
         )
-        return updated.map_sync(json_serialize)
+{% endif %}        if updated.is_err():
+            return Err(updated.unwrap_err())
+        return Ok({{ '_serialize_row' if datetime_fields else 'json_serialize' }}(updated.unwrap()))
 {% endif %}{% if ops['delete'] %}
-    @delete("/{{ resource_path }}/{item_id}")
-    async def delete(self, item_id: str) -> Result[dict[str, str], NotFoundError]:
+    @delete("/{{ resource_path }}/{item_id}", response_schema_model=CrudDeleteResponse, result_errors=[{{ result_errors['delete'] | join(', ') }}])
+    async def delete(self, item_id: str) -> Result[dict[str, str], ConflictError | NotFoundError]:
         deleted = await self.repo.delete(item_id)
         return deleted.map_sync(lambda _done: {"message": "{{ class_name }} deleted"})
 {%- endif %}

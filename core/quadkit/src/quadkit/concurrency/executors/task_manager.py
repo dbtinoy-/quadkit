@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 from typing import TYPE_CHECKING, Any
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
@@ -96,10 +96,9 @@ class TaskManager:
                     ):
                         raise
                     if isinstance(exc, Exception):
-                        self._logger.exception(
+                        self._logger.error(
                             "task_manager.periodic_task_error",
-                            task=name or "unnamed",
-                            error=str(exc),
+                            error_type=safe_error_type(exc),
                         )
                         continue
                     raise
@@ -146,11 +145,6 @@ class TaskManager:
                     timed_out=len(pending),
                     timeout=critical_timeout,
                 )
-                for task in pending:
-                    self._logger.warning(
-                        "task_manager.critical_incomplete",
-                        task=task.get_name(),
-                    )
 
         # Phase 2: Cancel background tasks
         if self._background:
@@ -211,7 +205,6 @@ class TaskManager:
         task.add_done_callback(target_set.discard)
         self._logger.debug(
             "task.created",
-            name=task_name,
             priority="critical" if critical else "background",
         )
         return task

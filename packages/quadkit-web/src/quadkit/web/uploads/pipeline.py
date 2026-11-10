@@ -7,13 +7,15 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from pathlib import Path
+import mimetypes
+from pathlib import Path, PurePosixPath
 from typing import TYPE_CHECKING
 
 import aiofiles
 import aiofiles.os
 
 from quadkit.result import Err, Ok, Result
+from quadkit.web.exceptions import BadRequestError
 
 if TYPE_CHECKING:
     from starlette.datastructures import UploadFile
@@ -64,7 +66,7 @@ class FileUpload:
             base = Path(base_dir).resolve()
             if not resolved.is_relative_to(base):
                 raise ValueError(
-                    f"Path {str(path)!r} escapes base directory {str(base_dir)!r}"
+                    "Upload destination escapes the allowed base directory"
                 )
         await aiofiles.os.makedirs(path.parent, exist_ok=True)
 
@@ -98,7 +100,7 @@ class FileUpload:
             base = Path(base_dir).resolve()
             if not resolved.is_relative_to(base):
                 raise ValueError(
-                    f"Path {str(path)!r} escapes base directory {str(base_dir)!r}"
+                    "Upload destination escapes the allowed base directory"
                 )
         await aiofiles.os.makedirs(path.parent, exist_ok=True)
 
@@ -150,7 +152,7 @@ class FileSizeValidator(AbstractFileValidator):
         if upload.size > self.max_size:
             return Err(
                 FileValidationError(
-                    message=f"File size {upload.size} exceeds maximum {self.max_size}",
+                    message="File exceeds the maximum allowed size",
                 )
             )
         return Ok(None)
@@ -174,8 +176,7 @@ class FileTypeValidator(AbstractFileValidator):
         if upload.content_type.lower() not in self.allowed_types:
             return Err(
                 FileValidationError(
-                    message=f"File type {upload.content_type} not allowed. "
-                    f"Allowed: {self.allowed_types}",
+                    message="File type is not allowed",
                 )
             )
         return Ok(None)
@@ -199,11 +200,150 @@ class FileExtensionValidator(AbstractFileValidator):
         if upload.extension not in self.allowed_extensions:
             return Err(
                 FileValidationError(
-                    message=f"File extension {upload.extension} not allowed. "
-                    f"Allowed: {self.allowed_extensions}",
+                    message="File extension is not allowed",
                 )
             )
         return Ok(None)
+
+
+def sniff_mime_type(data: bytes) -> str | None:
+    """Detect common binary MIME types from magic-byte headers."""
+    if len(data) >= 3 and data[:3] == b"\xff\xd8\xff":
+        return "image/jpeg"
+    if len(data) >= 8 and data[:8] == b"\x89PNG\r\n\x1a\n":
+        return "image/png"
+    if len(data) >= 6 and data[:6] in (b"GIF87a", b"GIF89a"):
+        return "image/gif"
+    if len(data) >= 12 and data[:4] == b"RIFF" and data[8:12] == b"WEBP":
+        return "image/webp"
+    if len(data) >= 5 and data[:5] == b"%PDF-":
+        return "application/pdf"
+    return None
+
+
+_SNIFFED_MIMES: frozenset[str] = frozenset(
+    {
+        "image/jpeg",
+        "image/png",
+        "image/gif",
+        "image/webp",
+        "application/pdf",
+    }
+)
+
+
+class MagicByteValidator(AbstractFileValidator):
+    """Verifies binary file headers match declared or allowed MIME types."""
+
+    def __init__(self, allowed_types: list[str] | tuple[str, ...] | None = None):
+        self._allowed = (
+            frozenset(t.lower() for t in allowed_types)
+            if allowed_types is not None
+            else None
+        )
+
+    async def validate(self, upload: FileUpload) -> Result[None, FileValidationError]:
+        """Read header bytes (rewinding when supported) and verify magic signature."""
+        header = await upload.file.read(16)
+        seek = getattr(upload.file, "seek", None)
+        if callable(seek):
+            maybe_coro = seek(0)
+            if hasattr(maybe_coro, "__await__"):
+                await maybe_coro
+        return validate_magic_bytes(
+            header,
+            declared_content_type=upload.content_type,
+            allowed_types=self._allowed,
+        )
+
+
+def validate_magic_bytes(
+    data: bytes,
+    *,
+    declared_content_type: str | None = None,
+    allowed_types: frozenset[str]
+    | set[str]
+    | list[str]
+    | tuple[str, ...]
+    | None = None,
+) -> Result[None, FileValidationError]:
+    """Validate *data* magic-byte signature against declared and allowed MIME types."""
+    sniffed = sniff_mime_type(data)
+    declared = (declared_content_type or "").lower()
+    allowed_set = (
+        frozenset(t.lower() for t in allowed_types)
+        if allowed_types is not None
+        else None
+    )
+
+    if declared in _SNIFFED_MIMES and sniffed != declared:
+        return Err(
+            FileValidationError(
+                message=(
+                    f"File header signature ({sniffed or 'unknown'}) does not match "
+                    f"declared content type '{declared_content_type}'"
+                )
+            )
+        )
+
+    if allowed_set is not None and sniffed is not None and sniffed not in allowed_set:
+        return Err(
+            FileValidationError(
+                message=f"Detected file type '{sniffed}' is not allowed"
+            )
+        )
+
+    return Ok(None)
+
+
+def validate_upload_metadata(
+    content_type: str,
+    size_bytes: int,
+    *,
+    max_size_bytes: int,
+    allowed_types: list[str] | tuple[str, ...],
+) -> Result[None, FileValidationError]:
+    """Validate upload MIME type and byte size before streaming or presigning."""
+    normalized_allowed = [t.lower() for t in allowed_types]
+    if content_type.lower() not in normalized_allowed:
+        return Err(
+            FileValidationError(
+                message=f"Content type '{content_type}' not allowed",
+            )
+        )
+    if size_bytes > max_size_bytes:
+        return Err(
+            FileValidationError(
+                message=f"File size {size_bytes} exceeds maximum {max_size_bytes} bytes",
+            )
+        )
+    return Ok(None)
+
+
+def validate_upload_bytes(
+    data: bytes,
+    content_type: str,
+    *,
+    max_size_bytes: int,
+    allowed_types: list[str] | tuple[str, ...],
+    verify_magic_bytes: bool = True,
+) -> Result[None, FileValidationError]:
+    """Validate in-memory upload bytes for MIME type, size limit, and magic signature."""
+    meta_res = validate_upload_metadata(
+        content_type,
+        len(data),
+        max_size_bytes=max_size_bytes,
+        allowed_types=allowed_types,
+    )
+    if meta_res.is_err():
+        return meta_res
+    if verify_magic_bytes:
+        return validate_magic_bytes(
+            data,
+            declared_content_type=content_type,
+            allowed_types=allowed_types,
+        )
+    return Ok(None)
 
 
 class FileUploadPipeline:
@@ -243,3 +383,48 @@ class FileUploadPipeline:
         for upload in uploads:
             results.append(await self.process(upload))
         return results
+
+
+SAFE_MEDIA_RESPONSE_HEADERS: dict[str, str] = {
+    "Cross-Origin-Resource-Policy": "cross-origin",
+    "Cache-Control": "public, max-age=86400",
+    "X-Content-Type-Options": "nosniff",
+}
+
+_CANONICAL_MIME_EXTENSIONS: dict[str, str] = {
+    "image/jpeg": ".jpg",
+    "image/jpg": ".jpg",
+    "image/png": ".png",
+    "image/gif": ".gif",
+    "image/webp": ".webp",
+    "application/pdf": ".pdf",
+    "text/plain": ".txt",
+}
+
+
+def extension_for_mime_type(content_type: str | None) -> str:
+    """Return a storage-safe file extension derived from a validated MIME type."""
+    if not content_type:
+        return ""
+    normalized = content_type.split(";", 1)[0].strip().lower()
+    if normalized in _CANONICAL_MIME_EXTENSIONS:
+        return _CANONICAL_MIME_EXTENSIONS[normalized]
+    ext = mimetypes.guess_extension(normalized)
+    if ext == ".jpe":
+        return ".jpg"
+    return ext or ""
+
+
+def sanitize_blob_key(raw_path: str) -> str:
+    """Validate and normalize a relative blob storage key, rejecting traversal attempts."""
+    if (
+        not raw_path
+        or "\x00" in raw_path
+        or "\\" in raw_path
+        or raw_path.startswith("/")
+    ):
+        raise BadRequestError("Invalid storage path")
+    parts = PurePosixPath(raw_path).parts
+    if not parts or any(part in ("", ".", "..") for part in parts):
+        raise BadRequestError("Invalid storage path")
+    return "/".join(parts)

@@ -22,6 +22,9 @@ from quadkit.contracts.cli.generators import (
     pascal_case as pascal_case,
 )
 from quadkit.contracts.cli.generators import (
+    pluralize_identifier as pluralize_identifier,
+)
+from quadkit.contracts.cli.generators import (
     resolve_options as resolve_options,
 )
 from quadkit.contracts.cli.generators import (
@@ -43,6 +46,11 @@ class GeneratorBase:
     (``uv add 'quadkit[codegen]'``); construction, name normalization,
     and guarded file writes work without it.
     """
+
+    #: Whether ``generate`` accepts and honors a structured
+    #: :class:`quadkit.contracts.cli.EntitySpec`. This is explicit opt-in:
+    #: bridges must never infer support merely from ``**options``.
+    supports_entity_spec: bool = False
 
     def __init__(
         self,
@@ -311,6 +319,10 @@ class GeneratorBase:
     @staticmethod
     def _to_snake_case(name: str) -> str:
         return snake_case(name)
+
+    @staticmethod
+    def _pluralize(name: str) -> str:
+        return pluralize_identifier(name)
 
     @classmethod
     def _validate_component_name(cls, name: str) -> str:

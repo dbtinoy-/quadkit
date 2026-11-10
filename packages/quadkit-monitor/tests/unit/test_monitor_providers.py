@@ -97,8 +97,10 @@ class TestObservabilityProvider:
         container = MagicMock()
         singleton_results = {}
 
-        def capture_singleton(protocol, factory):
-            if callable(factory):
+        def capture_singleton(protocol, factory=None, *, instance=None):
+            if instance is not None:
+                singleton_results[protocol] = instance
+            elif callable(factory):
                 singleton_results[protocol] = factory()
             else:
                 singleton_results[protocol] = factory
@@ -175,9 +177,7 @@ class TestMonitorProvider:
         """A provider always exposes a usable tracer (in-memory default)."""
         assert provider.tracer is not None
 
-    def test_metrics_collector_initialized(
-        self, provider: MonitorProvider
-    ) -> None:
+    def test_metrics_collector_initialized(self, provider: MonitorProvider) -> None:
         assert provider.metrics_collector is not None
 
     def test_trace_provider_initialized_with_explicit_config(
@@ -217,11 +217,8 @@ class TestMonitorProvider:
         container = MagicMock()
         singleton_results = {}
 
-        def capture_singleton(protocol, factory):
-            if callable(factory):
-                singleton_results[protocol] = factory
-            else:
-                singleton_results[protocol] = factory
+        def capture_singleton(protocol, factory=None, *, instance=None):
+            singleton_results[protocol] = instance if instance is not None else factory
 
         container.singleton = capture_singleton
 
@@ -290,15 +287,17 @@ class TestMonitorProvider:
 
         await provider.boot(container)
 
-        assert provider.metrics_collector.get_metric(
-            "quadkit_requests_total"
-        ) is not None
-        assert provider.metrics_collector.get_metric(
-            "quadkit_active_connections"
-        ) is not None
-        assert provider.metrics_collector.get_metric(
-            "quadkit_request_duration_seconds"
-        ) is not None
+        assert (
+            provider.metrics_collector.get_metric("quadkit_requests_total") is not None
+        )
+        assert (
+            provider.metrics_collector.get_metric("quadkit_active_connections")
+            is not None
+        )
+        assert (
+            provider.metrics_collector.get_metric("quadkit_request_duration_seconds")
+            is not None
+        )
 
     @pytest.mark.asyncio
     async def test_shutdown_calls_backend_shutdown(
@@ -342,17 +341,13 @@ class TestMonitorProvider:
         warning_spy.warning.assert_called_once()
         assert warning_spy.warning.call_args.kwargs["error"] == "Connection failed"
 
-    def test_record_request_increments_counter(
-        self, provider: MonitorProvider
-    ) -> None:
+    def test_record_request_increments_counter(self, provider: MonitorProvider) -> None:
         provider.record_request("GET", "/test", 0.1, 200)
 
         counter = provider.metrics_collector.get_metric("quadkit_requests_total")
         assert counter is not None
 
-    def test_record_request_records_histogram(
-        self, provider: MonitorProvider
-    ) -> None:
+    def test_record_request_records_histogram(self, provider: MonitorProvider) -> None:
         provider.record_request("GET", "/test", 0.5, 200)
 
         histogram = provider.metrics_collector.get_metric(
@@ -382,7 +377,9 @@ class TestMonitorProvider:
         assert counter is not None
         assert provider.metrics_collector.get_metric("test_counter") is not None
 
-    def test_create_gauge_delegates_to_collector(self, provider: MonitorProvider) -> None:
+    def test_create_gauge_delegates_to_collector(
+        self, provider: MonitorProvider
+    ) -> None:
         gauge = provider.create_gauge("test_gauge", "Test gauge")
 
         assert gauge is not None
@@ -407,7 +404,9 @@ class TestMonitorProviderFromConfig:
 
         config = MonitorConfig()
 
-        with patch("quadkit.monitor.di.factories.create_provider_from_config") as factory:
+        with patch(
+            "quadkit.monitor.di.factories.create_provider_from_config"
+        ) as factory:
             mock_provider = MagicMock(spec=MonitorProvider)
             factory.return_value = mock_provider
 
@@ -466,3 +465,18 @@ class TestHookEventHelperFunctions:
         result = _extract_payload_attributes(payload)
 
         assert result == {"payload.simple": "value"}
+
+
+def test_module_is_global_so_observability_exports_are_visible_app_wide():
+    """The monitor's exports must be visible outside its importers.
+
+    Non-global exports raise ``QK_ERR_MOD_005`` for any module that does not
+    import the monitor — a downstream service's infrastructure module could not
+    resolve ``HealthCheckRegistryProtocol``, so its health checks were never
+    registered.
+    """
+    from quadkit.monitor import MonitorModule
+
+    assert MonitorModule.configure().is_global is True
+    assert MonitorModule.with_slo().is_global is True
+    assert MonitorModule.stub().is_global is True

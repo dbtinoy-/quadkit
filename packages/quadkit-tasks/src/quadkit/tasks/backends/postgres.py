@@ -14,7 +14,7 @@ from typing import TYPE_CHECKING, Any
 import uuid
 
 from quadkit.contracts.data.identifiers import table as _sql_table
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.result import Ok, Result
 from quadkit.serialization import dumps, loads
 from quadkit.tasks.config import PostgresTaskConfig
@@ -146,7 +146,7 @@ class PostgresTaskQueue:
                 [task_id, dumps(payload), priority],
             )
 
-        logger.debug("Enqueued task %s", task_id)
+        logger.debug("task.enqueued")
         return task_id
 
     async def _dequeue(self) -> dict[str, Any] | None:
@@ -212,7 +212,7 @@ class PostgresTaskQueue:
                 [job_id],
             )
 
-        logger.debug("Acknowledged task %s", job_id)
+        logger.debug("task.acknowledged")
 
     async def _nack(
         self, job_id: str, *, requeue: bool, delay_seconds: int = 0
@@ -243,7 +243,7 @@ class PostgresTaskQueue:
                     """,  # noqa: S608 -- dialect-quoted Table identifier from validated config
                     [job_id],
                 )
-            logger.debug("Nacked task %s (requeue=False, marked failed)", job_id)
+            logger.debug("task.nacked", requeued=False)
             return
 
         async with self._provider.scoped_context():
@@ -257,7 +257,7 @@ class PostgresTaskQueue:
                 [job_id, delay_seconds],
             )
 
-        logger.debug("Nacked task %s (delay=%s)", job_id, delay_seconds)
+        logger.debug("task.nacked", requeued=True, delay_seconds=delay_seconds)
 
     async def requeue_stalled(self, visibility_timeout_seconds: int = 60) -> int:
         """Requeue tasks that have been in_progress beyond visibility timeout.
@@ -307,8 +307,11 @@ class PostgresTaskQueue:
                 return row_count
             try:
                 return int(str(result).rsplit(maxsplit=1)[-1])
-            except (ValueError, IndexError) as e:
-                logger.warning("Failed to parse affected rows count: %s", e)
+            except (ValueError, IndexError) as exc:
+                logger.warning(
+                    "affected_rows_count_parse_failed",
+                    error_type=safe_error_type(exc),
+                )
                 return 0
 
         return _count(res_failed) + _count(res_requeued)

@@ -6,14 +6,61 @@ Extracted from ``worker.py`` to keep that module under the 500-LOC limit.
 from __future__ import annotations
 
 import inspect
-from typing import TYPE_CHECKING, Any, get_type_hints
+import types
+from typing import (
+    TYPE_CHECKING,
+    Annotated,
+    Any,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 
 if TYPE_CHECKING:
     from collections.abc import Callable
 
 logger = get_logger(__name__)
+
+_PRIMITIVE_JOB_ARG_TYPES: tuple[type[Any], ...] = (
+    str,
+    int,
+    float,
+    bool,
+    bytes,
+    dict,
+    list,
+    tuple,
+    set,
+    frozenset,
+)
+
+
+def _is_service_annotation(annotation: Any) -> bool:
+    """Return True if *annotation* names a DI-resolvable class or ``Annotated`` binding."""
+    if get_origin(annotation) is Annotated:
+        args = get_args(annotation)
+        return bool(
+            args
+            and inspect.isclass(args[0])
+            and args[0] not in _PRIMITIVE_JOB_ARG_TYPES
+        )
+    return inspect.isclass(annotation) and annotation not in _PRIMITIVE_JOB_ARG_TYPES
+
+
+def _extract_optional_service_type(annotation: Any) -> Any:
+    """Return the service annotation inside ``Svc | None`` / ``Optional[Svc]``, or None."""
+    if get_origin(annotation) not in (Union, types.UnionType):
+        return None
+    non_none = [arg for arg in get_args(annotation) if arg is not type(None)]
+    if len(non_none) != 1:
+        return None
+    candidate = non_none[0]
+    if _is_service_annotation(candidate):
+        return candidate
+    return None
 
 
 async def resolve_handler_dependencies(
@@ -48,7 +95,15 @@ async def resolve_handler_dependencies(
         # Unwrap staticmethod if present
         if hasattr(inner, "__func__"):
             inner = inner.__func__
+        if inner is handler:
+            break
         handler = inner
+
+    cls_handler: Any = handler
+    is_class_task = inspect.isclass(handler) and callable(
+        getattr(handler, "execute", None)
+    )
+    signature_target: Any = cls_handler.execute if is_class_task else handler
 
     if container is None:
         _log.debug(
@@ -63,15 +118,24 @@ async def resolve_handler_dependencies(
     )
 
     try:
-        sig = inspect.signature(handler)
+        sig = inspect.signature(signature_target)
         _log.debug("Handler %s signature: %s", original_handler.__name__, sig)
     except (ValueError, TypeError) as e:
-        _log.error("Failed to get signature for handler %s: %s", handler.__name__, e)
+        _log.error(
+            "task_handler_signature_unavailable",
+            error_type=safe_error_type(e),
+        )
         return list(provided_args), provided_kwargs
+
+    params = [
+        (param_name, param)
+        for idx, (param_name, param) in enumerate(sig.parameters.items())
+        if not (is_class_task and idx == 0 and param_name == "self")
+    ]
 
     # Build a set of parameter names that are already provided
     provided_param_names = set()
-    for param_name in list(sig.parameters.keys())[: len(provided_args)]:
+    for param_name, _ in params[: len(provided_args)]:
         provided_param_names.add(param_name)
     provided_param_names.update(provided_kwargs.keys())
 
@@ -83,13 +147,13 @@ async def resolve_handler_dependencies(
     _log.debug(
         "Handler %s has %d parameters, provided args: %d, provided kwargs: %s",
         original_handler.__name__,
-        len(sig.parameters),
+        len(params),
         len(provided_args),
         list(provided_kwargs.keys()),
     )
 
     # Iterate through parameters and resolve missing ones from container
-    for param_name, param in sig.parameters.items():
+    for param_name, param in params:
         if param_name in provided_param_names:
             continue
         if param.kind in (
@@ -106,9 +170,11 @@ async def resolve_handler_dependencies(
 
         # Handle string annotations (forward references)
         if isinstance(annotation, str):
-            # Try to resolve the string to an actual type using get_type_hints
+            # Try to resolve the string to an actual type using get_type_hints.
+            # Pass include_extras=True so Annotated[..., Named("...")] markers
+            # survive PEP 563 forward-reference evaluation.
             try:
-                hints = get_type_hints(handler)
+                hints = get_type_hints(signature_target, include_extras=True)
                 if param_name in hints:
                     annotation = hints[param_name]
                 else:
@@ -121,22 +187,21 @@ async def resolve_handler_dependencies(
                 # imported under ``TYPE_CHECKING`` together with
                 # ``from __future__ import annotations``.
                 _log.warning(
-                    "task_dependency_annotation_unresolvable handler=%s param=%s "
-                    "annotation=%r error=%s — import the type at runtime "
-                    "(not under TYPE_CHECKING) so the container can inject it",
-                    original_handler.__name__,
-                    param_name,
-                    annotation,
-                    e,
+                    "task_dependency_annotation_unresolvable",
+                    error_type=safe_error_type(e),
                 )
                 continue
 
-        # A parameter with a default whose annotation is not a class — an
+        # A parameter with a default whose annotation is not a service — an
         # ``Optional[str]`` job argument, a ``list[int] | None`` — is the
-        # job's to pass, not the container's to resolve. Asking the container
-        # for ``str | None`` could never succeed and logged a line per job.
-        if param.default is not inspect.Parameter.empty and not inspect.isclass(
-            annotation
+        # job's to pass, not the container's to resolve. However, an optional
+        # service dependency ``Svc | None = None`` unwraps cleanly to ``Svc``.
+        optional_service = _extract_optional_service_type(annotation)
+        if optional_service is not None:
+            annotation = optional_service
+        elif (
+            param.default is not inspect.Parameter.empty
+            and not _is_service_annotation(annotation)
         ):
             _log.debug(
                 "Skipping param %s - job argument with a default, not a service",
@@ -164,23 +229,18 @@ async def resolve_handler_dependencies(
                 )
         except Exception as e:
             # A required service the container cannot provide will dead-letter
-            # the job; an optional one is a quiet default. Log accordingly
-            # instead of one ``info`` line per parameter per execution.
+            # the job; an optional one is a quiet default. Log only static
+            # events and the exception category to avoid exposing job context.
             if param.default is inspect.Parameter.empty:
                 _log.warning(
-                    "task_dependency_unresolved handler=%s param=%s annotation=%r error=%s",
-                    original_handler.__name__,
+                    "task_dependency_unresolved param=%s error_type=%s",
                     param_name,
-                    annotation,
-                    e,
+                    safe_error_type(e),
                 )
             else:
                 _log.debug(
-                    "Could not resolve optional dependency %s (type: %s) for handler %s: %s",
-                    param_name,
-                    annotation,
-                    original_handler.__name__,
-                    e,
+                    "task_optional_dependency_unresolved",
+                    error_type=safe_error_type(e),
                 )
 
     return resolved_args, resolved_kwargs

@@ -8,19 +8,57 @@ from __future__ import annotations
 
 from typing import Any
 import uuid as _uuid
-{% if needs_datetime %}from datetime import datetime
+{% if json_fields %}import json as _json
+{% endif %}{% if needs_datetime %}from datetime import datetime
 {% endif %}
 from quadkit import clock
 from quadkit.contracts import DatabaseProviderProtocol
-{% if not exceptions_first_party %}from {{ exceptions_module }} import {{ not_found_error }}
+from quadkit.contracts.exceptions import ConflictError{% if has_foreign_keys %}, FieldError, ValidationError{% endif %}{% if exceptions_is_contracts %}, {{ not_found_error }}{% endif %}
+{% if not exceptions_first_party and not exceptions_is_contracts %}from {{ exceptions_module }} import {{ not_found_error }}
 {% endif %}from quadkit.result import Err, Ok, Result
 from quadkit.serialization.domain import json_serialize
+from quadkit.sql.exceptions import DuplicateKeyError, ForeignKeyError, IntegrityError
 from quadkit.sql.repositories.generic_repository import GenericRepository
 {% if exceptions_first_party %}
 
 from {{ exceptions_module }} import {{ not_found_error }}
-{% endif %}
+{% endif %}{% if has_foreign_keys %}
 
+#: Physical foreign keys: field name -> ``"<table>.<column>"`` target.
+_FOREIGN_KEYS = {
+{% for fk in foreign_keys %}    "{{ fk.field }}": "{{ fk.target }}",
+{% endfor %}}
+
+
+def _reference_error(data: dict[str, Any]) -> ValidationError:
+    """The 422 a create/update answers when a referenced row is missing.
+
+    The database reports *that* a foreign key failed, not which one; the
+    offending field is named only when exactly one foreign-key field in
+    the payload is non-null, so the identification is always exact.
+    """
+    named = [name for name in _FOREIGN_KEYS if data.get(name) is not None]
+    if len(named) == 1:
+        field = named[0]
+        return ValidationError(
+            "{{ entity_name }} references a row that does not exist",
+            errors=[
+                FieldError(
+                    field,
+                    f"references a missing {_FOREIGN_KEYS[field]} row",
+                    code="reference_missing",
+                )
+            ],
+        )
+    return ValidationError("{{ entity_name }} references a row that does not exist")
+{% endif %}{% if write_only_fields %}
+#: Write-only fields: accepted on write, stripped from every serialized row.
+_WRITE_ONLY_FIELDS = frozenset([{% for name in write_only_fields %}"{{ name }}"{% if not loop.last %}, {% endif %}{% endfor %}])
+{% endif %}{% if json_fields %}
+#: JSON columns: stored as JSON text (the providers encode dict/list
+#: values on write), hydrated back to values on read.
+_JSON_FIELDS = frozenset([{% for name in json_fields %}"{{ name }}"{% if not loop.last %}, {% endif %}{% endfor %}])
+{% endif %}
 
 class {{ entity_name }}Entity:
     """{{ entity_name }} row entity (plain attrs; swap for a model later)."""
@@ -38,11 +76,18 @@ class _{{ repo_name }}Inner(GenericRepository[{{ entity_name }}Entity, str]):
         """Row dict via the framework serializer (datetime/UUID/enum-safe)."""
         serialized = json_serialize(entity)
         if isinstance(serialized, dict):
-            return serialized
+{% if write_only_fields %}            for write_only in _WRITE_ONLY_FIELDS:
+                serialized.pop(write_only, None)
+{% endif %}            return serialized
         return {"value": serialized}
 
     def _row_to_entity(self, row: dict[str, Any]) -> {{ entity_name }}Entity:
-        return self.entity_class(**dict(row))
+{% if json_fields %}        data = dict(row)
+        for json_field in _JSON_FIELDS:
+            value = data.get(json_field)
+            if isinstance(value, str):
+                data[json_field] = _json.loads(value)
+        return self.entity_class(**data){% else %}        return self.entity_class(**dict(row)){% endif %}
 
 
 class {{ repo_name }}Repository:
@@ -64,22 +109,45 @@ class {{ repo_name }}Repository:
 
     def _prepare(self, data: dict[str, Any]) -> dict[str, Any]:
         row = dict(data)
-        row.setdefault("{{ key_field }}", _uuid.uuid4().hex)
+        row.setdefault("{{ key_field }}", str(_uuid.uuid4()))
         now = clock.now().isoformat()
         row.setdefault("created_at", now)
         row["updated_at"] = now
         return row
 
-    async def create(self, data: dict[str, Any]) -> {{ entity_name }}Entity:
+    async def create(
+        self, data: dict[str, Any]
+    ) -> Result[{% if write_only_fields %}dict[str, Any]{% else %}{{ entity_name }}Entity{% endif %}, ConflictError | {% if has_foreign_keys %}ValidationError | {% endif %}{{ not_found_error }}]:
+        """Insert a row, mapping integrity outcomes to domain errors.
+
+        A CRUD surface has one return shape: the new row travels as
+        ``Ok(entity)`` like every sibling verb (R6). Expected integrity
+        outcomes travel the same way — a missing reference is a 422
+        ``ValidationError``, a unique/constraint collision a 409
+        ``ConflictError`` — instead of surfacing as unhandled 500s.
+        Harder faults stay on the throw path.{% if write_only_fields %} The entity
+        has write-only fields, so the created row travels as its serialized
+        public shape: a write-only value never travels back out.{% endif %}"""
         row = self._prepare(data)
-        await self._provider.execute_insert("{{ table_name }}", row)
+        try:
+            await self._provider.execute_insert("{{ table_name }}", row)
+        except {% if has_foreign_keys %}ForeignKeyError:
+            return Err(_reference_error(row))
+        except {% endif %}DuplicateKeyError:
+            return Err(
+                ConflictError("{{ entity_name }} violates a unique constraint")
+            )
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ entity_name }} violates a database constraint")
+            )
         found = await self._inner.find_by_id(row["{{ key_field }}"])
         if found is None:
             raise RuntimeError(
                 "Insert succeeded but fetch failed for {{ table_name }}:"
                 + str(row["{{ key_field }}"])
             )
-        return found
+        return Ok({% if write_only_fields %}self._inner._serialize_entity(found){% else %}found{% endif %})
 
     async def get(self, key: str) -> Result[dict[str, Any], {{ not_found_error }}]:
         """A row that is not there is an expected outcome: absence travels
@@ -91,36 +159,68 @@ class {{ repo_name }}Repository:
             )
         return Ok(self._inner._serialize_entity(entity))
 
-    async def list(self, limit: int = 50) -> list[dict[str, Any]]:
+    async def list(
+        self, limit: int = 50
+    ) -> Result[list[dict[str, Any]], {{ not_found_error }}]:
+        """An empty page is a value, and it travels as ``Ok([])``: list joins
+        the Result surface so callers never special-case one verb (R6)."""
         entities = await self._inner.find(limit=limit)
-        return [self._inner._serialize_entity(e) for e in entities]
+        return Ok([self._inner._serialize_entity(e) for e in entities])
 
     async def update(
         self, key: str, data: dict[str, Any]
-    ) -> Result[dict[str, Any], {{ not_found_error }}]:
+    ) -> Result[dict[str, Any], ConflictError | {% if has_foreign_keys %}ValidationError | {% endif %}{{ not_found_error }}]:
         existing = await self._inner.find_by_id(key)
         if existing is None:
             return Err(
                 {{ not_found_error }}(f"{{ entity_name }} not found with id: {key}")
             )
-        async with self._provider.transaction():
-            row = {
-                **data,
-                "{{ key_field }}": key,
-                "updated_at": clock.now().isoformat(),
-            }
-            await self._provider.execute_update(
-                "{{ table_name }}", row, '"{{ key_field }}" = ?', [key]
+        try:
+            async with self._provider.transaction():
+                row = {
+                    **data,
+                    "{{ key_field }}": key,
+                    "updated_at": clock.now().isoformat(),
+                }
+                await self._provider.execute_update(
+                    "{{ table_name }}", row, '"{{ key_field }}" = ?', [key]
+                )
+        except {% if has_foreign_keys %}ForeignKeyError:
+            return Err(_reference_error(data))
+        except {% endif %}DuplicateKeyError:
+            return Err(
+                ConflictError("{{ entity_name }} violates a unique constraint")
             )
-        return await self.get(key)
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ entity_name }} violates a database constraint")
+            )
+        # Rebox the read outcome into this method's wider error union. Result
+        # is invariant; returning get() directly would narrow the error type.
+        result = await self.get(key)
+        if result.is_err():
+            return Err(result.unwrap_err())
+        return Ok(result.unwrap())
 
-    async def delete(self, key: str) -> Result[bool, {{ not_found_error }}]:
+    async def delete(self, key: str) -> Result[bool, ConflictError | {{ not_found_error }}]:
         """Deleting a row that is not there is an expected outcome, so it
         travels as ``Err({{ not_found_error }})`` — one named error type for the
         outcome, defined once, instead of a truthiness every caller must
-        re-read (R6). Harder faults (a dead connection) stay on the throw
-        path."""
-        removed = await self._inner.delete_by_id(key)
+        re-read (R6). A delete other rows restrict is likewise expected:
+        it travels as ``Err(ConflictError)`` (409). Harder faults (a dead
+        connection) stay on the throw path."""
+        try:
+            removed = await self._inner.delete_by_id(key)
+        except ForeignKeyError:
+            return Err(
+                ConflictError(
+                    f"{{ entity_name }} {key} is still referenced by other rows"
+                )
+            )
+        except IntegrityError:
+            return Err(
+                ConflictError("{{ entity_name }} violates a database constraint")
+            )
         if not removed:
             return Err(
                 {{ not_found_error }}(f"{{ entity_name }} not found with id: {key}")

@@ -39,9 +39,15 @@ class MetricGenerator(GeneratorBase):
         """
         metric_name = self._to_pascal_case(name)
         metric_snake = self._to_snake_case(name)
+        unit = str(options.get("unit", "ms")).strip() or "ms"
+        description = (
+            str(options.get("description", "")).strip() or f"The {metric_name} metric"
+        )
         context: dict[str, Any] = {
             "metric_name": metric_name,
             "metric_name_snake": metric_snake,
+            "unit_literal": repr(unit),
+            "description_literal": repr(description),
         }
         content = self.render_template("metric.py.jinja2", context)
         file_path = self.output_dir / f"{metric_snake}_metric.py"

@@ -72,6 +72,10 @@ class DatabaseDriver(DatabaseProviderProtocol, ABC):
         self.query_executor = self._create_query_executor(query_logger)
         self.crud_operations = self._create_crud_operations()
         self.transaction_manager = self._create_transaction_manager()
+        self.connection_manager.transaction_manager = self.transaction_manager
+        self.connection_manager.set_transaction_context_validator(
+            self.transaction_manager._require_transaction_owner
+        )
         self.schema_manager = self._create_schema_manager()
         self.query_builder_manager = self._create_query_builder_manager()
         self.health_monitor = self._create_health_monitor()
@@ -184,6 +188,9 @@ class DatabaseDriver(DatabaseProviderProtocol, ABC):
                 super().__init__(connection_manager)
                 self.provider = provider
 
+            def _check_outer_transaction_boundary(self, connection: Any) -> None:
+                self.provider._check_outer_transaction_boundary(connection)
+
             async def _begin_transaction_raw(
                 self, connection: Any, isolation: Any | None = None
             ) -> None:
@@ -258,6 +265,13 @@ class DatabaseDriver(DatabaseProviderProtocol, ABC):
         params: list[Any] | None = None,
     ) -> int:
         """Execute INSERT/UPDATE/DELETE and return affected rows (implementation-specific)"""
+
+    def _check_outer_transaction_boundary(self, connection: Any) -> None:
+        """Optionally reject physical ambient work before a managed BEGIN.
+
+        The default supplies no physical-ownership guarantee for custom
+        drivers or adapters.
+        """
 
     @abstractmethod
     async def _begin_transaction_raw(
@@ -471,10 +485,24 @@ class DatabaseDriver(DatabaseProviderProtocol, ABC):
 
     async def table_exists(self, table_name: str) -> bool:
         """Check if a table exists"""
+        import inspect
+
+        inner = getattr(self, "provider", None)
+        if inner is not None and inner is not self:
+            fn = getattr(inner, "table_exists", None)
+            if inspect.iscoroutinefunction(fn):
+                return bool(await fn(table_name))
         return await self.schema_manager.table_exists(table_name)
 
     async def get_table_columns(self, table_name: str) -> list[dict[str, Any]]:
         """Get column information for a table"""
+        import inspect
+
+        inner = getattr(self, "provider", None)
+        if inner is not None and inner is not self:
+            fn = getattr(inner, "get_table_columns", None)
+            if inspect.iscoroutinefunction(fn):
+                return list(await fn(table_name))
         return await self.schema_manager.get_table_columns(table_name)
 
     async def create_table(self, table_name: str, columns: dict[str, str]) -> None:

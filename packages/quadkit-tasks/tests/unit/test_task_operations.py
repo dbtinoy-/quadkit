@@ -6,6 +6,8 @@ from typing import Any
 
 import pytest
 
+from quadkit.contracts.infra.tasks.exceptions import TaskQueueError
+from quadkit.result import Ok, Result
 from quadkit.tasks.decorators import scheduled
 from quadkit.tasks.exceptions import TaskRegistrationError
 from quadkit.tasks.models.job import JobProtocol
@@ -15,8 +17,9 @@ class _FakeQueue:
     def __init__(self) -> None:
         self.enqueued: list[JobProtocol] = []
 
-    async def enqueue(self, job: JobProtocol) -> None:
+    async def enqueue(self, job: JobProtocol) -> Result[str, TaskQueueError]:
         self.enqueued.append(job)
+        return Ok(job.id)
 
 
 def _job() -> JobProtocol:
@@ -37,7 +40,9 @@ class _FakeScheduler:
         self.unscheduled: list[str] = []
         self.scheduled_jobs: dict[str, Any] = {}
 
-    def schedule_job_sync(self, template: Any, cron: str, job_id: str | None) -> str | None:
+    def schedule_job_sync(
+        self, template: Any, cron: str, job_id: str | None
+    ) -> str | None:
         self.scheduled.append((template, cron, job_id))
         return job_id or "scheduled-id"
 
@@ -73,6 +78,7 @@ def _provider(
 
 class TestRegisterHandler:
     """Operations-mixin behavior on a real TaskProvider."""
+
     def test_registers_and_refreshes(self) -> None:  # noqa: D102
         p = _provider(worker_pool=_FakeWorkerPool())
 
@@ -110,6 +116,7 @@ class TestRegisterHandler:
 
 class TestIdempotencyBuilders:
     """Operations-mixin behavior on a real TaskProvider."""
+
     def test_build_idempotency_manager(self) -> None:  # noqa: D102
         from quadkit.tasks.execution.manager import IdempotencyManager
 
@@ -145,6 +152,7 @@ class TestIdempotencyBuilders:
 
 class TestRegisterScheduledTask:
     """Operations-mixin behavior on a real TaskProvider."""
+
     def test_missing_task_name_raises(self) -> None:  # noqa: D102
         p = _provider()
 
@@ -183,7 +191,9 @@ class TestRegisterScheduledTask:
 
     def test_scheduling_failure_rolls_back(self) -> None:  # noqa: D102
         class _FailingScheduler(_FakeScheduler):
-            def schedule_job_sync(self, template: Any, cron: str, job_id: str | None) -> str | None:
+            def schedule_job_sync(
+                self, template: Any, cron: str, job_id: str | None
+            ) -> str | None:
                 raise RuntimeError("sched boom")
 
         sched = _FailingScheduler()
@@ -215,6 +225,7 @@ class TestRegisterScheduledTask:
 
 class TestEnqueueAndScheduling:
     """Operations-mixin behavior on a real TaskProvider."""
+
     @pytest.mark.asyncio
     async def test_enqueue_job_returns_id(self) -> None:  # noqa: D102
         p = _provider()
@@ -254,6 +265,7 @@ class TestEnqueueAndScheduling:
 
 class TestStatsAndRefresh:
     """Operations-mixin behavior on a real TaskProvider."""
+
     def test_get_worker_stats(self) -> None:  # noqa: D102
         pool = _FakeWorkerPool()
         p = _provider(worker_pool=pool)

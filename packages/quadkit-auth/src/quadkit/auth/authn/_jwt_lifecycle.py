@@ -37,8 +37,8 @@ class _JWTLifecycleMixin(_JWTRefreshMixin):
 
     # ── Attributes set by JWTTokenManager.__init__ ───────────────────────────
     algorithm: str
-    access_expiration_hours: int
-    refresh_expiration_days: int
+    access_expiration_hours: float
+    refresh_expiration_days: float
     _required_audience: str | None
     _binding_config: TokenBindingConfig | None
     _blacklist_mgr: JWTBlacklist

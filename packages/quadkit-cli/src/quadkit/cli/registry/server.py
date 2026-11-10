@@ -147,14 +147,16 @@ class GranianBackend(ServerBackend):
             config.host,
             "--port",
             str(config.port),
-            config.entry_point,
         ]
+        if config.factory:
+            cmd.append("--factory")
+        cmd.append(config.entry_point)
         if config.workers > 1:
             cmd.extend(["--workers", str(config.workers)])
         return cmd
 
     def build_dev_command(self, config: ServerConfig) -> list[str]:
-        return [
+        cmd = [
             "granian",
             "--interface",
             "asgi",
@@ -163,8 +165,11 @@ class GranianBackend(ServerBackend):
             "--port",
             str(config.port),
             "--reload",
-            config.entry_point,
         ]
+        if config.factory:
+            cmd.append("--factory")
+        cmd.append(config.entry_point)
+        return cmd
 
     def is_available(self) -> bool:
         return self.get_binary() is not None

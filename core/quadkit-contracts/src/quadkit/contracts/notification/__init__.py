@@ -9,7 +9,11 @@ from quadkit.contracts.notification.delivery import (
     DeliveryStoreProtocol,
 )
 from quadkit.contracts.notification.errors import NotificationError
-from quadkit.contracts.notification.inbox import InboxMessage, InboxStoreProtocol
+from quadkit.contracts.notification.inbox import (
+    IdempotentInboxStoreProtocol,
+    InboxMessage,
+    InboxStoreProtocol,
+)
 from quadkit.contracts.notification.protocols import (
     DeliveryChannelProtocol,
     DeliveryDispatcherProtocol,
@@ -30,6 +34,7 @@ __all__ = [
     "DeliveryRecord",
     "DeliveryStatus",
     "DeliveryStoreProtocol",
+    "IdempotentInboxStoreProtocol",
     "InboxMessage",
     "InboxStoreProtocol",
     "NotificationError",

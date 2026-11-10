@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Literal, cast
 
 from quadkit.contracts.core import HealthCheckResult, HealthStatus, ProviderPriority
+from quadkit.contracts.infra.cache import CacheBackendProtocol
 from quadkit.contracts.infra.redis import RedisClientProtocol
 from quadkit.contracts.web import WebRateLimiterProtocol
 from quadkit.di.provider import Provider
@@ -115,18 +116,24 @@ class RateLimitProvider(Provider):
             logger.info("RateLimitProvider started (memory backend)")
             return
 
+        cache_backend: CacheBackendProtocol | None = None
         if self.redis_client is None:
             self.redis_client = await resolve_redis_client(container)
             if self.redis_client is None:
-                logger.warning(
-                    "rate_limit_redis_client_missing",
-                    hint=(
-                        'register RedisClientProtocol or a "redis_client" '
-                        "binding, or use the memory backend"
-                    ),
-                )
+                try:
+                    cache_backend = await container.resolve(CacheBackendProtocol)
+                except Exception:  # noqa: BLE001 — optional fallback
+                    cache_backend = None
+                if cache_backend is None:
+                    logger.warning(
+                        "rate_limit_redis_client_missing",
+                        hint=(
+                            'register RedisClientProtocol, CacheBackendProtocol, or a "redis_client" '
+                            "binding, or use the memory backend"
+                        ),
+                    )
 
-        self.limiter = RateLimiter(self.redis_client)
+        self.limiter = RateLimiter(self.redis_client, cache_backend=cache_backend)
         logger.info("RateLimitProvider started")
 
     async def shutdown(self) -> None:

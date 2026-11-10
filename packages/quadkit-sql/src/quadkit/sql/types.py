@@ -6,6 +6,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, TypeAlias, TypeVar
 
+from quadkit.contracts.cli.generators import pluralize_identifier
 from quadkit.contracts.core import JSON, HealthStatus
 from quadkit.contracts.data.sql.database import IsolationLevel
 from quadkit.domain import DomainModel
@@ -147,7 +148,7 @@ class Entity(DomainModel):
         table_name_attr = getattr(cls, "__tablename__", None)
         if table_name_attr:
             return str(table_name_attr)
-        return cls.__name__.lower() + "s"
+        return pluralize_identifier(cls.__name__)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert entity to dictionary."""

@@ -7,6 +7,9 @@ from __future__ import annotations
 
 from typing import Any, Protocol, runtime_checkable
 
+from quadkit.contracts.core.result import Result
+from quadkit.contracts.exceptions import AuthorizationError
+
 
 @runtime_checkable
 class AuthenticatorProtocol(Protocol):
@@ -40,8 +43,8 @@ class AuthorizerProtocol(Protocol):
         user: Any,
         action: str,
         resource: Any,
-    ) -> bool:
-        """Check if user is authorized for action on resource.
+    ) -> Result[bool, AuthorizationError]:
+        """Evaluate authorization; a successful evaluation may still deny.
 
         Args:
             user: Authenticated user.
@@ -49,7 +52,10 @@ class AuthorizerProtocol(Protocol):
             resource: Target resource.
 
         Returns:
-            True if authorized.
+            Ok(True) grants; Ok(False) denies; Err denies with a domain error.
+            Consumers must inspect the boolean payload, not Result truthiness
+            or is_ok() alone. Use can() for an exact boolean permission check.
+            Infrastructure exceptions propagate; this is not row filtering.
         """
         ...
 

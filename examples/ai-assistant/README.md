@@ -1,8 +1,9 @@
 # AI Assistant — external integration
 
-> **Labelled external integration:** Quadkit ships no AI client. This
+> **Labelled external integration:** This example deliberately uses an
+> application-owned HTTP client rather than the Quadkit AI LLM integration. The
 > starter shows the seam: the controller depends on a small
-> `AssistantClient` protocol; the production binding calls any
+> `AssistantClient` protocol; the production binding calls an
 > OpenAI-compatible `/chat/completions` endpoint over `httpx` (already a
 > `quadkit-web` dependency), and tests bind a fake — no network, no API
 > key.

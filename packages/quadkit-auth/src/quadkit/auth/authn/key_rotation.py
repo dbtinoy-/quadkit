@@ -74,6 +74,12 @@ class JWTKeyStore:
             new_secret: Key material — a plain string for HMAC algorithms or a
                 dict with ``"private"`` / ``"public"`` entries for RSA/EC.
         """
+        # Grace starts when the outgoing key is retired, not when it was
+        # originally created: a long-lived active key still needs its full
+        # overlap period after rotation.
+        now = ambient_clock.now()
+        if self.current_key_id != new_key_id and self.current_key_id in self._key_meta:
+            self._key_meta[self.current_key_id]["retired_at"] = now
         if isinstance(new_secret, dict):
             self.keys[new_key_id] = {
                 sk: SecretStr(sv) if isinstance(sv, str) else sv
@@ -83,7 +89,7 @@ class JWTKeyStore:
             self.keys[new_key_id] = (
                 SecretStr(new_secret) if isinstance(new_secret, str) else new_secret
             )
-        self._key_meta[new_key_id] = {"created_at": ambient_clock.now()}
+        self._key_meta[new_key_id] = {"created_at": now}
         self.current_key_id = new_key_id
         await self._cleanup_old_keys()
 
@@ -95,10 +101,12 @@ class JWTKeyStore:
         now = ambient_clock.now()
         remove: list[str] = []
         for kid, meta in list(self._key_meta.items()):
-            created = meta.get("created_at")
-            if not created:
+            # Preloaded non-current keys have no known retirement timestamp;
+            # preserve the historical created-at fallback for those keys.
+            retired = meta.get("retired_at") or meta.get("created_at")
+            if not retired:
                 continue
-            if (now - created).total_seconds() > self.grace_period_seconds:
+            if (now - retired).total_seconds() > self.grace_period_seconds:
                 if kid != self.current_key_id:
                     remove.append(kid)
 

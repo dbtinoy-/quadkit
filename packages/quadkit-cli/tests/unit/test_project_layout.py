@@ -19,6 +19,7 @@ import pytest
 from typer.testing import CliRunner
 
 from quadkit.cli.commands.new import app as new_app
+from quadkit.cli.layout import LAYOUT_VERSION
 from quadkit.cli.scaffold import render_project, template_names
 
 _TEMPLATES = tuple(template_names())
@@ -86,10 +87,14 @@ class TestScaffoldedTree:
     def test_a_fresh_project_declares_only_its_package(
         self, runner: CliRunner, temp_dir: Path
     ) -> None:
-        """``[tool.quadkit]`` names the ASGI target and nothing else.
+        """``[tool.quadkit]`` names the ASGI target and stamps the map.
 
         A `structure` key would be a second source of truth about a tree
         that is no longer variable, so there is not one to write or read.
+        ``layout_version`` is not a choice of that kind — it records
+        which version of the canonical map produced the project, so a
+        future map change that would move files is detectable instead
+        of silent.
         """
         result = runner.invoke(
             new_app,
@@ -100,6 +105,7 @@ class TestScaffoldedTree:
         pyproject = (temp_dir / "my-app" / "pyproject.toml").read_text()
         assert 'module = "my_app.app:app"' in pyproject
         assert "structure" not in pyproject
+        assert f"layout_version = {LAYOUT_VERSION}" in pyproject
 
     def test_a_fresh_project_has_no_modules(
         self, runner: CliRunner, temp_dir: Path

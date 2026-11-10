@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from quadkit.auth.exceptions import EmailExistsError, UsernameExistsError
 from quadkit.auth.models.user import User, UserCredentials
 from quadkit.di.decorators import inject
 from quadkit.logging import get_logger
@@ -92,6 +93,13 @@ class MongoDBUserStore:
     ) -> User:
         """Create a new user."""
         await self._ensure_collection()
+
+        # Same uniqueness contract as InMemoryUserStore (name, then
+        # email), surfacing as typed conflicts.
+        if await self._col.find_one({"name": name}):
+            raise UsernameExistsError(f"Name '{name}' already exists")
+        if await self._col.find_one({"email": email}):
+            raise EmailExistsError(f"Email '{email}' already exists")
 
         import uuid
 

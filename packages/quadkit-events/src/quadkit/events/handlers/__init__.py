@@ -15,6 +15,10 @@ from quadkit.events.handlers.base import (
     MultiEventHandlerProtocol,
     QueryHandlerProtocol,
 )
+from quadkit.events.handlers.di_binder import (
+    bind_event_handler,
+    subscribe_event_handlers,
+)
 from quadkit.events.handlers.discovery import (
     discover_and_register,
     discover_event_types,
@@ -31,8 +35,10 @@ __all__ = [
     "HandlerRegistry",
     "MultiEventHandlerProtocol",
     "QueryHandlerProtocol",
+    "bind_event_handler",
     "clear_handler_registry",
     "discover_and_register",
     "discover_event_types",
     "register_discovered_types",
+    "subscribe_event_handlers",
 ]

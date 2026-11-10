@@ -12,6 +12,7 @@ from quadkit.auth.exceptions import (
     EmailExistsError,
     InvalidCredentialsError,
     PasswordPolicyError,
+    UsernameExistsError,
     UserNotFoundError,
 )
 from quadkit.auth.models.user import User, UserCredentials
@@ -65,13 +66,14 @@ class UserService:
         email: str,
         password: str,
         roles: list[str] | None = None,
-    ) -> Result[User, EmailExistsError | PasswordPolicyError]:
+    ) -> Result[User, EmailExistsError | UsernameExistsError | PasswordPolicyError]:
         """Create a new user.
 
         Returns:
             ``Ok(User)`` on success.
             ``Err(PasswordPolicyError)`` if the password does not satisfy policy.
             ``Err(EmailExistsError)`` if the email address is already registered.
+            ``Err(UsernameExistsError)`` if the name is already registered.
 
         Infrastructure exceptions (e.g. DB connectivity) propagate unchanged.
         """
@@ -88,11 +90,8 @@ class UserService:
                 hashed_password,
                 roles,
             )
-        except EmailExistsError as e:
+        except (EmailExistsError, UsernameExistsError) as e:
             return Err(e)
-        except ValueError as e:
-            # In-memory store raises ValueError for duplicate email.
-            return Err(EmailExistsError(str(e)))
         return Ok(user)
 
     async def get_user(self, user_id: str) -> User | None:

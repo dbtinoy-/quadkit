@@ -22,8 +22,8 @@ Example:
         })
 
         # Authorize a user action
-        result = await auth_service.authorize(user, "articles", "read")
-        if result.is_ok():
+        result = await auth_service.authorize(user, "read", "articles")
+        if result.unwrap_or(False) is True:
             # User can read articles
             pass
 
@@ -37,8 +37,7 @@ Example:
                 self.auth = auth
 
             async def check_permission(self, user, resource: str, action: str) -> bool:
-                result = await self.auth.authorize(user, resource, action)
-                return result.is_ok()
+                return await self.auth.can(user, action, resource)
 
 See Also:
     - :class:`quadkit.auth.policies.engine.PolicyEngine`: ABAC policy engine.

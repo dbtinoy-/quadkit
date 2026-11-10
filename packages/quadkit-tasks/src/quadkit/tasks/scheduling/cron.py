@@ -82,8 +82,8 @@ class CronExpression:
             # Ensure mypy knows croniter is available (guarded by HAS_CRONITER in __init__)
             assert croniter is not None  # noqa: S101  # guarded by HAS_CRONITER import gate
             croniter.croniter(self.expression)
-        except Exception as e:
-            raise ValueError(f"Invalid cron expression '{self.expression}': {e}") from e
+        except Exception:
+            raise ValueError("Invalid cron expression") from None
 
     def get_next(self, base_time: float | None = None) -> float:
         """Get next execution time

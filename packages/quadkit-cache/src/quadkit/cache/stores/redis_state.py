@@ -25,21 +25,30 @@ from quadkit.logging import get_logger
 logger = get_logger(__name__)
 
 RedisError: type[Exception] = Exception
+ResponseError: type[Exception] = Exception
 try:
     import redis.asyncio as redis
-    from redis.exceptions import RedisError as _RedisError
+    from redis.exceptions import (
+        RedisError as _RedisError,
+    )
+    from redis.exceptions import (
+        ResponseError as _ResponseError,
+    )
 
     RedisError = _RedisError
+    ResponseError = _ResponseError
     HAS_REDIS = True
 except ImportError as e:
     redis = None  # type: ignore[assignment]
     RedisError = Exception
+    ResponseError = Exception
     HAS_REDIS = False
     logger.debug("Redis package not available: %s", e, exc_info=True)
 except (AttributeError, TypeError, RuntimeError):
     # Unexpected error importing Redis - disable Redis integration and log the error
     redis = None  # type: ignore[assignment]
     RedisError = Exception
+    ResponseError = Exception
     HAS_REDIS = False
     logger.exception("Unexpected error importing redis module")
 
@@ -199,8 +208,16 @@ class RedisStateStore(RedisDriver, StateStoreProtocol):
             await asyncio.wait_for(
                 cast("Awaitable[Any]", client.ping()), timeout=timeout
             )
-            # Get some basic stats
-            info = await cast("Awaitable[dict[str, Any]]", client.info())
+            # Get basic server stats when permitted; ACL-restricted Redis/Valkey
+            # users (-@dangerous) and Redis proxies may reject INFO even when
+            # PING and data commands are healthy.
+            info: dict[str, Any] = {}
+            try:
+                info = await cast("Awaitable[dict[str, Any]]", client.info())
+            except ResponseError:
+                logger.debug(
+                    "Redis INFO command unavailable during health check; continuing after PING"
+                )
             duration_ms = (time.monotonic() - start_time) * 1000
             return HealthCheckResult(
                 component="state_store",

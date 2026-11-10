@@ -200,3 +200,21 @@ class _CacheServicesMixin:
             Default CacheService instance
         """
         return self.get_service()
+
+    def get_redis_client(self, backend_name: str | None = None) -> Any | None:
+        """Return the underlying Redis client when backed by Redis, else ``None``.
+
+        Unwraps resilience decorators (e.g. ``RedisCircuitBreakerBackend``) so
+        callers consuming :class:`~quadkit.contracts.infra.redis.RedisClientProtocol`
+        share the cache pool without opening a second connection.
+        """
+        try:
+            backend = self.get_backend(backend_name)
+        except ValueError:
+            return None
+
+        inner = getattr(backend, "_backend", backend)
+        getter = getattr(inner, "get_underlying_client", None)
+        if callable(getter):
+            return getter()
+        return None

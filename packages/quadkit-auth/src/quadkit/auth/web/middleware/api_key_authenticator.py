@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from quadkit.auth.web.middleware._active_user import is_active_user
 from quadkit.contracts import AuthProviderProtocol
 
 
@@ -29,7 +30,7 @@ class ApiKeyAuthenticator:
             return None
 
         user = await self.auth_provider.get_user(api_key.user_id)
-        if not user:
+        if user is None or not is_active_user(user):
             return None
 
         # Pre-fetch delegations for sync check_access

@@ -8,13 +8,16 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 import asyncio
+from collections.abc import Callable
 from contextlib import asynccontextmanager
 from typing import Any
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from quadkit.contracts.core import HookRegistryProtocol
 from quadkit.logging import get_logger
 from quadkit.sql import ConnectionPoolProtocol
+from quadkit.sql.abstractions.connection import DatabaseConnection
+from quadkit.sql.exceptions import DatabaseConnectionError
 from quadkit.sql.hooks import SQLConnectionReadyHook
 
 logger = get_logger(__name__)
@@ -36,8 +39,13 @@ class ConnectionManager(ABC):
         self.connection_string = connection_string
         self.connection_pool = connection_pool
         self._connected = False
+        # A failed transaction cleanup leaves connection state uncertain. Do
+        # not silently return that connection (or pool) to application use.
+        self._quarantined = False
         self._connection: Any | None = None
         self._hooks: HookRegistryProtocol | None = None
+        self._transaction_context_validator: Callable[[], None] | None = None
+        self._transaction_connection_supplier: Callable[[], Any | None] | None = None
         # Serialize access to the shared single connection so that concurrent
         # coroutines cannot both run queries on the same asyncpg connection
         # simultaneously (which would raise InterfaceError).
@@ -46,14 +54,21 @@ class ConnectionManager(ABC):
         # acquisition when a transaction and its inner queries share the
         # same coroutine (e.g. SQLiteProvider single-connection mode).
         self._connection_holder: asyncio.Task[Any] | None = None
+        # Set by DatabaseDriver after both managers have been constructed.
+        self.transaction_manager: Any | None = None
 
-        # Parse connection string for metadata
+        # Parse connection string for metadata (supporting libpq ?host=/socket/dir)
         parsed = urlparse(connection_string)
+        query_params = parse_qs(parsed.query)
         self.database_type = (
             parsed.scheme.split("+")[0] if "+" in parsed.scheme else parsed.scheme
         )
-        self.host = parsed.hostname
-        self.port = parsed.port
+        host_param = query_params.get("host", [None])[0]
+        port_param = query_params.get("port", [None])[0]
+        self.host = parsed.hostname or host_param
+        self.port = parsed.port or (
+            int(port_param) if port_param and port_param.isdigit() else None
+        )
         self.database = parsed.path.lstrip("/") if parsed.path else None
         self.username = parsed.username
         self.password = parsed.password
@@ -61,7 +76,34 @@ class ConnectionManager(ABC):
     @property
     def connected(self) -> bool:
         """Check if database is connected"""
-        return self._connected
+        return self._connected and not self._quarantined
+
+    def quarantine(self) -> None:
+        """Permanently refuse new managed acquisitions after uncertain cleanup.
+
+        A fresh manager/provider is required. This does not revoke raw handles,
+        stop already-running operations, or quarantine an independently shared
+        pool accessed directly outside this manager.
+        """
+        self._quarantined = True
+
+    def _require_usable(self) -> None:
+        if self._quarantined:
+            raise DatabaseConnectionError("database connection unavailable")
+        if self._transaction_context_validator is not None:
+            self._transaction_context_validator()
+
+    def set_transaction_context_validator(
+        self, validator: Callable[[], None] | None
+    ) -> None:
+        """Validate task ownership before managed acquisition or reconnect."""
+        self._transaction_context_validator = validator
+
+    def set_transaction_connection_supplier(
+        self, supplier: Callable[[], Any | None] | None
+    ) -> None:
+        """Bind managed acquisitions to the owner task's transaction connection."""
+        self._transaction_connection_supplier = supplier
 
     def set_hook_registry(self, hooks: HookRegistryProtocol | None) -> None:
         """Attach an optional hook registry for connection acquisition events."""
@@ -79,6 +121,7 @@ class ConnectionManager(ABC):
 
     async def connect(self) -> None:
         """Establish connection to the database"""
+        self._require_usable()
         if self.connection_pool:
             await self.connection_pool.initialize()
             # Warm-up: acquire a connection to ensure pool works
@@ -115,10 +158,40 @@ class ConnectionManager(ABC):
     @asynccontextmanager
     async def get_connection(self) -> Any:
         """Get a connection from pool or create new one"""
-        if self.connection_pool:
-            async with self.connection_pool.get_connection() as conn:
+        self._require_usable()
+        manager = self.transaction_manager
+        if manager is not None and manager.in_transaction:
+            # Queries and CRUD must use the same connection as BEGIN/COMMIT,
+            # including with a pool or manually started transaction.
+            conn = manager.current_connection()
+            await self._emit_connection_acquired()
+            self._require_usable()
+            yield conn
+        elif self.connection_pool:
+            # Quadkit pools yield an abstraction wrapping the native driver
+            # handle, but driver methods expect that native handle. Unwrap only
+            # known connection abstractions, never arbitrary driver's internals.
+            # Pool implementations may translate exceptions thrown through
+            # their context into connection errors; defer caller exceptions
+            # until after release so their type and transaction outcome survive.
+            failure: BaseException | None = None
+            async with self.connection_pool.get_connection() as pooled:
+                self._require_usable()
+                conn = pooled
+                if isinstance(pooled, DatabaseConnection):
+                    conn = getattr(pooled, "_conn", None)
+                    if conn is None:
+                        raise RuntimeError(
+                            "pool connection has no native driver handle"
+                        )
                 await self._emit_connection_acquired()
-                yield conn
+                self._require_usable()
+                try:
+                    yield conn
+                except BaseException as exc:
+                    failure = exc
+            if failure is not None:
+                raise failure.with_traceback(failure.__traceback__)
         else:
             if not self._connection:
                 self._connection = await self._create_connection()
@@ -132,12 +205,15 @@ class ConnectionManager(ABC):
                 # connection (transaction context), so reuse it directly
                 # instead of deadlocking on the non-reentrant lock.
                 await self._emit_connection_acquired()
+                self._require_usable()
                 yield self._connection
                 return
             async with self._connection_lock:
+                self._require_usable()
                 self._connection_holder = asyncio.current_task()
                 try:
                     await self._emit_connection_acquired()
+                    self._require_usable()
                     yield self._connection
                 finally:
                     self._connection_holder = None

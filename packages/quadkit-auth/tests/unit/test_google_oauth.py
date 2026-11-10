@@ -287,3 +287,48 @@ class TestGoogleJwkSelection:
         service = GoogleOAuthService(client_id="google-client-id")
         with pytest.raises(OAuth2Error, match="empty"):
             service._select_jwk({"keys": []}, None)
+
+
+class TestGooglePlaceholderConfiguration:
+    """An explicit blank placeholder is off; partial setups still fail."""
+
+    def test_blank_client_id_does_not_register_google(self) -> None:
+        from quadkit.auth.config import AuthConfig, JWTConfig
+        from quadkit.auth.di.bundle_provider import AuthBundleProvider
+
+        config = AuthConfig(
+            secret_key="dev-root-key",
+            token=JWTConfig(secret_key=""),
+            oauth2_providers={"google": {"client_id": ""}},
+        )
+        bundle = AuthBundleProvider(config=config)
+        assert not any(
+            isinstance(p, GoogleOAuthProvider) for p in bundle._sub_providers
+        )
+
+    @pytest.mark.asyncio
+    async def test_partial_google_configuration_fails(self) -> None:
+        from quadkit.auth.config import AuthConfig, JWTConfig
+        from quadkit.auth.di.bundle_provider import AuthBundleProvider
+        from quadkit.contracts.exceptions import ConfigurationError
+
+        config = AuthConfig(
+            secret_key="dev-root-key",
+            token=JWTConfig(secret_key=""),
+            oauth2_providers={
+                "google": {"client_id": "", "jwks_url": "https://example.com/keys"}
+            },
+        )
+        bundle = AuthBundleProvider(config=config)
+        provider = next(
+            p for p in bundle._sub_providers if isinstance(p, GoogleOAuthProvider)
+        )
+        with pytest.raises(ConfigurationError, match="client_id"):
+            await provider.register(MagicMock())
+
+    @pytest.mark.parametrize("client_id", ["", " ", " client", "client "])
+    def test_blank_or_padded_client_id_rejected_by_service(
+        self, client_id: str
+    ) -> None:
+        with pytest.raises(ValueError, match="client_id"):
+            GoogleOAuthService(client_id=client_id)

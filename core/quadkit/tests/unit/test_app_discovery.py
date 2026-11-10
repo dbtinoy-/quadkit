@@ -244,20 +244,32 @@ class TestDirectoryDiscovery:
         result = discovery.discover_modules_from_directories([plugin_dir])
         assert set(result) == {"FromPlugin"}
 
-    def test_nonexistent_and_file_paths_skipped(self, tmp_path: Path) -> None:
+    def test_nonexistent_and_file_paths_skipped(
+        self, tmp_path: Path, capsys
+    ) -> None:
         a_file = tmp_path / "afile.py"
         a_file.write_text("x = 1")
-        result = discovery.discover_modules_from_directories(
-            [tmp_path / "missing", a_file]
-        )
+        missing = tmp_path / "PRIVATE_DISCOVERY_PATH_SENTINEL"
+        result = discovery.discover_modules_from_directories([missing, a_file])
+        output = capsys.readouterr().out
         assert result == {}
+        assert "PRIVATE_DISCOVERY_PATH_SENTINEL" not in output
+        assert str(tmp_path) not in output
 
-    def test_broken_plugin_skipped_with_warning(self, tmp_path: Path) -> None:
-        plugin_dir = tmp_path / "broken"
+    def test_broken_plugin_skipped_with_warning(
+        self, tmp_path: Path, capsys
+    ) -> None:
+        plugin_dir = tmp_path / "PRIVATE_DISCOVERY_PATH_SENTINEL"
         plugin_dir.mkdir()
-        (plugin_dir / "plugin.py").write_text("raise ImportError('kaboom')")
+        (plugin_dir / "plugin.py").write_text(
+            "raise ImportError('PRIVATE_DISCOVERY_ERROR_SENTINEL /srv/private')"
+        )
         result = discovery.discover_modules_from_directories([plugin_dir])
+        output = capsys.readouterr().out
         assert result == {}
+        assert "PRIVATE_DISCOVERY_PATH_SENTINEL" not in output
+        assert "PRIVATE_DISCOVERY_ERROR_SENTINEL" not in output
+        assert "/srv/private" not in output
 
     def test_empty_dir_without_candidates(self, tmp_path: Path) -> None:
         empty = tmp_path / "empty"

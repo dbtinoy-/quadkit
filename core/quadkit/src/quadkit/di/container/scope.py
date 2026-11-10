@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+from contextvars import ContextVar
 import inspect
 from typing import (
     TYPE_CHECKING,
@@ -13,8 +14,12 @@ from typing import (
 )
 
 from quadkit.contracts.core.scopes import ServiceScope
-from quadkit.contracts.exceptions import UnresolvableDependencyError
+from quadkit.contracts.exceptions import (
+    CircularDependencyError,
+    UnresolvableDependencyError,
+)
 from quadkit.di.extensions.interceptors import wrap_with_interceptors
+from quadkit.di.resolution.injector import DependencyInjector
 from quadkit.logging import get_logger
 
 if TYPE_CHECKING:
@@ -34,7 +39,8 @@ class Scope:
     """Request-scoped resolution context.
 
     Caches scoped service instances for the lifetime of the scope.
-    Singletons and transients delegate to the root container.
+    Singletons delegate to the root container. Scoped and transient constructors
+    resolve their dependencies through this scope, never the root resolver.
 
     Supports nested scopes (K-02): parent scopes can be specified to create
     hierarchical scoping where child scopes can access parent scope services.
@@ -63,12 +69,30 @@ class Scope:
         # parallel resolve() calls for the same scoped service await one
         # instance instead of racing the cache check-then-create.
         self._inflight: dict[type, asyncio.Future[Any]] = {}
+        # Never mutate the root injector's resolver: sibling request scopes may
+        # construct concurrently. Each scope owns an injector and immutable,
+        # task-local construction path for cycle/depth checks before inflight waits.
+        self._injector: DependencyInjector | None = None
+        self._construction_path: ContextVar[tuple[object, ...]] = ContextVar(
+            "scoped_construction_path", default=()
+        )
 
     async def resolve(self, service_type: type[T]) -> T:
         """Resolve a service from this scope.
 
         K-02: Falls back to parent scope if not found in current scope.
         """
+        path = self._construction_path.get()
+        if service_type in path:
+            names = [
+                getattr(key, "__name__", repr(key)) for key in (*path, service_type)
+            ]
+            raise CircularDependencyError(" -> ".join(names))
+        limit = self._root._resolver._max_resolution_depth
+        if limit and len(path) >= limit:
+            raise CircularDependencyError(
+                f"Resolution depth exceeded {limit}; possible circular or overly deep dependency graph"
+            )
         descriptor = self._root._get_descriptor(service_type)
 
         if descriptor is None:
@@ -84,7 +108,9 @@ class Scope:
             return await self._root.resolve(service_type)
 
         if descriptor.scope == ServiceScope.TRANSIENT:
-            return cast("T", await self._create_instance(descriptor))
+            return cast(
+                "T", await self._create_instance(descriptor, service_key=service_type)
+            )
 
         # Scoped — cache per scope
         if service_type in self._cache:
@@ -100,7 +126,7 @@ class Scope:
         self._inflight[service_type] = future
 
         try:
-            instance = await self._create_instance(descriptor)
+            instance = await self._create_instance(descriptor, service_key=service_type)
         except BaseException as err:
             del self._inflight[service_type]
             if not future.cancelled():
@@ -133,34 +159,46 @@ class Scope:
         """
         return Scope(self._root, parent=self)
 
-    async def _create_instance(self, descriptor: ServiceDescriptor) -> Any:
+    async def _create_instance(
+        self, descriptor: ServiceDescriptor, *, service_key: object | None = None
+    ) -> Any:
         """Create a service instance from its descriptor.
 
         After the raw object is constructed we consult the interceptor
         registry (if any) to see whether we need to return a proxy.
         """
-        impl = descriptor.implementation
-
-        if not callable(impl):
-            instance = impl
-        elif inspect.isclass(impl):
-            instance = await self._root._create_with_injection(
-                impl,
-                cast("type", descriptor.service_type),
+        token = self._construction_path.set(
+            (
+                *self._construction_path.get(),
+                descriptor.service_type if service_key is None else service_key,
             )
-        else:
-            result = impl()
-            if inspect.isawaitable(result):
-                instance = await result
-            else:
-                instance = result
-
-        # apply interceptors if registered
-        return wrap_with_interceptors(
-            instance,
-            cast("type", descriptor.service_type),
-            self._root.interceptor_registry,
         )
+        try:
+            impl = descriptor.implementation
+
+            if not callable(impl):
+                instance = impl
+            elif inspect.isclass(impl):
+                if self._injector is None:
+                    self._injector = DependencyInjector(
+                        self._root._type_hint_resolver, self
+                    )
+                instance = await self._injector.instantiate(impl, force_inject=True)
+            else:
+                result = impl()
+                if inspect.isawaitable(result):
+                    instance = await result
+                else:
+                    instance = result
+
+            # apply interceptors if registered
+            return wrap_with_interceptors(
+                instance,
+                cast("type", descriptor.service_type),
+                self._root.interceptor_registry,
+            )
+        finally:
+            self._construction_path.reset(token)
 
     async def _call(
         self,
@@ -197,6 +235,10 @@ class Scope:
     def has(self, service_type: object) -> bool:
         """Check if a service is registered (delegates to root container)."""
         return self._root.has(service_type)
+
+    def can_resolve(self, service_type: object) -> bool:
+        """Internal injector capability; resolution itself stays scope-owned."""
+        return self.has(service_type)
 
     async def resolve_optional(self, service_type: type[T]) -> T | None:
         """Resolve a service, returning None if not registered."""

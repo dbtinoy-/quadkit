@@ -40,6 +40,17 @@ SHARED_DIR = "shared"
 #: Package holding bounded contexts inside the app package.
 MODULES_DIR = "modules"
 
+#: Version of this layout contract. Bump when a COMPONENTS row or a
+#: resolver answer changes in a way that would *move a file* in an
+#: existing project (a rename, a shared flip, a new special case) —
+#: additive rows for brand-new components do not move anything and do
+#: not bump. Scaffolds stamp it into ``[tool.quadkit] layout_version``
+#: so a project records which map produced it; without the stamp,
+#: regeneration answers come from whatever CLI version happens to be
+#: installed, and files move under hand-written imports with no record
+#: of why.
+LAYOUT_VERSION: int = 1
+
 
 @dataclass(frozen=True)
 class ComponentDir:
@@ -82,6 +93,9 @@ COMPONENTS: tuple[ComponentDir, ...] = (
     ComponentDir("auth", "auth", True, ()),
     ComponentDir("clients", "clients", False, ("api_client",)),
     ComponentDir("commands", "commands", False, ("command",)),
+    # Use cases (P1.1): named, actor-bound behavior projecting onto the
+    # command family — module-local like commands/queries.
+    ComponentDir("usecases", "usecases", False, ("use_case",)),
     ComponentDir("consumers", "consumers", False, ("message_consumer",)),
     # Request/response schemas shared across controllers. They are the
     # interface between a context and its callers, so they cannot be
@@ -192,13 +206,17 @@ _ROOTS_BY_GENERATOR: dict[str, str] = {
 class ProjectLayout:
     """Project layout metadata read from ``[tool.quadkit]``.
 
-    Only the application package is recorded. There is nothing else to
-    record: the tree is the same for every project, and where a component
-    lands is decided per node rather than per project.
+    The application package is the only *choice* recorded: the tree is
+    the same for every project, and where a component lands is decided
+    per node rather than per project. ``layout_version`` is not a
+    choice — it is the producing map's fingerprint (see
+    :data:`LAYOUT_VERSION`), absent (``None``) in projects scaffolded
+    before stamping existed.
     """
 
     app_package: str = "app"
     declared: bool = False
+    layout_version: int | None = None
 
     def module_target(self) -> str:
         """Return the default ``[tool.quadkit] module`` target.
@@ -239,7 +257,14 @@ def read_project_layout(cwd: Path | None = None) -> ProjectLayout:
         if raw_package:
             app_package = raw_package
 
-    return ProjectLayout(app_package=app_package, declared=bool(quadkit_tool))
+    raw_version = quadkit_tool.get("layout_version")
+    layout_version = raw_version if isinstance(raw_version, int) else None
+
+    return ProjectLayout(
+        app_package=app_package,
+        declared=bool(quadkit_tool),
+        layout_version=layout_version,
+    )
 
 
 def component_metadata(output_dir: str) -> ComponentDir | None:
@@ -392,6 +417,7 @@ def _strip_src(output_dir: str) -> str:
 
 __all__ = [
     "COMPONENTS",
+    "LAYOUT_VERSION",
     "MODULES_DIR",
     "ROOT_DIRS",
     "SHARED_DIR",

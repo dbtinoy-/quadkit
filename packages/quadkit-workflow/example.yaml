@@ -1,0 +1,43 @@
+# Copy to application.yaml and adjust to your deployment. Remove sections you don't use.
+# Full field reference: see the README Configuration section.
+# YAML key: workflow:
+# Environment variable prefix: QK_WORKFLOW__
+
+workflow:
+
+  # ============================================================================
+  # Bulk Operation Configuration
+  # ============================================================================
+
+  # Number of items per batch during bulk processing
+  batch_size: 10
+
+  # Maximum number of concurrent operations for parallel execution
+  max_concurrency: 5
+
+  # Operation timeout in seconds
+  timeout: 300.0
+
+  # Number of automatic retry attempts on failure
+  retry_attempts: 3
+
+  # Delay (seconds) between retry attempts
+  retry_delay: 1.0
+
+  # Whether to track and report progress during bulk operations
+  enable_progress_tracking: true
+
+  # Optional circuit breaker configuration for resilience
+  # Disable with: circuit_breaker_config: ~
+  circuit_breaker_config:
+    # Failure rate threshold (0-1) before opening circuit
+    failure_threshold: 0.5
+
+    # Number of requests before evaluating circuit state
+    evaluation_window: 10
+
+    # Time (seconds) in open state before attempting half-open
+    timeout: 30
+
+  # Default pipeline execution timeout in seconds
+  pipeline_timeout: 300.0

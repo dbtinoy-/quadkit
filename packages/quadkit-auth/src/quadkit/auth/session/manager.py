@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timedelta
+import hashlib
 from typing import Any
 
 from quadkit.auth.exceptions import (
@@ -23,6 +24,12 @@ from quadkit.primitives import clock as ambient_clock
 from quadkit.result import Err, Ok, Result
 
 logger = get_logger(__name__)
+
+
+def _session_ref(session_id: str) -> str:
+    """Non-credential correlation identifier for logs and audits."""
+    return "sha256:" + hashlib.sha256(session_id.encode()).hexdigest()
+
 
 # Minimum seconds between last_active_at DB writes for the same session.
 # Prevents an excessive write on every authenticated request under load.
@@ -64,7 +71,9 @@ class SessionManagerImpl:
                 the least-recently-used session is evicted.  ``None`` (the
                 default) means no limit is enforced.
         """
-        self._store: SessionStore = session_store or InMemorySessionStore()
+        self._store: SessionStore = (
+            session_store if session_store is not None else InMemorySessionStore()
+        )
         self._ids = ids
         self._audit_logger: AuditLoggerProtocol | None = audit_logger
         self._revoke_token: Callable[[str], Awaitable[None]] | None = revoke_token
@@ -146,7 +155,7 @@ class SessionManagerImpl:
 
         logger.info(
             "Created session %s for user %s (Device: %s)",
-            session_id,
+            _session_ref(session_id),
             user_id,
             device_id,
         )
@@ -157,7 +166,7 @@ class SessionManagerImpl:
                     action="session.created",
                     actor_id=user_id,
                     resource_type="Session",
-                    resource_id=session_id,
+                    resource_id=_session_ref(session_id),
                     outcome="success",
                     metadata={
                         "device_id": device_id,
@@ -192,7 +201,7 @@ class SessionManagerImpl:
 
         if session.is_expired():
             await self.revoke_session(session_id)
-            logger.warning("Session %s expired", session_id)
+            logger.warning("Session %s expired", _session_ref(session_id))
             return Err(TokenExpiredError("Session has expired"))
 
         if not session.is_active:
@@ -240,7 +249,7 @@ class SessionManagerImpl:
             is_active=False,
             updated_at=ambient_clock.now(),
         )
-        logger.info("Revoked session: %s", session_id)
+        logger.info("Revoked session: %s", _session_ref(session_id))
 
         # Blacklist the associated JWT access token if we have a JTI and callback
         if session and session.token_jti and self._revoke_token is not None:
@@ -257,13 +266,13 @@ class SessionManagerImpl:
                 )
 
         if self._audit_logger is not None:
-            actor = session.user_id if session else session_id
+            actor = session.user_id if session else "unknown"
             await self._audit_logger.log(
                 AuditEntry(
                     action="session.revoked",
                     actor_id=actor,
                     resource_type="Session",
-                    resource_id=session_id,
+                    resource_id=_session_ref(session_id),
                     outcome="success",
                 )
             )
@@ -278,7 +287,7 @@ class SessionManagerImpl:
             mfa_verified_at=now,
             updated_at=now,
         )
-        logger.info("MFA verified for session: %s", session_id)
+        logger.info("MFA verified for session: %s", _session_ref(session_id))
         return True
 
     async def revoke_all_sessions(self, user_id: str) -> bool:

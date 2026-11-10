@@ -1,6 +1,7 @@
 import os
 
 import pytest
+
 from quadkit.auth.config import (
     AuthConfig,
     AuthMiddlewareConfig,
@@ -56,45 +57,44 @@ class TestAuthConfigProductionSecurity:
     def test_rejects_default_secret_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="CRITICAL SECURITY ERROR"):
                 AuthConfig(secret_key="change-me", token={"secret_key": "change-me"})
-            assert "CRITICAL SECURITY ERROR" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
 
     def test_rejects_your_secret_key_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="CRITICAL SECURITY ERROR"):
                 AuthConfig(
                     secret_key="your-secret-key",
                     token={"secret_key": "your-secret-key"},
                 )
-            assert "CRITICAL SECURITY ERROR" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
 
     def test_rejects_default_admin_password_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
+        strong_key = "secure-key-that-is-at-least-32-bytes!!"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="CRITICAL SECURITY ERROR"):
                 AuthConfig(
-                    secret_key="secure-key",
-                    token={"secret_key": "secure-key", "required_audience": "my-service"},
+                    secret_key=strong_key,
+                    token={"secret_key": strong_key, "required_audience": "my-service"},
                     admin_password="password",
                 )
-            assert "CRITICAL SECURITY ERROR" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
 
     def test_accepts_secure_keys_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
+        strong_key = "secure-key-that-is-at-least-32-bytes!!"
         try:
             config = AuthConfig(
-                secret_key="secure-key",
-                token={"secret_key": "secure-key", "required_audience": "my-service"},
+                secret_key=strong_key,
+                token={"secret_key": strong_key, "required_audience": "my-service"},
             )
-            assert config.secret_key == "secure-key"
+            assert config.secret_key == strong_key
         finally:
             os.environ["QK_ENV"] = "development"
 
@@ -121,18 +121,16 @@ class TestJWTConfigProductionSecurity:
     def test_rejects_default_secret_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="CRITICAL SECURITY ERROR"):
                 JWTConfig(secret_key="change-me")
-            assert "CRITICAL SECURITY ERROR" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
 
     def test_rejects_short_hs256_in_production(self) -> None:
         os.environ["QK_ENV"] = "production"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="SECURITY ERROR") as excinfo:
                 JWTConfig(secret_key="short-key", algorithm="HS256")
-            assert "SECURITY ERROR" in str(excinfo.value)
             assert "at least 32 bytes" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
@@ -247,12 +245,11 @@ class TestJWTSecretQuality:
     def test_hs384_requires_long_secret(self) -> None:
         os.environ["QK_ENV"] = "production"
         try:
-            with pytest.raises(ValueError) as excinfo:
+            with pytest.raises(ValueError, match="SECURITY ERROR"):
                 AuthConfig(
                     secret_key="secure-key",
                     token=JWTConfig(secret_key="short", algorithm="HS384"),
                 )
-            assert "SECURITY ERROR" in str(excinfo.value)
         finally:
             os.environ["QK_ENV"] = "development"
 
@@ -262,7 +259,7 @@ class TestJWTSecretMasking:
         os.environ["QK_ENV"] = "development"
         try:
             cfg = JWTConfig(secret_key="x" * 64)
-            secret_attr = getattr(cfg, "secret_key")
+            secret_attr: object = cfg.secret_key
             assert hasattr(secret_attr, "get_secret_value")
             assert "x" * 64 not in repr(secret_attr)
             assert secret_attr.get_secret_value() == "x" * 64

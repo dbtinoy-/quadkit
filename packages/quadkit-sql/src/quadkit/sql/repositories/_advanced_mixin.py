@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any, overload
 
 from quadkit.contracts.data.identifiers import Column, Table
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.sql.exceptions import (
     DatabaseConnectionError,
     DatabaseError,
@@ -13,13 +13,28 @@ from quadkit.sql.exceptions import (
     RepositoryError,
 )
 from quadkit.sql.repositories.cursor import CursorPage, decode_cursor, encode_cursor
+from quadkit.sql.repositories.filter_objects import ComputedKey
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
+    from collections.abc import AsyncIterator, Iterable
 
     from quadkit.sql.specification import SqlSpecification
 
 logger = get_logger(__name__)
+
+
+def _buckets(bucket: ComputedKey | Iterable[ComputedKey] | None) -> list[ComputedKey]:
+    """Normalise the ``bucket`` argument to a list.
+
+    A computed key is anything that renders a grouped expression — the numeric
+    :class:`Bucket` and the calendar :class:`DateBucket` are both, and a caller
+    may pass several (several keys share one SELECT list and one GROUP BY).
+    """
+    if bucket is None:
+        return []
+    if isinstance(bucket, ComputedKey):
+        return [bucket]
+    return list(bucket)
 
 
 class _AdvancedMixin:
@@ -36,7 +51,10 @@ class _AdvancedMixin:
         min: str | list[str] | None = None,
         max: str | list[str] | None = None,
         count: str | None = None,
+        count_distinct: str | None = None,
         group_by: None = None,
+        bucket: None = None,
+        filter_expressions: Iterable[Any] | None = None,
         **filters: Any,
     ) -> dict[str, Any]: ...
     @overload
@@ -48,7 +66,25 @@ class _AdvancedMixin:
         min: str | list[str] | None = None,
         max: str | list[str] | None = None,
         count: str | None = None,
+        count_distinct: str | None = None,
+        group_by: None = None,
+        bucket: ComputedKey | Iterable[ComputedKey],
+        filter_expressions: Iterable[Any] | None = None,
+        **filters: Any,
+    ) -> list[dict[str, Any]]: ...
+    @overload
+    async def aggregate(
+        self,
+        *,
+        sum: str | list[str] | None = None,
+        avg: str | list[str] | None = None,
+        min: str | list[str] | None = None,
+        max: str | list[str] | None = None,
+        count: str | None = None,
+        count_distinct: str | None = None,
         group_by: str | list[str],
+        bucket: ComputedKey | Iterable[ComputedKey] | None = None,
+        filter_expressions: Iterable[Any] | None = None,
         **filters: Any,
     ) -> list[dict[str, Any]]: ...
     async def aggregate(
@@ -59,7 +95,10 @@ class _AdvancedMixin:
         min: str | list[str] | None = None,
         max: str | list[str] | None = None,
         count: str | None = None,
+        count_distinct: str | None = None,
         group_by: str | list[str] | None = None,
+        bucket: ComputedKey | Iterable[ComputedKey] | None = None,
+        filter_expressions: Iterable[Any] | None = None,
         **filters: Any,
     ) -> dict[str, Any] | list[dict[str, Any]]:
         """Run aggregate queries using raw SQL.
@@ -70,7 +109,22 @@ class _AdvancedMixin:
             min: Column(s) to MIN.
             max: Column(s) to MAX.
             count: Column to COUNT (``"*"`` for all rows).
+            count_distinct: Column whose distinct values are counted —
+                ``COUNT(DISTINCT "user_id")``, "how many users", which a plain
+                ``count`` cannot answer without returning every row.
             group_by: Column(s) to GROUP BY.
+            bucket: A :class:`~quadkit.sql.repositories.filter_objects.ComputedKey`,
+                or several, added to the projection *and* to GROUP BY. A
+                bucket is a computed key — ``created_at - created_at % 3600``
+                for :class:`Bucket`, ``DATE(created_at)`` for
+                :class:`DateBucket` — which ``group_by`` cannot express,
+                because it takes column names.
+            filter_expressions: Typed ``Filter`` expressions to AND together,
+                as ``find_many`` accepts. Aggregating a *window* — "how much
+                quota was consumed between these two timestamps" — has no
+                equality form, and keyword filters are skipped for
+                date-shaped columns on purpose (see ``_apply_filters_to_query``),
+                so a range has to arrive as a typed filter or not at all.
             **filters: Attribute equality (or operator) filters.
 
         Returns:
@@ -88,7 +142,16 @@ class _AdvancedMixin:
             if count is not None:
                 safe_count = str(Column(count)) if count != "*" else "*"
                 select_parts.append(f"COUNT({safe_count}) AS count")
-            elif not any([sum, avg, min, max]):
+            if count_distinct is not None:
+                distinct_column = Column(count_distinct)
+                select_parts.append(
+                    f"COUNT(DISTINCT {distinct_column}) AS count_distinct"
+                )
+            if (
+                not any([sum, avg, min, max])
+                and count is None
+                and count_distinct is None
+            ):
                 select_parts.append("COUNT(*) AS count")
 
             if sum:
@@ -108,11 +171,21 @@ class _AdvancedMixin:
                     sc = Column(col)
                     select_parts.append(f"MAX({sc}) AS {sc.name}_max")
 
+            # ``group_cols`` holds *rendered* keys so that a plain column and a
+            # computed bucket can share one SELECT list and one GROUP BY; the
+            # two must agree exactly or some dialects reject the statement.
             group_cols: list[str] = []
             if group_by:
-                group_cols = _ensure_list(group_by)
-                safe_group_cols = [str(Column(c)) for c in group_cols]
-                select_parts = [*safe_group_cols, *select_parts]
+                group_cols = [str(Column(c)) for c in _ensure_list(group_by)]
+                select_parts = [*group_cols, *select_parts]
+
+            bucket_keys = _buckets(bucket)
+            if bucket_keys:
+                select_parts = [
+                    *[item.to_select() for item in bucket_keys],
+                    *select_parts,
+                ]
+                group_cols.extend(item.to_sql() for item in bucket_keys)
 
             query = f"SELECT {', '.join(select_parts)} FROM {self._table}"  # noqa: S608 -- self._table Table()-validated; select parts Column()-validated
             params: list[Any] = []
@@ -121,11 +194,12 @@ class _AdvancedMixin:
                 query,
                 params,
                 filters,
+                False,
+                tuple(filter_expressions or ()),
             )
 
             if group_cols:
-                safe_gc = ", ".join(str(Column(c)) for c in group_cols)
-                query += f" GROUP BY {safe_gc}"
+                query += f" GROUP BY {', '.join(group_cols)}"
 
             result = await self.provider.execute_query(query, params)  # type: ignore[attr-defined]
 
@@ -140,9 +214,9 @@ class _AdvancedMixin:
         except RepositoryError:
             raise
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed aggregate table=%s",
-                self.table_name,  # type: ignore[attr-defined]
+            logger.error(
+                "repository_aggregate_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to run aggregate query") from err
 
@@ -190,9 +264,9 @@ class _AdvancedMixin:
                 return [self._row_to_entity(row) for row in result.rows]  # type: ignore[attr-defined]
             return []
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed find_by_spec table=%s",
-                self.table_name,  # type: ignore[attr-defined]
+            logger.error(
+                "repository_find_by_spec_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to find by spec") from err
 
@@ -216,9 +290,9 @@ class _AdvancedMixin:
                 return int(result.rows[0]["count"])
             return 0
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed count_by_spec table=%s",
-                self.table_name,  # type: ignore[attr-defined]
+            logger.error(
+                "repository_count_by_spec_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed to count by spec") from err
 
@@ -318,9 +392,9 @@ class _AdvancedMixin:
         except RepositoryError:
             raise
         except (DatabaseError, QueryError, DatabaseConnectionError) as err:
-            logger.exception(
-                "Failed paginate_cursor table=%s",
-                self.table_name,  # type: ignore[attr-defined]
+            logger.error(
+                "repository_paginate_cursor_failed",
+                error_type=safe_error_type(err),
             )
             raise RepositoryError("Failed cursor pagination") from err
 

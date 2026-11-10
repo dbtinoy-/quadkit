@@ -8,10 +8,13 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from functools import update_wrapper
-from typing import TYPE_CHECKING, Any, Protocol, cast
+import inspect
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, overload
 
 from quadkit.tasks.models.job import JobProtocol
 from quadkit.tasks.types import Priority
+
+_ClsT = TypeVar("_ClsT", bound=type[Any])
 
 if TYPE_CHECKING:
     from quadkit.contracts.infra.tasks import TaskQueueProtocol
@@ -98,14 +101,14 @@ def task(
     timeout: float | None = None,
     queue: str = "default",
     idempotency_key: str | None = None,
-) -> Callable[[Callable[..., Any]], Any]:
+) -> Callable[[Any], Any]:
     """Decorator to define a task.
 
-    Converts a regular function into a task that can be enqueued and executed
-    by workers.
+    Supports both async/sync functions and class-based tasks defining an
+    ``execute(self, ...)`` method (such as :class:`ScheduledTask` subclasses).
 
     Args:
-        name: Task name (defaults to function name)
+        name: Task name (defaults to function/class name)
         priority: Task priority (HIGH, NORMAL, LOW)
         max_retries: Maximum retry attempts on failure
         timeout: Execution timeout in seconds
@@ -113,12 +116,97 @@ def task(
         idempotency_key: Optional key for idempotent execution
 
     Returns:
-        Decorated function with .delay() and .apply_async() methods
+        Decorated class (preserving class identity) or ``TaskFunction`` wrapper.
     """
+    resolved_priority = (
+        priority if isinstance(priority, int) else cast("Priority", priority).value
+    )
 
-    def decorator(func: Callable[..., Any]) -> TaskFunction:
+    @overload
+    def decorator(func: _ClsT) -> _ClsT: ...
+
+    @overload
+    def decorator(func: Callable[..., Any]) -> TaskFunction: ...
+
+    def decorator(func: Any) -> Any:
         task_name = name or func.__name__
         module_name = func.__module__
+
+        def _make_signature(*args: Any, **kwargs: Any) -> JobProtocol:
+            return JobProtocol(
+                id="",
+                name=task_name,
+                args=args,
+                kwargs=kwargs,
+                priority=resolved_priority,
+                max_retries=max_retries,
+                idempotency_key=idempotency_key,
+                timeout=timeout,
+            )
+
+        async def _delay(*args: Any, **kwargs: Any) -> Any:
+            raise NotImplementedError(
+                "Use TaskProvider.enqueue_job() or apply_async(queue, ...)",
+            )
+
+        async def _apply_async(
+            task_queue: TaskQueueProtocol,
+            *args: Any,
+            priority: int | None = None,
+            max_retries: int | None = None,
+            timeout: float | None = None,
+            idempotency_key: str | None = None,
+            **kwargs: Any,
+        ) -> JobProtocol:
+            from quadkit.tasks.models import JobProtocol as _JobProtocol
+
+            job = _JobProtocol(
+                id="",
+                name=task_name,
+                args=args,
+                kwargs=kwargs,
+                priority=priority if priority is not None else resolved_priority,
+                max_retries=(
+                    max_retries if max_retries is not None else func_max_retries
+                ),
+                timeout=timeout if timeout is not None else func_timeout,
+                idempotency_key=(
+                    idempotency_key
+                    if idempotency_key is not None
+                    else func_idempotency_key
+                ),
+            )
+            await task_queue.enqueue(job)
+            return job
+
+        func_max_retries = max_retries
+        func_timeout = timeout
+        func_idempotency_key = idempotency_key
+
+        if inspect.isclass(func) and callable(getattr(func, "execute", None)):
+            cls_target: Any = func
+            cls_target._task_name = task_name
+            cls_target._task_module = module_name
+            cls_target._priority = resolved_priority
+            cls_target._max_retries = max_retries
+            cls_target._timeout = timeout
+            cls_target._queue = queue
+            cls_target._idempotency_key = idempotency_key
+            if not hasattr(cls_target, "signature"):
+                cls_target.signature = staticmethod(_make_signature)
+            if not hasattr(cls_target, "s"):
+                cls_target.s = staticmethod(_make_signature)
+            if not hasattr(cls_target, "delay"):
+                cls_target.delay = staticmethod(_delay)
+            if not hasattr(cls_target, "apply_async"):
+                cls_target.apply_async = staticmethod(_apply_async)
+
+            _store_registered_task(
+                cls_target,
+                module_name=module_name,
+                task_name=task_name,
+            )
+            return cls_target
 
         class TaskFunction:
             """Wrapped task function with queue methods."""
@@ -127,11 +215,7 @@ def task(
             _func = staticmethod(func)
             _task_name = task_name
             _task_module = module_name
-            _priority = (
-                priority
-                if isinstance(priority, int)
-                else cast("Priority", priority).value
-            )
+            _priority = resolved_priority
             _max_retries = max_retries
             _timeout = timeout
             _queue = queue
@@ -143,37 +227,18 @@ def task(
 
             @classmethod
             def signature(cls, *args: Any, **kwargs: Any) -> JobProtocol:
-                """Create task signature without executing.
-
-                Returns:
-                    JobProtocol instance ready to be enqueued
-                """
-                return JobProtocol(
-                    id="",
-                    name=cls._task_name,
-                    args=args,
-                    kwargs=kwargs,
-                    priority=cls._priority,
-                    max_retries=cls._max_retries,
-                    idempotency_key=cls._idempotency_key,
-                    timeout=cls._timeout,
-                )
+                """Create task signature without executing."""
+                return _make_signature(*args, **kwargs)
 
             @classmethod
             def s(cls, *args: Any, **kwargs: Any) -> JobProtocol:
-                """Shorthand for signature().
-
-                Returns:
-                    JobProtocol instance ready to be enqueued
-                """
+                """Shorthand for signature()."""
                 return cls.signature(*args, **kwargs)
 
             @classmethod
             async def delay(cls, *args: Any, **kwargs: Any) -> Any:
                 """Enqueue task for execution (simplified interface)."""
-                raise NotImplementedError(
-                    "Use TaskProvider.enqueue_job() or apply_async(queue, ...)",
-                )
+                return await _delay(*args, **kwargs)
 
             @classmethod
             async def apply_async(
@@ -187,26 +252,15 @@ def task(
                 **kwargs: Any,
             ) -> JobProtocol:
                 """Enqueue task for asynchronous execution."""
-                from quadkit.tasks.models import JobProtocol
-
-                job = JobProtocol(
-                    id="",
-                    name=cls._task_name,
-                    args=args,
-                    kwargs=kwargs,
-                    priority=priority if priority is not None else cls._priority,
-                    max_retries=(
-                        max_retries if max_retries is not None else cls._max_retries
-                    ),
-                    timeout=timeout if timeout is not None else cls._timeout,
-                    idempotency_key=idempotency_key
-                    if idempotency_key is not None
-                    else cls._idempotency_key,
+                return await _apply_async(
+                    queue,
+                    *args,
+                    priority=priority,
+                    max_retries=max_retries,
+                    timeout=timeout,
+                    idempotency_key=idempotency_key,
+                    **kwargs,
                 )
-
-                await queue.enqueue(job)
-
-                return job
 
         task_wrapper = TaskFunction()
         update_wrapper(task_wrapper, func)
@@ -226,8 +280,9 @@ def scheduled(
     priority: Priority | int = Priority.NORMAL,
     max_retries: int = 3,
     timeout: float | None = None,
-) -> Callable[[Callable[..., Any]], Any]:
-    """Decorator to define a scheduled task.
+    queue: str = "default",
+) -> Callable[[Any], Any]:
+    """Decorator to define a scheduled task (function or ``ScheduledTask`` class).
 
     Args:
         cron: Cron expression (e.g., "0 9 * * *")
@@ -235,17 +290,25 @@ def scheduled(
         priority: Task priority
         max_retries: Maximum retry attempts
         timeout: Execution timeout
+        queue: Queue name for this task
 
     Returns:
-        Decorated task function with scheduling metadata
+        Decorated class or task wrapper with scheduling metadata.
     """
 
-    def decorator(func: Callable[..., Any]) -> Any:
+    @overload
+    def decorator(func: _ClsT) -> _ClsT: ...
+
+    @overload
+    def decorator(func: Callable[..., Any]) -> Any: ...
+
+    def decorator(func: Any) -> Any:
         task_wrapper = task(
             name=name,
             priority=priority,
             max_retries=max_retries,
             timeout=timeout,
+            queue=queue,
         )(func)
         task_wrapper._cron = cron
         return task_wrapper

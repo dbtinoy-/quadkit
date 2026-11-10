@@ -10,6 +10,9 @@ Architecture:
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from typing import Any
+
 from starlette.requests import Request
 from starlette.types import ASGIApp, Receive, Scope, Send
 
@@ -27,6 +30,79 @@ from quadkit.contracts.exceptions import (
 from quadkit.logging import get_logger
 
 logger = get_logger(__name__)
+
+
+def _normalise_user(user: object) -> dict | None:
+    """Convert supported identity values before deciding authentication succeeded."""
+    if user is None or isinstance(user, bool):
+        return None
+    if isinstance(user, dict):
+        result = user
+    elif hasattr(user, "model_dump") and callable(user.model_dump):
+        result = user.model_dump()
+    elif hasattr(user, "__dict__"):
+        import dataclasses
+
+        result = (
+            dataclasses.asdict(user)  # type: ignore[arg-type]
+            if dataclasses.is_dataclass(user)
+            else dict(vars(user))
+        )
+    else:
+        try:
+            result = dict(user)  # type: ignore[call-overload]
+        except (TypeError, ValueError):
+            return None
+    # An empty object cannot identify a principal. Do not let it bypass this
+    # middleware or suppress later authenticators in the configured chain.
+    return result if isinstance(result, dict) and result else None
+
+
+@dataclass(frozen=True, slots=True)
+class AuthenticationMiddlewareDocumentation:
+    """Native mandatory-auth rejection claim after successful middleware setup.
+
+    No bearer/cookie scheme is inferred from the authenticator protocol. Exclusions
+    use this middleware's literal prefix matching, not router/group semantics.
+    Empty-authenticator middleware must not publish this claim.
+    """
+
+    exclude_paths: tuple[str, ...] = ()
+
+    def __post_init__(self) -> None:
+        if type(self.exclude_paths) is not tuple or any(
+            not isinstance(prefix, str) for prefix in self.exclude_paths
+        ):
+            raise ValueError("Invalid authentication middleware exclusions")
+
+    def responses_for(self, path: str) -> dict[str, Any]:
+        """Describe the native error-only branch without authenticating a request."""
+        # Documentation paths are templates. Only a prefix wholly inside the
+        # fixed leading text exempts every concrete request. Variable names
+        # are not literal runtime values; narrower exclusions can exempt some
+        # values without removing the operation's possible401 response.
+        literal_prefix = path.partition("{")[0]
+        if any(literal_prefix.startswith(prefix) for prefix in self.exclude_paths):
+            return {}
+        return {
+            "401": {
+                "description": "Authentication required.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "properties": {
+                                "error": {
+                                    "type": "string",
+                                    "enum": ["Authentication required"],
+                                },
+                            },
+                            "required": ["error"],
+                        },
+                    },
+                },
+            },
+        }
 
 
 class AuthenticationMiddleware:
@@ -75,19 +151,42 @@ class AuthenticationMiddleware:
         self.enable_identity_resolution = enable_identity_resolution
         self.identity_resolver = identity_resolver
 
+    def _is_path_excluded(self, method: str, path: str) -> bool:
+        """Check whether *method* + *path* matches any configured exclusion rule.
+
+        Entries in ``exclude_paths`` may be plain path prefixes (e.g. ``"/health"``,
+        or ``"/"`` for exact root) or HTTP-method-qualified prefixes such as
+        ``"GET /api/v1/media/"`` so public read endpoints can coexist under a
+        shared prefix with authenticated write routes.
+        """
+        upper_method = method.upper()
+        for raw_rule in self.exclude_paths:
+            if " " in raw_rule:
+                rule_method, excl_path = raw_rule.split(" ", 1)
+                if rule_method.strip().upper() != upper_method:
+                    continue
+                excl_path = excl_path.strip()
+            else:
+                excl_path = raw_rule
+            if path == "/" if excl_path == "/" else path.startswith(excl_path):
+                return True
+        return False
+
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """Authenticate the request using configured authenticators."""
         if scope["type"] != "http":
             await self.app(scope, receive, send)
             return
 
-        # Get path from scope
+        # Get path and method from scope
         path = scope.get("path", "")
+        raw_method = scope.get("method", b"")
+        method_str = (
+            raw_method.decode() if isinstance(raw_method, bytes) else str(raw_method)
+        )
 
         # Determine if authentication is mandatory for this path
-        is_excluded = any(
-            path.startswith(excl_path) for excl_path in self.exclude_paths
-        )
+        is_excluded = self._is_path_excluded(method_str, path)
 
         # Create request from scope for authenticators
         request = Request(scope)
@@ -96,7 +195,7 @@ class AuthenticationMiddleware:
         user = None
         if self.authenticators:
             for authenticator in self.authenticators:
-                user = await authenticator.authenticate(request)
+                user = _normalise_user(await authenticator.authenticate(request))
                 if user is not None:
                     break
 
@@ -108,8 +207,6 @@ class AuthenticationMiddleware:
         if user is None and not is_excluded:
             # Emit structured audit log for auth failure
             client_host = scope.get("client", ("unknown", 0))[0]
-            method = scope.get("method", b"")
-            method_str = method.decode() if isinstance(method, bytes) else str(method)
             logger.warning(
                 "security.auth_failure",
                 path=path,
@@ -133,36 +230,7 @@ class AuthenticationMiddleware:
             )
             return
 
-        # Optionally resolve OAuth external IDs to internal UUIDs
-        if (
-            self.enable_identity_resolution
-            and self.identity_resolver is not None
-            and user is not None
-        ):
-
-            def _get(obj: object, key: str, default: object = None) -> object:
-                if isinstance(obj, dict):
-                    return obj.get(key, default)
-                return getattr(obj, key, default)
-
-            user_id = _get(user, "id") or _get(user, "user_id")
-            provider = _get(user, "provider") or "google"
-
-            resolved_id = await self.identity_resolver.resolve_user_id(
-                user_id,  # type: ignore[arg-type]
-                provider,  # type: ignore[arg-type]
-            )
-            if resolved_id:
-                if isinstance(user, dict):
-                    user_dict: dict = {**user}
-                else:
-                    user_dict = dict(user)
-                user_dict["id"] = resolved_id
-                user_dict["user_id"] = resolved_id
-                user_dict["resolved"] = True
-                user = user_dict
-
-        # Normalise user to dict
+        # Normalise user to dict before optional OAuth identity resolution
         if user is not None and not isinstance(user, dict):
             if isinstance(user, bool):
                 user = None
@@ -180,6 +248,26 @@ class AuthenticationMiddleware:
                     user = dict(user)
                 except (TypeError, ValueError):
                     user = None
+
+        # Optionally resolve OAuth external IDs to internal UUIDs
+        if (
+            self.enable_identity_resolution
+            and self.identity_resolver is not None
+            and user is not None
+        ):
+            user_id = str(user.get("id") or user.get("user_id") or "")
+            provider = str(user.get("provider") or "google")
+
+            resolved_id = await self.identity_resolver.resolve_user_id(
+                user_id,
+                provider,
+            )
+            if resolved_id:
+                user_dict: dict = {**user}
+                user_dict["id"] = resolved_id
+                user_dict["user_id"] = resolved_id
+                user_dict["resolved"] = True
+                user = user_dict
 
         # Store user in scope state
         scope.setdefault("state", {})["user"] = user

@@ -6,7 +6,7 @@ from typing import Any
 
 from quadkit.contracts.admin import PageContent
 from quadkit.contracts.admin.widget_content import Stat, StatContent
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks import TaskScheduler
 from quadkit.tasks.execution.metrics import TaskMetricsCollector
 
@@ -47,7 +47,10 @@ class TasksOverviewPage:
                 worker_count = str(getattr(self._scheduler, "worker_count", "N/A"))
                 scheduler_status = str(getattr(self._scheduler, "status", "N/A"))
         except Exception as exc:
-            logger.warning("tasks_overview.scheduler_unavailable", error=str(exc))
+            logger.warning(
+                "tasks_overview.scheduler_unavailable",
+                error_type=safe_error_type(exc),
+            )
 
         try:
             if self._metrics_collector is not None:
@@ -55,7 +58,10 @@ class TasksOverviewPage:
                     self._metrics_collector, "average_duration_ns", 0
                 )
         except Exception as exc:
-            logger.warning("tasks_overview.metrics_unavailable", error=str(exc))
+            logger.warning(
+                "tasks_overview.metrics_unavailable",
+                error_type=safe_error_type(exc),
+            )
 
         avg_ms = int(avg_duration_ns / 1_000_000) if avg_duration_ns else 0
 

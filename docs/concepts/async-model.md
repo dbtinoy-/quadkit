@@ -28,8 +28,13 @@ Two entry points serve an application, and the rule is simple:
   `RuntimeError` rather than silently blocking that loop.
 - `await run_server_async(app, ...)` — the async-native entry point for
   code already inside an event loop (REPLs, notebooks, embedding into a
-  larger async process). Uvicorn serves in the calling loop; Granian
-  runs in an executor thread.
+  larger async process). Uvicorn and Hypercorn serve in the calling
+  loop; Granian serves through its embedded server, also in the loop.
+  In-loop serving is single-process: configured `workers > 1` or
+  `reload` is warned about and ignored (the multiprocess machinery
+  installs OS signal handlers on the main thread — use `run_server` or
+  the `quadkit` CLI for workers). Cancelling the awaiting task stops
+  the server.
 
 Scripts and `__main__` entry points use the sync wrapper — that is what
 the [first app](../getting-started/first-app.md) does.

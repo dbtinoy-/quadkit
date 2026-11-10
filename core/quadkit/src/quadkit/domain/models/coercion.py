@@ -8,60 +8,114 @@ that have always imported it from this module.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from typing import Any, cast
 
-# The annotation resolver lives in `quadkit.primitives.typing` because it is not
-# a domain concern: `quadkit.mapping` needs the same answer ("what types does
-# this model declare") to match a source object's fields against a dataclass
-# destination, and two resolvers would eventually disagree.
 from quadkit.primitives.typing import resolve_type_hints as resolve_type_hints
 
 __all__ = ["coerce_and_build", "resolve_type_hints"]
 
 
-def coerce_and_build(cls: type[Any], data: dict[str, Any]) -> Any:
-    """Build *cls* from *data* through the same guard as direct construction.
+def _extract_attributes(cls: type[Any], data: Any) -> dict[str, Any]:
+    """Extract declared fields (and aliases) from an ORM or attribute object."""
+    fields = getattr(cls, "__dataclass_fields__", {})
+    obj_vars = vars(data) if hasattr(data, "__dict__") else {}
+    raw_dict: dict[str, Any] = {}
 
-    ``model_validate`` — the hydration path ``GenericRepository`` and every
-    ``from_dict``-shaped caller goes through — used to run a narrow coercion
-    table of its own (int/float/str/bool) and then ``cls(**coerced)``. On a
-    plain ``@dataclass`` subclass that bypasses everything ``DomainModel``
-    promises:
+    for fname, f in fields.items():
+        meta = getattr(f, "metadata", {}) or {}
+        alias = meta.get("alias")
+        if fname in obj_vars:
+            raw_dict[fname] = obj_vars[fname]
+        elif hasattr(data, fname):
+            attr_val = getattr(data, fname)
+            # Guard against SQLAlchemy DeclarativeBase.metadata class attribute
+            if (
+                fname == "metadata"
+                and attr_val is not None
+                and not isinstance(attr_val, Mapping)
+            ):
+                continue
+            raw_dict[fname] = attr_val
+        elif isinstance(alias, str) and hasattr(data, alias):
+            raw_dict[alias] = getattr(data, alias)
 
-    * a row's ISO timestamp stayed a ``str``, because ``datetime`` was never in
-      the table;
-    * an unknown column raised a bare ``TypeError: unexpected keyword
-      argument`` instead of landing in ``model_extra``;
-    * ``Field(...)`` constraints and the field/model validators never ran, so a
-      ``Field(min_length=...)`` declaration was documentation, not a check.
+    before_validators = (getattr(cls, "_model_validators", None) or {}).get(
+        "before", []
+    )
+    if before_validators and obj_vars:
+        # Expose raw ORM column attributes to mode="before" model validators,
+        # then prune unmapped ORM columns unless extra="allow" is configured.
+        candidate = {
+            k: v
+            for k, v in obj_vars.items()
+            if not k.startswith("_") and k not in raw_dict
+        }
+        candidate.update(raw_dict)
+        for validator_fn in before_validators:
+            res = validator_fn(cls, candidate)
+            if isinstance(res, dict):
+                candidate = res
 
-    Delegating to ``DomainModel.__init__`` — the path a directly constructed
-    model already takes — fixes all three by deleting the second
-    implementation rather than extending it. One guard, one behaviour:
-    ``Model.model_validate(row)`` and ``Model(**row)`` now agree.
+        cfg = getattr(cls, "model_config", None)
+        extra_mode = (
+            cfg.get("extra")
+            if isinstance(cfg, Mapping)
+            else getattr(cfg, "extra", None)
+        )
+        if extra_mode == "allow":
+            return candidate
 
-    Args:
-        cls: The domain model class being validated.
-        data: Raw field values (e.g. a database row or a decoded JSON body).
+        allowed_keys: set[str] = set(fields.keys())
+        for f in fields.values():
+            meta = getattr(f, "metadata", {}) or {}
+            if isinstance(meta.get("alias"), str):
+                allowed_keys.add(meta["alias"])
+            for cand_alias in meta.get("aliases", ()):
+                allowed_keys.add(str(cand_alias))
+        return {k: v for k, v in candidate.items() if k in allowed_keys}
 
-    Returns:
-        A new instance of *cls*.
+    return raw_dict
 
-    Raises:
-        ValidationError: If required fields are missing or a declared
-            constraint or field validator rejects a value.
-    """
+
+def coerce_and_build(
+    cls: type[Any],
+    data: Any,
+    *,
+    from_attributes: bool | None = None,
+) -> Any:
+    """Build *cls* from *data* through the same guard as direct construction."""
     import dataclasses as _dc
 
-    if not _dc.is_dataclass(cls):
-        return cls(**data)
+    if isinstance(data, cls):
+        return data
 
-    # Imported here: ``base`` imports this module at class-creation time.
+    raw_dict: dict[str, Any]
+    if isinstance(data, Mapping):
+        raw_dict = dict(data)
+    else:
+        cfg = getattr(cls, "model_config", None)
+        cfg_from_attrs = (
+            cfg.get("from_attributes", False)
+            if isinstance(cfg, Mapping)
+            else bool(getattr(cfg, "from_attributes", False))
+        )
+        allow_attrs = (
+            cfg_from_attrs if from_attributes is None else bool(from_attributes)
+        )
+        if not allow_attrs:
+            from quadkit.contracts.exceptions.domain import ValidationError
+
+            raise ValidationError(
+                f"Input should be a dictionary or mapping, got {type(data).__name__}"
+            )
+        raw_dict = _extract_attributes(cls, data)
+
+    if not _dc.is_dataclass(cls):
+        return cls(**raw_dict)
+
     from quadkit.domain.models.base import DomainModel
 
     instance = cls.__new__(cls)
-    # ``cls`` is only known to be a dataclass here, so the freshly allocated
-    # instance has to be named as the ``DomainModel`` it is about to be
-    # initialised as before its ``__init__`` can be called directly.
-    DomainModel.__init__(cast("DomainModel", instance), **data)
+    DomainModel.__init__(cast("DomainModel", instance), **raw_dict)
     return instance

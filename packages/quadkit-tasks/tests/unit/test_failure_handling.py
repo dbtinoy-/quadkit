@@ -65,7 +65,7 @@ class TestDedicatedDLQ:
         assert len(dlq.calls) == 1
         call = dlq.calls[0]
         assert call["job"] is job
-        assert call["error"] == "boom"
+        assert call["error"] == "Task failed"
         assert call["attempt_count"] == job.retry_count
 
     @pytest.mark.asyncio
@@ -76,7 +76,7 @@ class TestDedicatedDLQ:
         await send_to_dlq(
             dlq, _Queue(), job, "", worker_id="w1", logger_instance=_Logger()
         )
-        assert dlq.calls[0]["error"] == "stored error"
+        assert dlq.calls[0]["error"] == "Task failed"
 
     @pytest.mark.asyncio
     async def test_error_falls_back_to_unknown(self) -> None:  # noqa: D102
@@ -86,7 +86,20 @@ class TestDedicatedDLQ:
         await send_to_dlq(
             dlq, _Queue(), job, "", worker_id="w1", logger_instance=_Logger()
         )
-        assert dlq.calls[0]["error"] == "Unknown error"
+        assert dlq.calls[0]["error"] == "Task failed"
+
+    @pytest.mark.asyncio
+    async def test_preserves_only_safe_exception_type(self) -> None:
+        dlq = _RecordingDLQ()
+        await send_to_dlq(
+            dlq,
+            _Queue(),
+            _job(),
+            "Task failed (ValueError)",
+            worker_id="w1",
+            logger_instance=_Logger(),
+        )
+        assert dlq.calls[0]["error"] == "Task failed (ValueError)"
 
     @pytest.mark.asyncio
     async def test_does_not_re_enqueue(self) -> None:  # noqa: D102
@@ -137,6 +150,6 @@ class TestFallbackReEnqueue:
         await send_to_dlq(
             None, queue, job, "boom", worker_id="w2", logger_instance=logger
         )
-        assert len(logger.infos) == 1
-        assert "w2" in str(logger.infos[0])
-        assert "job-1" in str(logger.infos[0])
+        assert logger.infos == [("worker_job_sent_to_dlq",)]
+        assert "w2" not in str(logger.infos)
+        assert "job-1" not in str(logger.infos)

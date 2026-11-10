@@ -10,7 +10,7 @@ from quadkit.contracts.admin.widget_content import (
     TableCell,
     TableContent,
 )
-from quadkit.logging import get_logger
+from quadkit.logging import get_logger, safe_error_type
 from quadkit.tasks import WorkerPool
 
 logger = get_logger(__name__)
@@ -41,7 +41,10 @@ class TasksActivePage:
                 if w.current_job is not None
             ]
         except Exception as exc:
-            logger.warning("tasks_active.pool_unavailable", error=str(exc))
+            logger.warning(
+                "tasks_active.pool_unavailable",
+                error_type=safe_error_type(exc),
+            )
             return PageContent(
                 title="Active Tasks",
                 body=EmptyContent(

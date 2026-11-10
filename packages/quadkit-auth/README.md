@@ -16,6 +16,24 @@ Use `AuthModule.configure()` to register the auth bundle and protect routes with
 
 
 > Full documentation: [oridecon.dev/quadkit](https://oridecon.dev/quadkit)
+## Guard documentation
+
+The public Web `require_roles` and `require_permissions` decorators, like
+`require_auth`, declare immutable bearer-documentation metadata through
+Contracts. The authorization guard's non-optional `require_auth` variant does
+so too. Web can therefore document credentials without inspecting guard names
+or importing Auth. Optional authorization does not declare a bearer requirement.
+This metadata documents existing enforcement; it does not grant permissions or
+change guard decisions.
+
+The non-optional authorization decorator additionally declares its direct 403
+`application/json` rejection (`error: "forbidden"`, string `message`) when roles or
+permissions are required. These primitive declarations are deeply immutable and
+Web consumes them through Contracts. No 401 body is declared: outer authentication
+middleware can answer first with a different envelope. Auth-only, optional and
+DI-replaceable guard bodies remain unspecified. Existing enforcement and rejection
+rendering are unchanged; custom guards/middleware must own their response docs.
+
 ## Install
 
 ```bash
@@ -185,3 +203,13 @@ config = AuthConfig(
 
 This prevents the common mistake of silently trusting unverified tokens
 in production when a secret env-var is missing.
+
+## Explicit durable session storage
+
+`SQLSessionStore` provides encrypted SQLite persistence through the database
+contract, with insert-only IDs, revocation tombstones, expiry and conditional
+updates that cannot resurrect logged-out sessions. Hosts must provision a stable
+Fernet key and explicitly migrate the store, then pass it with
+`AuthModule.configure(..., session_store=store)`; nothing enables browser
+cookies or silently replaces an in-memory manager. See
+[composition, privacy and recovery limits](docs/SQL_SESSIONS.md).

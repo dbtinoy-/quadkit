@@ -96,8 +96,10 @@ class _FilterMixin:
                 params.append(_std(check_val))
 
         if search_term and search_fields:
+            # `LOWER(...) LIKE LOWER(...)` rather than `ILIKE`: see
+            # `Filter.to_sql` — SQLite and MySQL do not have ILIKE at all.
             search_clause = " OR ".join(
-                f"{Column(field)} ILIKE ?" for field in search_fields
+                f"LOWER({Column(field)}) LIKE LOWER(?)" for field in search_fields
             )
             where_parts.append(f"({search_clause})")
             params.extend([f"%{search_term}%" for _ in search_fields])

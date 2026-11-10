@@ -99,7 +99,7 @@ SA_TYPES: dict[str, str] = {
     "timestamp": "DateTime(timezone=True)",
     "date": "Date",
     "time": "Time",
-    "uuid": "String(length=32)",
+    "uuid": "String(length=36)",
     "json": "JSON",
     "jsonb": "JSON",
     "dict": "JSON",

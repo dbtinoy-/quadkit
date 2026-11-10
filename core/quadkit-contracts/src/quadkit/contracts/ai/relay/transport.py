@@ -22,10 +22,15 @@ class UpstreamRequest:
         method: HTTP method used for the upstream call.
         url: Fully-resolved upstream endpoint URL.
         headers: Headers to send with the upstream call.
-        payload: JSON payload to send with the upstream call.
+        payload: JSON payload to send with the upstream call. Empty when
+            ``content`` carries the body.
         timeout_seconds: Timeout budget for the upstream call.
         channel_name: Name of the relay channel that selected this call. Empty
             when the caller does not use channel identity.
+        content: Raw request body sent byte for byte instead of ``payload``.
+            Multipart endpoints (audio transcriptions, image edits) forward the
+            caller's bytes with its content type, so the file parts reach the
+            provider untouched. ``None`` (the default) means a JSON request.
     """
 
     request_id: str
@@ -35,15 +40,22 @@ class UpstreamRequest:
     payload: Mapping[str, JsonValue]
     timeout_seconds: float
     channel_name: str = ""
+    content: bytes | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class UpstreamResponse:
-    """A non-streaming response from an upstream model provider."""
+    """A non-streaming response from an upstream model provider.
+
+    ``payload`` is the decoded JSON object for a JSON response and the raw
+    bytes for a binary one (audio, images, ``application/octet-stream``).
+    The distinction matters: an audio response is not a malformed JSON body,
+    and treating it as one turned every successful speech call into a 502.
+    """
 
     status_code: int
     headers: Mapping[str, str]
-    payload: Mapping[str, JsonValue] | None
+    payload: Mapping[str, JsonValue] | bytes | None
 
 
 @dataclass(frozen=True, slots=True)

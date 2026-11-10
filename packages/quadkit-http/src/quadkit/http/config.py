@@ -50,10 +50,12 @@ class HTTPClientConfig(BaseConfig):
     Attributes:
         pool: Connection pool settings.
         proxy: Optional HTTP/HTTPS proxy URL (e.g. ``"http://proxy.example.com:8080"``).
-            Applied to all requests made by the client.
+            Applied to requests only when URL-safety enforcement is disabled;
+            proxies resolve destination hosts remotely and bypass the DNS pin.
         trust_env: Whether to read proxy settings from environment variables
-            (``HTTP_PROXY``, ``HTTPS_PROXY``, ``NO_PROXY``).  Defaults to
-            ``True`` — set to ``False`` to ignore environment proxies.
+            (``HTTP_PROXY``, ``HTTPS_PROXY``, ``NO_PROXY``). Defaults to ``True``
+            when URL safety is disabled. Enabling URL safety suppresses env
+            proxies because their remote DNS resolution bypasses DNS pins.
         cookie_jar: Whether to enable an in-memory cookie jar that persists
             cookies across requests within a single :class:`HTTPClient` session.
             Defaults to ``True``.

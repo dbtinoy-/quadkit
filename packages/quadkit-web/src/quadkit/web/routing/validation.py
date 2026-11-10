@@ -333,12 +333,18 @@ async def validate_and_merge_request(
                 is_model_type = False
                 if ann is not None:
                     try:
-                        from pydantic import BaseModel
-
-                        if isinstance(ann, type) and issubclass(ann, BaseModel):
+                        if isinstance(ann, type) and issubclass(ann, DomainModel):
                             is_model_type = True
-                    except ImportError:
+                    except (TypeError, AttributeError):
                         pass
+                    if not is_model_type:
+                        try:
+                            from pydantic import BaseModel
+
+                            if isinstance(ann, type) and issubclass(ann, BaseModel):
+                                is_model_type = True
+                        except ImportError:
+                            pass
 
                 if len(body_field_names) == 1 and (
                     name not in body_json or is_model_type

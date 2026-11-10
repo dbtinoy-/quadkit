@@ -8,12 +8,19 @@ from quadkit.contracts.cli.contributions import (
     HealthCheckContribution,
     ShellContextContribution,
 )
-from quadkit.contracts.cli.types import GeneratorDefinition, GeneratorOption
+from quadkit.contracts.cli.types import (
+    STRUCTURED_ENTITY_SPEC_CAPABILITY,
+    GeneratorDefinition,
+    GeneratorOption,
+)
 
 _FIELDS_OPTION = GeneratorOption(
     name="fields",
     type_hint="str",
-    description="Field spec in name:type[?][!unique][!fk=Model][=default] format",
+    description=(
+        "Field spec in name:type[?][!unique][!indexed]"
+        "[!fk=table.column][!ondelete=cascade][=default] format"
+    ),
 )
 
 # (name, description, generator_path, output_dir) — titles derive via make()
@@ -88,6 +95,10 @@ _OPTIONS: dict[str, tuple[GeneratorOption, ...]] = {
 # Titles that make() cannot derive exactly.
 _TITLES: dict[str, str] = {"health": "Generate Health Check"}
 
+_STRUCTURED_ENTITY_GENERATORS: frozenset[str] = frozenset(
+    {"domain", "migration", "repository", "seeder", "service"}
+)
+
 _GENERATOR_DEFINITIONS: tuple[GeneratorDefinition, ...] = tuple(
     GeneratorDefinition.make(
         name,
@@ -98,6 +109,11 @@ _GENERATOR_DEFINITIONS: tuple[GeneratorDefinition, ...] = tuple(
         category="database",
         options=_OPTIONS.get(name, ()),
         title=_TITLES.get(name),
+        capabilities=(
+            (STRUCTURED_ENTITY_SPEC_CAPABILITY,)
+            if name in _STRUCTURED_ENTITY_GENERATORS
+            else ()
+        ),
     )
     for name, description, generator_path, output_dir in _SPECS
 )
@@ -133,7 +149,7 @@ class SqlCliContributor:
         return [
             HealthCheckContribution(
                 name="database_connection",
-                description="Verify database connectivity and migration status",
+                description="Verify configured database provider connectivity",
                 check_path="quadkit.sql.cli.checks:check_database_connection",
                 contributor="sql",
                 category="database",

@@ -21,8 +21,8 @@ Key APIs
   Refresh an expired access token using a refresh token. Returns new access + refresh tokens.
 - ``AuthenticationService.authenticate(user_id, password) -> Result[AuthToken, AuthenticationFailed]``
   Authenticate a user with credentials.
-- ``AuthorizationService.authorize(user, required_roles) -> Result[True, AuthorizationFailed]``
-  Enforce RBAC policies.
+- ``AuthorizationService.authorize(user, action, resource) -> Result[bool, AuthorizationError]``
+  Evaluate permissions: only an exact True payload grants; is_ok alone does not.
 
 GuardProtocol decorators
 ----------------

@@ -55,7 +55,7 @@ def create_memory_task_provider(
     from quadkit.tasks.backends import MemoryTaskQueue
     from quadkit.tasks.di.provider import TaskProvider
 
-    queue = MemoryTaskQueue()  # type: ignore[abstract]
+    queue = MemoryTaskQueue()
     return TaskProvider(queue, worker_count, enable_scheduler)
 
 

@@ -33,7 +33,12 @@ logger = get_logger(__name__)
 
 @inject
 class TokenProvider(Provider):
-    """JWT token management ONLY."""
+    """JWT token management ONLY.
+
+    An explicit ``token_manager`` is reused rather than replaced; otherwise
+    the provider builds one from its configuration. ``cache_service`` is
+    forwarded to a newly built manager for token revocation.
+    """
 
     def __init__(
         self,
@@ -42,10 +47,15 @@ class TokenProvider(Provider):
         jwt_algorithm: str | None = None,
         jwt_access_expiration_hours: int | None = None,
         jwt_refresh_expiration_days: int | None = None,
+        token_manager: Any = None,
+        cache_service: Any = None,
         **kwargs: Any,
     ) -> None:
         super().__init__(name="tokens", priority=ProviderPriority.SECURITY)
         token_config = config.token if config else None
+        self._provided_token_manager = token_manager
+        self._cache_service = cache_service
+        self._required_audience = getattr(token_config, "required_audience", None)
 
         # ── JWT verification policy ──────────────────────────────────────────
         # Verified-only decoding is enforced everywhere.  A missing secret is
@@ -113,110 +123,104 @@ class TokenProvider(Provider):
         self.jwt_algorithm = jwt_algorithm or (
             token_config.algorithm if token_config else const.DEFAULT_TOKEN_ALGORITHM
         )
-        self.jwt_access_expiration_hours: int = int(
-            jwt_access_expiration_hours
-            or (  # type: ignore[arg-type]
-                getattr(token_config, "access_expiration_hours", 1)
-                if token_config
-                else 1
-            )
-        )
-        self.jwt_refresh_expiration_days: int = int(
-            jwt_refresh_expiration_days
-            or (  # type: ignore[arg-type]
-                getattr(
-                    token_config,
-                    "refresh_expiration_days",
-                    const.DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS,
-                )
-                if token_config
-                else const.DEFAULT_REFRESH_TOKEN_EXPIRE_DAYS
-            )
-        )
-        self.jwt_key_rotation_grace_period_seconds: int = int(
-            getattr(
-                token_config,
-                "key_rotation_grace_period_seconds",
-                const.DEFAULT_JWT_KEY_ROTATION_GRACE_PERIOD_SECONDS,
-            )
-            if token_config
-            else const.DEFAULT_JWT_KEY_ROTATION_GRACE_PERIOD_SECONDS
+        from quadkit.auth.di.sub_providers._token_durations import token_durations
+
+        (
+            self.jwt_access_expiration_hours,
+            self.jwt_refresh_expiration_days,
+            self.jwt_key_rotation_grace_period_seconds,
+        ) = token_durations(
+            token_config,
+            access_hours=jwt_access_expiration_hours,
+            refresh_days=jwt_refresh_expiration_days,
         )
 
     async def register(self, container: ContainerRegistrarProtocol) -> None:
         """Register token services with the container."""
-        # If RSA algorithm chosen and secret is not an RSA PEM, generate an ephemeral keypair
-        keys_to_pass = None
-        current_kid = None
-        if self.jwt_algorithm.startswith("RS"):
-            # If secret_key looks like a PEM private key, use it
-            if self.secret_key and "-----BEGIN" in self.secret_key:
-                keys_to_pass = {"default": {"private": self.secret_key}}
-                current_kid = "default"
-            else:
-                # Generate ephemeral RSA keypair
-                try:
-                    from cryptography.hazmat.primitives import serialization
-                    from cryptography.hazmat.primitives.asymmetric import rsa
-                except (ImportError, ModuleNotFoundError):
-                    raise RuntimeError(
-                        "cryptography is required for RS algorithms (install cryptography)",
-                    ) from None
-
-                private_key = rsa.generate_private_key(
-                    public_exponent=65537,
-                    key_size=2048,
-                )
-                private_pem = private_key.private_bytes(
-                    encoding=serialization.Encoding.PEM,
-                    format=serialization.PrivateFormat.PKCS8,
-                    encryption_algorithm=serialization.NoEncryption(),
-                ).decode("utf-8")
-
-                public_pem = (
-                    private_key.public_key()
-                    .public_bytes(
-                        encoding=serialization.Encoding.PEM,
-                        format=serialization.PublicFormat.SubjectPublicKeyInfo,
-                    )
-                    .decode("utf-8")
-                )
-
-                keys_to_pass = {
-                    "default": {"private": private_pem, "public": public_pem},
-                }
-                current_kid = "default"
-
-                logger.warning(
-                    "TokenProvider: using generated ephemeral RSA keypair for RS algorithm; provide persistent keys for production",
-                )
-
-        # Initialize token manager with keys or legacy secret
-        from pydantic import SecretStr
-
-        if keys_to_pass is not None and current_kid is not None:
-            self.token_manager = JWTTokenManager(
-                current_key_id=current_kid,
-                keys=keys_to_pass,  # type: ignore[arg-type]
-                algorithm=self.jwt_algorithm,
-                access_expiration_hours=self.jwt_access_expiration_hours,
-                refresh_expiration_days=self.jwt_refresh_expiration_days,
-                grace_period_seconds=self.jwt_key_rotation_grace_period_seconds,
-            )
+        if self._provided_token_manager is not None:
+            self.token_manager = self._provided_token_manager
         else:
-            current_key = (
-                SecretStr(self.secret_key)
-                if isinstance(self.secret_key, str)
-                else self.secret_key
-            )
-            self.token_manager = JWTTokenManager(
-                current_key_id="default",
-                keys={"default": current_key},
-                algorithm=self.jwt_algorithm,
-                access_expiration_hours=self.jwt_access_expiration_hours,
-                refresh_expiration_days=self.jwt_refresh_expiration_days,
-                grace_period_seconds=self.jwt_key_rotation_grace_period_seconds,
-            )
+            from pydantic import SecretStr
+
+            # If RSA algorithm chosen and secret is not an RSA PEM, generate an ephemeral keypair
+            keys_to_pass = None
+            current_kid = None
+            if self.jwt_algorithm.startswith(("RS", "PS")):
+                # If secret_key looks like a PEM private key, use it
+                if self.secret_key and "-----BEGIN" in self.secret_key:
+                    from quadkit.auth.authn._key_utils import rsa_key_material
+
+                    keys_to_pass = {"default": rsa_key_material(self.secret_key)}
+                    current_kid = "default"
+                else:
+                    # Generate ephemeral RSA keypair
+                    try:
+                        from cryptography.hazmat.primitives import serialization
+                        from cryptography.hazmat.primitives.asymmetric import rsa
+                    except (ImportError, ModuleNotFoundError):
+                        raise RuntimeError(
+                            "cryptography is required for RS algorithms (install cryptography)",
+                        ) from None
+
+                    private_key = rsa.generate_private_key(
+                        public_exponent=65537,
+                        key_size=2048,
+                    )
+                    private_pem = private_key.private_bytes(
+                        encoding=serialization.Encoding.PEM,
+                        format=serialization.PrivateFormat.PKCS8,
+                        encryption_algorithm=serialization.NoEncryption(),
+                    ).decode("utf-8")
+
+                    public_pem = (
+                        private_key.public_key()
+                        .public_bytes(
+                            encoding=serialization.Encoding.PEM,
+                            format=serialization.PublicFormat.SubjectPublicKeyInfo,
+                        )
+                        .decode("utf-8")
+                    )
+
+                    keys_to_pass = {
+                        "default": {
+                            "private": SecretStr(private_pem),
+                            "public": SecretStr(public_pem),
+                        },
+                    }
+                    current_kid = "default"
+
+                    logger.warning(
+                        "TokenProvider: using generated ephemeral RSA keypair for RS algorithm; provide persistent keys for production",
+                    )
+
+            # Initialize token manager with keys or legacy secret
+            if keys_to_pass is not None and current_kid is not None:
+                self.token_manager = JWTTokenManager(
+                    current_key_id=current_kid,
+                    keys=keys_to_pass,  # type: ignore[arg-type]
+                    algorithm=self.jwt_algorithm,
+                    access_expiration_hours=self.jwt_access_expiration_hours,
+                    refresh_expiration_days=self.jwt_refresh_expiration_days,
+                    grace_period_seconds=self.jwt_key_rotation_grace_period_seconds,
+                    required_audience=self._required_audience,
+                    cache_service=self._cache_service,
+                )
+            else:
+                current_key = (
+                    SecretStr(self.secret_key)
+                    if isinstance(self.secret_key, str)
+                    else self.secret_key
+                )
+                self.token_manager = JWTTokenManager(
+                    current_key_id="default",
+                    keys={"default": current_key},
+                    algorithm=self.jwt_algorithm,
+                    access_expiration_hours=self.jwt_access_expiration_hours,
+                    refresh_expiration_days=self.jwt_refresh_expiration_days,
+                    grace_period_seconds=self.jwt_key_rotation_grace_period_seconds,
+                    required_audience=self._required_audience,
+                    cache_service=self._cache_service,
+                )
 
         # Register with container
         container.singleton(JWTTokenManager, lambda: self.token_manager)
@@ -236,7 +240,8 @@ class TokenProvider(Provider):
         """Initialize token provider."""
         logger.info("TokenProvider started")
         hooks = await container.resolve_optional(HookRegistryProtocol)
-        self.token_manager.set_hook_registry(hooks)
+        if hasattr(self.token_manager, "set_hook_registry"):
+            self.token_manager.set_hook_registry(hooks)
 
         # Token revocation needs a cache backend; none is available during
         # register(). Attach a deferred source over the root resolver so

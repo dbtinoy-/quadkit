@@ -1,0 +1,66 @@
+# mcp.yaml.example
+# Quadkit AI MCP (Model Context Protocol) Configuration Template
+# YAML key: ai_mcp:
+# Environment variable prefix: QK_AI_MCP__
+
+ai_mcp:
+  # -------------------------------------------------------------------------
+  # HTTP Server Transport (default)
+  # -------------------------------------------------------------------------
+
+  # Host to bind the MCP HTTP endpoint to.
+  host: "0.0.0.0"
+
+  # Port to bind to.
+  port: 8080
+
+  # URL path for the MCP endpoint.
+  path: "/mcp"
+
+  # Enable Server-Sent Events (SSE) for streaming responses.
+  enable_sse: true
+
+  # Use stdio transport instead of HTTP (for local desktop-agent integration).
+  # When true, the host/port/path settings above are ignored.
+  stdio_mode: false
+
+  # -------------------------------------------------------------------------
+  # Server Identity
+  # -------------------------------------------------------------------------
+
+  # Human-readable name of this MCP server (passed to clients on handshake).
+  server_name: "the optional provider"
+
+  # Version string of this MCP server.
+  server_version: "1.0.0"
+
+  # -------------------------------------------------------------------------
+  # HTTP-specific settings
+  # -------------------------------------------------------------------------
+
+  # CORS allowed origins for browser-based MCP clients.
+  cors_origins: []
+  # - "http://localhost:3000"
+  # - "https://claude.ai"
+
+  # Maximum accepted request body size in bytes.
+  max_request_size: 1048576  # 1 MB
+
+  # Request processing timeout in seconds.
+  request_timeout: 30.0
+
+  # -------------------------------------------------------------------------
+  # Remote MCP Client — connect TO an external MCP server
+  # -------------------------------------------------------------------------
+
+  # URL of an external MCP server to connect to as an SSE client.
+  # null = operate as a standalone server only.
+  client_url: null  # e.g. "https://remote-mcp.example.com/mcp"
+
+  # Command and arguments to spawn a local MCP subprocess via stdio.
+  # Takes precedence over client_url when non-empty.
+  client_stdio_command: []
+  # - "npx"
+  # - "-y"
+  # - "@modelcontextprotocol/server-filesystem"
+  # - "/path/to/workspace"

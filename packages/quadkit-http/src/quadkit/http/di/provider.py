@@ -66,8 +66,8 @@ class HTTPProvider(Provider):
         Args:
             container: The DI registrar.
         """
-        container.singleton(HTTPClient, self._get_client)
-        container.singleton(HTTPClientProtocol, self._get_client)
+        container.singleton(HTTPClient, factory=self._resolve_client)
+        container.singleton(HTTPClientProtocol, factory=self._resolve_client)
 
     async def boot(self, container: ContainerResolverProtocol) -> None:
         """Construct and start the HTTP client with injected resilience.
@@ -140,6 +140,10 @@ class HTTPProvider(Provider):
             status=HealthStatus.HEALTHY if started else HealthStatus.UNHEALTHY,
             details={"started": started},
         )
+
+    def _resolve_client(self, *_args: Any) -> HTTPClient:
+        """DI factory wrapper accepting optional container resolver arguments."""
+        return self._get_client()
 
     def _get_client(self) -> HTTPClient:
         """Return the booted client; raises if :meth:`boot` has not been called."""

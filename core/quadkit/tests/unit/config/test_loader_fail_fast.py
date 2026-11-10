@@ -26,7 +26,7 @@ class _OSErrorSource(ConfigSource):
     pre_interpolated = True
 
     def load_sync(self) -> dict:
-        raise OSError("source temporarily unreachable")
+        raise OSError("PRIVATE_SOURCE_ERROR_SENTINEL /srv/private/config.yaml")
 
     def get_name(self) -> str:
         return "optional-oserror"
@@ -68,8 +68,8 @@ class TestLoaderFailFast:
         with pytest.raises(ConfigurationError, match="simulated hard failure"):
             loader.load_sync(dict)
 
-    def test_omittable_oserror_source_still_skipped(self):
-        """Optional sources raising OSError are skipped, not fatal."""
+    def test_omittable_oserror_source_still_skipped(self, capsys):
+        """Optional source errors are skipped and logged without their details."""
 
         class _GoodSource(ConfigSource):
             pre_interpolated = True
@@ -84,4 +84,9 @@ class TestLoaderFailFast:
         loader.add_source(_OSErrorSource())
         loader.add_source(_GoodSource())
         merged = loader._collect_sync(None)
+        output = capsys.readouterr().out
         assert merged == {"ok": 1}
+        assert "OSError" in output
+        assert "PRIVATE_SOURCE_ERROR_SENTINEL" not in output
+        assert "/srv/private/config.yaml" not in output
+        assert "optional-oserror" not in output

@@ -416,6 +416,15 @@ class CollectorMetricsApp:
             auth_token=auth_token,
         )
 
+    @property
+    def content_type(self) -> str:
+        """MIME content type for Prometheus text exposition."""
+        return "text/plain; charset=utf-8"
+
+    def export(self) -> str:
+        """Render the collector's current series in Prometheus text format."""
+        return self._renderer._format_prometheus_metrics()
+
     async def __call__(self, scope: dict, receive: Callable, send: Callable) -> None:
         """Serve the metrics exposition for any HTTP request."""
         if scope["type"] != "http":

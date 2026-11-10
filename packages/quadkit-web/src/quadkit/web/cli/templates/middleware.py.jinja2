@@ -28,8 +28,8 @@ class {{ class_name }}:
     with the web provider so it composes into the middleware stack::
 
         WebProvider(middleware=[({{ class_name }},)])          # no options
-        WebProvider(middleware=[({{ class_name }}, {{ '{"key": "value"}' }})])
-
+{% if options %}        WebProvider(middleware=[({{ class_name }}, {{ '{"options": {"key": "value"}}' }})])
+{% endif %}
     A bare class (``middleware=[{{ class_name }}]``) also works — the
     middleware adapter instantiates it with the downstream app.
     """

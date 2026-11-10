@@ -203,10 +203,11 @@ class TestTaskProviderHealthCheck:
 
         assert result.status.value == "healthy"
 
-    async def test_unhealthy_returns_unhealthy_on_error(self) -> None:
-        """Health check returns UNHEALTHY on exception."""
+    async def test_unhealthy_returns_sanitized_error_on_failure(self) -> None:
+        """Health check returns a typed error without backend details."""
+        sentinel = "SENSITIVE_HEALTH_ERROR_SENTINEL"
         queue = MagicMock()
-        queue.get_task_count = AsyncMock(side_effect=RuntimeError("backend down"))
+        queue.get_task_count = AsyncMock(side_effect=RuntimeError(sentinel))
         provider = TaskProvider(queue=queue, worker_count=1, enable_scheduler=False)
         container = _ContainerStub()
 
@@ -214,6 +215,8 @@ class TestTaskProviderHealthCheck:
         result = await provider.health_check()
 
         assert result.status.value == "unhealthy"
+        assert "RuntimeError" in result.error
+        assert sentinel not in result.error
 
 
 class TestTaskProviderRegisterHandler:
@@ -353,15 +356,17 @@ class TestModuleHelpers:
         assert result.status.value == "healthy"
 
     @pytest.mark.asyncio
-    async def test_check_queue_health_returns_unhealthy_on_error(self) -> None:
-        """_check_queue_health returns UNHEALTHY on error."""
+    async def test_check_queue_health_returns_sanitized_unhealthy_error(self) -> None:
+        """_check_queue_health reports the error type, not its text."""
+        sentinel = "SENSITIVE_QUEUE_HEALTH_ERROR_SENTINEL"
         queue = MagicMock()
-        queue.get_task_count = AsyncMock(side_effect=RuntimeError("boom"))
+        queue.get_task_count = AsyncMock(side_effect=RuntimeError(sentinel))
 
         result = await _check_queue_health(queue)
 
         assert result.status.value == "unhealthy"
-        assert "boom" in result.error
+        assert "RuntimeError" in result.error
+        assert sentinel not in result.error
 
 
 class TestFactoryFunctions:

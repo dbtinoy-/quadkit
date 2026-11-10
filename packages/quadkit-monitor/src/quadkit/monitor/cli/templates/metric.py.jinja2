@@ -15,8 +15,8 @@ class {{ metric_name }}Metric:
     """Custom application metric: ``{{ metric_name_snake }}``."""
 
     name = "{{ metric_name_snake }}"
-    description = "The {{ metric_name }} metric"
-    unit = "ms"
+    description = {{ description_literal }}
+    unit = {{ unit_literal }}
     labels: dict[str, str] = field(default_factory=dict)
 
     def record(self, value: float, **labels: str) -> None:

@@ -128,6 +128,12 @@ class RouterEndpointMixin(RouterSignatureMixin):
                 )  # Fall back to per-request resolution
 
         async def endpoint(request: Request) -> Any:
+            from quadkit.web.middleware.rate_limit import (
+                reset_current_request,
+                set_current_request,
+            )
+
+            req_token = set_current_request(request)
             try:
                 # 1. Resolve scoped container (from DIScopeMiddleware) or use root
                 scoped_container = getattr(request.state, "container", None)
@@ -213,6 +219,8 @@ class RouterEndpointMixin(RouterSignatureMixin):
                 # This catch is now a safety net, as the pipeline should handle most things.
                 # But if resolution or pipeline setup fails, we still try global filters.
                 return await self.exception_filters.handle(e, request)
+            finally:
+                reset_current_request(req_token)
 
         return endpoint
 

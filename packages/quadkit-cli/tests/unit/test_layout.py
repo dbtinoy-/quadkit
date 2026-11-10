@@ -158,6 +158,20 @@ class TestReadProjectLayout:
         assert layout.app_package == "my_app"
         assert layout.declared is True
         assert layout.module_target() == "my_app.app:app"
+        # Pre-stamp project: no layout_version was recorded.
+        assert layout.layout_version is None
+
+    def test_reads_the_layout_version_stamp(self, tmp_path: Path) -> None:
+        """The stamp says which map produced the project.
+
+        It is a fingerprint, not a setting: read for comparison against
+        the live LAYOUT_VERSION, never used to branch placement.
+        """
+        (tmp_path / "pyproject.toml").write_text(
+            '[tool.quadkit]\nmodule = "my_app.app:app"\nlayout_version = 1\n'
+        )
+        layout = read_project_layout(tmp_path)
+        assert layout.layout_version == 1
 
     def test_a_stale_structure_key_is_ignored(self, tmp_path: Path) -> None:
         """Projects generated before the collapse still resolve.

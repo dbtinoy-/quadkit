@@ -4,7 +4,13 @@ from __future__ import annotations
 
 from typing import Any
 
-from quadkit.codegen import GenerationResult, GeneratorBase, parse_fields
+from quadkit.codegen import (
+    EntitySpec,
+    GenerationResult,
+    GeneratorBase,
+    pluralize_identifier,
+    resolve_field_specs,
+)
 from quadkit.contracts.cli.generators import resolve_options
 
 GRAPHQL_TYPE_MAP = {
@@ -36,6 +42,7 @@ class GraphQLGenerator(GeneratorBase):
     """Generate a GraphQL schema scaffold."""
 
     template_name = "graphql.py.jinja2"
+    supports_entity_spec = True
 
     def __init__(self, output_dir: str = "src/schema") -> None:
         super().__init__(output_dir=output_dir)
@@ -52,15 +59,33 @@ class GraphQLGenerator(GeneratorBase):
         name: str,
         *,
         fields_str: str | None = None,
+        entity_spec: EntitySpec | None = None,
         doc: str | None = None,
         dry_run: bool = False,
         force: bool = False,
         **options: object,
     ) -> GenerationResult:
         type_name = self._to_snake_case(name)
-        resource_name = self._pluralize(type_name)
+        if (
+            entity_spec is not None
+            and self._to_snake_case(entity_spec.name) != type_name
+        ):
+            raise ValueError(
+                f"entity_spec.name {entity_spec.name!r} does not match "
+                f"generator name {name!r}"
+            )
+        resource_name = (
+            entity_spec.table_name
+            if entity_spec is not None
+            # Standalone callers historically passed an already-plural
+            # resource name. Preserve that shape instead of double-
+            # pluralizing it; structured specs carry the exact table.
+            else type_name
+            if self._singularize(type_name) != type_name
+            else self._pluralize(type_name)
+        )
         file_path = self.output_dir / f"{type_name}.py"
-        fields = parse_fields(fields_str or "")
+        fields = resolve_field_specs(fields_str, entity_spec)
 
         prepared_fields: list[dict[str, Any]] = []
         required_fields: list[dict[str, Any]] = []
@@ -151,22 +176,15 @@ class GraphQLGenerator(GeneratorBase):
 
     @staticmethod
     def _pluralize(value: str) -> str:
-        """Best-effort plural, mirroring `_singularize`.
+        """Pluralize a singular list-field name via the contracts rule.
 
-        The sibilant endings take ``-es`` (``box`` → ``boxes``, ``church`` →
-        ``churches``) rather than being left alone or suffixed with ``-s``:
-        the plural is the list field's *name*, so ``boxs`` would be the field
-        a client queries.
+        Callers reach this helper only after the already-plural guard in
+        ``generate``; ``_singularize`` remains the compatibility detector
+        for legacy standalone resource names, while the actual plural is
+        the same final-token derivation every table and route uses.
         """
-        if value.endswith("y") and value[-2:-1] not in {"a", "e", "i", "o", "u"}:
-            return f"{value[:-1]}ies"
-        if value.endswith(("ss", "x", "z", "ch", "sh")):
-            return f"{value}es"
-        if value.endswith("s"):
-            # Already plural: ``orders`` stays ``orders``. Singular nouns
-            # ending in -ss took the branch above.
-            return value
-        return f"{value}s"
+
+        return pluralize_identifier(value)
 
 
 __all__ = ["GraphQLGenerator"]
