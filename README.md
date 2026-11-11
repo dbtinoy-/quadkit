@@ -1,8 +1,8 @@
-# QuadKit
+<h1 align="center">QuadKit — async, contract-driven Python application framework</h1>
 
-![QuadKit Banner](banner.svg)
+<p align="center"><img src="banner.svg" alt="QuadKit — the AI-friendly Python framework" width="720" /></p>
 
-*async python, contract-driven, container-assembled.*
+<p align="center"><em>async python, contract-driven, container-assembled.</em></p>
 
 [![PyPI version](https://img.shields.io/pypi/v/quadkit?color=%2322c55e&label=pypi%20package)](https://pypi.org/project/quadkit/)
 [![Python versions](https://img.shields.io/pypi/pyversions/quadkit?color=%2322c55e)](https://pypi.org/project/quadkit/)
@@ -66,33 +66,40 @@ Also available by default:
 
 ## build in the browser
 
-[Quadkit Playground](https://builder.oridecon.dev) is the hosted visual
-builder for that same stack: draw framework-shaped nodes — entities, auth,
-jobs, routes — on a canvas, then generate and download a real standalone
-Quadkit project. One-way codegen, nothing to install locally.
+|  |  |
+| :-: | :--- |
+| <picture><source media="(prefers-color-scheme: dark)" srcset="docs/builder/banner.svg"><img src="docs/builder/banner-black.svg" alt="QuadKit Builder" width="220" /></picture> | [QuadKit Builder](https://builder.oridecon.dev) is the hosted visual builder for that same stack: draw framework-shaped nodes — entities, auth, jobs, routes — on a canvas, then generate and download a real, standalone QuadKit project. One-way codegen, nothing to install locally. |
+
+|  |  |
+| :-: | :-: |
+| ![QuadKit Builder — compose modules on the graph canvas](docs/builder/builder-03.jpg) | ![QuadKit Builder — the generated project graph, settings and capabilities](docs/builder/builder-04.jpg) |
+| ![QuadKit Builder — generated project files and the composition root](docs/builder/builder-01.jpg) | ![QuadKit Builder — static OpenAPI docs generated from the graph](docs/builder/builder-02.jpg) |
 
 ## why quadkit?
 
-Quadkit is a kit of **18 public-use packages**, installed à la carte: sixteen
-to build with, one optional to test, one for the command line.
+**Quad** — four packages carry the framework, and these four are the only names
+you have to keep in your head. Everything else is a reusable add-on that binds
+to the same contracts and is installed à la carte.
 
-```mermaid
-graph LR
-    QC[quadkit-contracts] --> Q[quadkit] --> W[quadkit-web] --> APP[Your&nbsp;Application]
-    Q --> CLI[quadkit-cli]
+![Why QuadKit — four packages carry the framework. quadkit-contracts defines the protocols and the Result model; quadkit is the core (DI container, modules, typed config, logging, primitives); quadkit-web is the ASGI layer and quadkit-cli scaffolds and runs projects; every other package is a reusable add-on bound to the same contracts. All of them compose into your application.](docs/quadkit-architecture.svg)
 
-    style QC fill:#166534,stroke:#22c55e,color:#fff
-    style Q fill:#166534,stroke:#22c55e,color:#fff
-    style W fill:#166534,stroke:#22c55e,color:#fff
-    style CLI fill:#166534,stroke:#22c55e,color:#fff
-    style APP fill:#374151,stroke:#6b7280,color:#fff
-```
+Contracts are the floor: `quadkit` binds to them, `quadkit-web` and
+`quadkit-cli` build on the core, and every reusable package plugs into the
+same protocol layer. The graph is the architecture — a package never imports a
+sibling implementation, only the contracts.
 
-| package | what it is |
+| the quad | what it is |
 | --- | --- |
 | [`quadkit-contracts`](https://pypi.org/project/quadkit-contracts/) | protocol definitions every package binds against — and the `Result` error model, with zero runtime dependencies |
 | [`quadkit`](https://pypi.org/project/quadkit/) | the framework core — DI container, modules, typed config, logging, domain primitives |
 | [`quadkit-web`](https://pypi.org/project/quadkit-web/) | ASGI layer — controllers, routing, middleware, OpenAPI docs, websockets |
+| [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
+
+**Reusable packages** — install only what you need; each binds to the same
+contracts, so you can swap its implementation without touching the call sites:
+
+| package | what it is |
+| --- | --- |
 | [`quadkit-sql`](https://pypi.org/project/quadkit-sql/) | repositories, units of work and migrations, declared as protocols so the backend stays yours |
 | [`quadkit-cache`](https://pypi.org/project/quadkit-cache/) | cache protocols and the memory/Redis backends behind them |
 | [`quadkit-auth`](https://pypi.org/project/quadkit-auth/) | JWT issuance, user storage and permission evaluation |
@@ -101,12 +108,12 @@ graph LR
 | [`quadkit-storage`](https://pypi.org/project/quadkit-storage/) | object storage behind a filesystem/S3 protocol |
 | [`quadkit-http`](https://pypi.org/project/quadkit-http/) | typed HTTP clients for talking to other services |
 | [`quadkit-monitor`](https://pypi.org/project/quadkit-monitor/) | metrics, tracing and health endpoints |
-| [`quadkit-cli`](https://pypi.org/project/quadkit-cli/) | project scaffolding and code generators |
 | [`quadkit-ai-llm`](https://pypi.org/project/quadkit-ai-llm/) | typed LLM clients and provider bindings |
 | [`quadkit-ai-agents`](https://pypi.org/project/quadkit-ai-agents/) | bounded agent execution and strategies |
 | [`quadkit-ai-mcp`](https://pypi.org/project/quadkit-ai-mcp/) | Model Context Protocol integration |
 | [`quadkit-workflow`](https://pypi.org/project/quadkit-workflow/) | application workflow and pipeline primitives |
 | [`quadkit-notification`](https://pypi.org/project/quadkit-notification/) | notification delivery and recipient inbox primitives |
+| [`quadkit-testing`](https://pypi.org/project/quadkit-testing/) | test harnesses, fakes, and fixtures (test-time only) |
 
 Every one of them binds against the same protocol layer, so the contracts
 define interfaces for SQL, cache, auth, events, tasks, queues, LLM, RAG, and
